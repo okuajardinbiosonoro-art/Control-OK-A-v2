@@ -1,0 +1,10 @@
+{
+    "com_port": "COM5",
+    "baudrate": 115200,
+    "midi_outputs": [
+        "loopMIDI Port"
+    ],
+    "flush_ms": 10,
+    "max_silence_s": 60.0,
+    "running_status": false
+}
