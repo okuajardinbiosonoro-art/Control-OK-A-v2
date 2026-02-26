@@ -36,7 +36,7 @@ Para ejecutarlo (PowerShell):
 
 ## Config (v2)
 
-- En desarrollo: `config.json` en la raiz del repo.
+- En desarrollo: copiar `config.example.json` a `config.json` en la raiz del repo.
 - En ejecutable PyInstaller: `config.json` junto a `Control Okua.exe`.
 - Si falta `config.json`, se crea automaticamente con defaults v2.
 - Si el archivo esta corrupto, se renombra a `config.corrupt.<timestamp>.json` y se regenera.

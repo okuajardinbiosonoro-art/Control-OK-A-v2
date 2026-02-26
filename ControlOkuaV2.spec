@@ -11,9 +11,9 @@ ICO_PATH = PROJECT_DIR / "assets" / "icons" / "app_icon.ico"
 PNG_PATH = PROJECT_DIR / "assets" / "icons" / "app_icon.png"
 
 if ICO_PATH.exists():
-    ICON_FILE = str(ICO_PATH)
+    ICON_FILE = ICO_PATH
 elif PNG_PATH.exists():
-    ICON_FILE = str(PNG_PATH)
+    ICON_FILE = PNG_PATH
 else:
     ICON_FILE = None
 
@@ -60,5 +60,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=ICON_FILE,  # <- aquí el cambio clave
+    icon=str(ICON_FILE) if ICON_FILE and ICON_FILE.exists() else None,
 )

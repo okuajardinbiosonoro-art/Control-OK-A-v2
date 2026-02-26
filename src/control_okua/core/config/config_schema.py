@@ -41,11 +41,7 @@ def default_config() -> dict[str, Any]:
         "midi": {
             "backend": "rtmidi",
             "send_noteoff_on_vel0": True,
-            "outputs": {
-                "0": "loopMIDI Port 1",
-                "1": "loopMIDI Port 2",
-                "2": "loopMIDI Port 3",
-            },
+            "outputs": {},
         },
         "logging": {
             "enabled": True,
@@ -233,8 +229,8 @@ def validate_and_fix(cfg: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
 
     outputs = midi_cfg.get("outputs")
     if not isinstance(outputs, dict):
-        midi_cfg["outputs"] = deep_merge(defaults["midi"]["outputs"], {})
-        warnings.append("midi.outputs invalido; se restauraron defaults.")
+        midi_cfg["outputs"] = {}
+        warnings.append("midi.outputs invalido; se uso {}.")
     else:
         filtered_outputs: dict[str, str] = {}
         for key, value in outputs.items():
@@ -248,9 +244,9 @@ def validate_and_fix(cfg: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
                         f"midi.outputs['{key_str}'] no era string; se convirtio a string."
                     )
 
-        if not filtered_outputs:
-            midi_cfg["outputs"] = deep_merge(defaults["midi"]["outputs"], {})
-            warnings.append("midi.outputs sin claves validas; se restauraron defaults.")
+        if outputs and not filtered_outputs:
+            midi_cfg["outputs"] = {}
+            warnings.append("midi.outputs sin claves validas; se dejo vacio.")
         else:
             if len(filtered_outputs) != len(outputs):
                 warnings.append("midi.outputs tenia claves invalidas; fueron descartadas.")
