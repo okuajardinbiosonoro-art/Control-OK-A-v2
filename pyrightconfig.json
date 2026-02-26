@@ -1,0 +1,5 @@
+{
+  "include": ["src", "main.py", "tests"],
+  "exclude": [".venv", "build", "dist", "**/__pycache__"],
+  "extraPaths": ["src"]
+}
