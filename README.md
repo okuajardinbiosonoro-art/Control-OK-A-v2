@@ -46,6 +46,7 @@ La ventana principal usa flujo operator-first:
 
 En `Operacion` aparecen tarjetas de estado para:
 
+- perfil operativo
 - modo activo
 - transporte configurado
 - MIDI
@@ -59,6 +60,13 @@ Las acciones tecnicas se movieron a `Herramientas avanzadas`:
 - ver config JSON
 - recargar config
 - widget de salidas MIDI
+
+Acciones operativas visibles:
+
+- `Cambiar perfil`: abre selector guiado de perfil operativo.
+- `Cambiar modo`: selector tecnico de compatibilidad (fallback).
+- `Recargar configuracion`.
+- `Herramientas avanzadas`.
 
 La app todavia no inicia una sesion de transporte desde esta UI; por eso se informa estado `sesion no iniciada` o `no disponible aun` donde aplica.
 
@@ -81,8 +89,9 @@ Campos principales:
 
 Notas de consistencia runtime:
 
-- Si `mode` es invalido o `null`, la app pide seleccionar modo al iniciar y persiste el valor.
+- Si `profile.active` es `null` o invalido, la app pide seleccionar perfil al iniciar.
 - Si `profile.active` existe y es valido, el runtime alinea `mode` al perfil esperado.
+- Si no hay perfil activo y `mode` es invalido, se usa el selector de modo tecnico como fallback de compatibilidad.
 - Si `midi.outputs` llega vacio o invalido, se restauran defaults (`0/1/2 -> loopMIDI Port 1/2/3`).
 
 ## Perfiles operativos
@@ -103,8 +112,8 @@ Cada perfil define:
 
 Compatibilidad:
 
-- Si `profile.active` falta, se infiere desde `mode` cuando es posible.
-- Si no se puede inferir, queda `null` sin romper el arranque.
+- Si `profile.active` falta o es `null`, el arranque sigue siendo compatible y la app solicita perfil.
+- `mode` tecnico permanece para compatibilidad interna y herramientas avanzadas.
 
 ## Validacion y pruebas
 

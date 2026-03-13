@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from control_okua.app_qt.advanced_tools_dialog import AdvancedToolsDialog
 from control_okua.app_qt.mode_selector_dialog import ModeSelectorDialog
+from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
 from control_okua.app_qt.widgets import ConfigViewDialog
 from control_okua.app_qt.viewmodels import (
     build_general_status_summary,
@@ -33,6 +34,12 @@ from control_okua.app_qt.viewmodels import (
     build_transport_summary,
 )
 from control_okua.core.config.config_schema import load_config, save_config
+from control_okua.core.profiles.profile_service import (
+    build_profile_ui_summary,
+    infer_profile_from_config,
+    is_known_profile_id,
+    set_active_profile,
+)
 
 
 class MainWindow(QMainWindow):
@@ -93,6 +100,10 @@ class MainWindow(QMainWindow):
         self.change_mode_button.clicked.connect(self.change_mode)
         quick_actions_layout.addWidget(self.change_mode_button)
 
+        self.change_profile_button = QPushButton("Cambiar perfil")
+        self.change_profile_button.clicked.connect(self.change_profile)
+        quick_actions_layout.addWidget(self.change_profile_button)
+
         self.reload_button = QPushButton("Recargar configuración")
         self.reload_button.clicked.connect(self.reload_config)
         quick_actions_layout.addWidget(self.reload_button)
@@ -108,6 +119,7 @@ class MainWindow(QMainWindow):
         cards_layout = QGridLayout(cards_group)
 
         cards = [
+            ("profile", "Perfil operativo"),
             ("mode", "Modo activo"),
             ("transport", "Transporte configurado"),
             ("midi", "MIDI"),
@@ -178,6 +190,7 @@ class MainWindow(QMainWindow):
         summary_layout = QFormLayout(summary_group)
 
         fields = [
+            ("profile", "Perfil"),
             ("config_path", "Archivo config"),
             ("mode", "Modo"),
             ("transport", "Transporte"),
@@ -203,12 +216,20 @@ class MainWindow(QMainWindow):
         return tab
 
     def refresh_ui(self) -> None:
+        active_profile = self._active_profile_id()
+        profile_summary = build_profile_ui_summary(active_profile, self.cfg)
+
         mode_summary = build_mode_summary(self.cfg)
         transport_summary = build_transport_summary(self.cfg)
         midi_summary = build_midi_summary(self.cfg)
         logging_summary = build_logging_summary(self.cfg)
         general_summary = build_general_status_summary(self.cfg, self.warnings)
 
+        profile_card_text = (
+            f"Perfil activo: {profile_summary['short_name']}\n"
+            f"{profile_summary['description']}"
+        )
+        self._operation_summary_labels["profile"].setText(profile_card_text)
         self._operation_summary_labels["mode"].setText(mode_summary)
         self._operation_summary_labels["transport"].setText(transport_summary)
         self._operation_summary_labels["midi"].setText(midi_summary)
@@ -234,6 +255,10 @@ class MainWindow(QMainWindow):
         else:
             self.warnings_view.setPlainText("Sin advertencias actuales.")
 
+        profile_diag_text = (
+            f"{profile_summary['short_name']} ({profile_summary['effective_mode']})"
+        )
+        self._diagnostic_summary_labels["profile"].setText(profile_diag_text)
         self._diagnostic_summary_labels["config_path"].setText(str(self.config_path))
         self._diagnostic_summary_labels["mode"].setText(mode_summary)
         self._diagnostic_summary_labels["transport"].setText(transport_summary)
@@ -253,8 +278,27 @@ class MainWindow(QMainWindow):
             return
 
         self.cfg["mode"] = selected_mode
+        inferred_profile = infer_profile_from_config(self.cfg)
+        if isinstance(inferred_profile, str):
+            self.cfg = set_active_profile(self.cfg, inferred_profile)
         save_config(self.cfg, self.config_path)
         self.warnings = [f"Modo actualizado desde UI a '{selected_mode}'."]
+        self.refresh_ui()
+
+    def change_profile(self) -> None:
+        current_profile = self._active_profile_id()
+        selected_profile = ProfileSelectorDialog.choose_profile(
+            current_profile_id=current_profile,
+            parent=self,
+        )
+        if not isinstance(selected_profile, str):
+            return
+        if selected_profile == current_profile:
+            return
+
+        self.cfg = set_active_profile(self.cfg, selected_profile)
+        save_config(self.cfg, self.config_path)
+        self.warnings = [f"Perfil actualizado desde UI a '{selected_profile}'."]
         self.refresh_ui()
 
     def reload_config(self) -> None:
@@ -289,3 +333,14 @@ class MainWindow(QMainWindow):
 
     def _config_pretty_text(self) -> str:
         return json.dumps(self.cfg, indent=2, ensure_ascii=False)
+
+    def _active_profile_id(self) -> str | None:
+        profile_cfg = self.cfg.get("profile")
+        if not isinstance(profile_cfg, dict):
+            return infer_profile_from_config(self.cfg)
+
+        active_profile = profile_cfg.get("active")
+        if isinstance(active_profile, str) and is_known_profile_id(active_profile):
+            return active_profile
+
+        return infer_profile_from_config(self.cfg)

@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 from control_okua.core.profiles.profile_service import (
-    infer_profile_from_config,
     is_known_profile_id,
     resolve_profile_to_mode,
 )
@@ -181,15 +180,10 @@ def validate_and_fix(cfg: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
 
     active_profile = profile_cfg.get("active")
     if active_profile is None:
-        profile_cfg["active"] = infer_profile_from_config(candidate)
+        profile_cfg["active"] = None
     elif not is_known_profile_id(active_profile):
-        profile_cfg["active"] = infer_profile_from_config(
-            {
-                "mode": candidate.get("mode"),
-                "profile": {"active": None},
-            }
-        )
-        warnings.append("profile.active invalido; se infirio desde mode o se uso null.")
+        profile_cfg["active"] = None
+        warnings.append("profile.active invalido; se uso null.")
 
     resolved_mode = resolve_profile_to_mode(profile_cfg.get("active"))
     if resolved_mode in {"serial", "udp"} and candidate.get("mode") != resolved_mode:

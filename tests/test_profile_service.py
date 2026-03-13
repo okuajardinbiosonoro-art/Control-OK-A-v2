@@ -10,6 +10,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from control_okua.core.profiles.profile_service import (  # noqa: E402
+    build_profile_ui_summary,
     infer_profile_from_config,
     list_available_profiles,
     resolve_profile_to_mode,
@@ -56,11 +57,27 @@ def test_infer_profile_prefers_valid_explicit_active_profile() -> None:
     assert inferred == "lab_sim"
 
 
-def test_validate_and_fix_infers_profile_when_missing_section() -> None:
+def test_build_profile_ui_summary_for_lab_sim() -> None:
+    summary = build_profile_ui_summary("lab_sim", {"mode": "udp"})
+
+    assert summary["short_name"] == "LAB / simulación"
+    assert summary["mode"] == "udp"
+    assert "laboratorio" in summary["operation_summary"].lower()
+
+
+def test_build_profile_ui_summary_for_unknown_profile() -> None:
+    summary = build_profile_ui_summary("invalid_profile", {"mode": "serial"})
+
+    assert summary["short_name"] == "Perfil no definido"
+    assert summary["effective_mode"] == "serial"
+
+
+def test_validate_and_fix_keeps_profile_none_when_missing_section() -> None:
     cfg = {"version": 2, "mode": "serial"}
     fixed_cfg, _warnings = validate_and_fix(cfg)
 
-    assert fixed_cfg["profile"]["active"] == "serial_local"
+    assert fixed_cfg["profile"]["active"] is None
+    assert fixed_cfg["mode"] == "serial"
 
 
 def test_validate_and_fix_aligns_mode_from_profile() -> None:
