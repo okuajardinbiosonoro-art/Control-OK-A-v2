@@ -117,6 +117,28 @@ Compatibilidad:
 - Si `profile.active` falta o es `null`, el arranque sigue siendo compatible y la app solicita perfil.
 - `mode` tecnico permanece para compatibilidad interna y herramientas avanzadas.
 
+## Flujo de perfiles (primer arranque)
+
+1. La app carga `config.json`.
+2. Si `profile.active` no es valido, abre selector guiado de perfil:
+   - `Serial local`
+   - `UDP Jardin`
+   - `LAB / simulacion`
+3. Al confirmar, guarda `profile.active` y ajusta `mode` asociado.
+4. Si el perfil ya estaba persistido, no vuelve a preguntar automaticamente.
+
+## Cambiar perfil desde la app
+
+- En `Operacion`, usar `Cambiar perfil`.
+- El cambio se guarda en `config.json` y refresca la vista.
+- El modo tecnico (`mode`) se mantiene coherente con el perfil seleccionado.
+
+## Perfil, modo y configuracion avanzada
+
+- `profile.active` representa la intencion operativa para usuarios no tecnicos.
+- `mode` sigue existiendo como dato tecnico de compatibilidad.
+- `Herramientas avanzadas` concentra acciones de soporte (ver config, recargar, carpeta, MIDI) sin exponer JSON en la vista principal.
+
 ## Validacion y pruebas
 
 ### Compileall
