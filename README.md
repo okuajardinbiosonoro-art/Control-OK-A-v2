@@ -48,6 +48,10 @@ En `Operacion` aparecen tarjetas de estado para:
 
 - perfil activo
 - modo asociado
+- backend esperado
+- estado de sesion
+- mensaje de sesion
+- capacidades de sesion (puede iniciar/detener)
 - resumen operativo
 - modo tecnico
 - transporte configurado
@@ -189,9 +193,12 @@ Remove-Item Env:CKV2_AUTOCLOSE_MS
 ### Smoke manual basico
 
 1. Verificar que la primera pestaña sea `Operacion`.
-2. Confirmar que la pantalla principal no sea config-first.
-3. Abrir `Herramientas avanzadas` y validar `Ver config`, `Abrir carpeta`, `Recargar config` y `Salidas MIDI`.
-4. Cambiar modo desde UI, cerrar, reabrir y confirmar persistencia.
+2. Confirmar estado inicial de sesion en `inactiva`.
+3. Pulsar `Iniciar sesion` y verificar `error` controlado (backend placeholder no implementado).
+4. Pulsar `Reiniciar error` y confirmar retorno a estado inactivo.
+5. Validar bloqueo de `Cambiar perfil`/`Cambiar modo`/`Recargar configuracion` cuando la sesion no esta en estado seguro (`starting`, `running`, `stopping`).
+6. Abrir `Herramientas avanzadas` y validar `Ver config`, `Abrir carpeta`, `Recargar config` y `Salidas MIDI`.
+7. Cerrar y reabrir la app sin errores.
 
 ## Prueba MIDI (LoopMIDI / Ableton)
 
