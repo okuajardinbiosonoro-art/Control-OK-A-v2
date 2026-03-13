@@ -212,6 +212,12 @@ config.json
 config.*.*.json
 !config.example.json
 
+# OKUA dev artifacts (screenshots, evidence)
+artifacts/
+
+# UI experiments / temporary widgets (if not part of core app yet)
+src/control_okua/app_qt/widgets/
+
 # OKUA runtime outputs
 logs/
 

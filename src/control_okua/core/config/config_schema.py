@@ -6,6 +6,12 @@ import time
 from pathlib import Path
 from typing import Any
 
+DEFAULT_OUTPUTS: dict[str, str] = {
+    "0": "loopMIDI Port 1",
+    "1": "loopMIDI Port 2",
+    "2": "loopMIDI Port 3",
+}
+
 
 def timestamp_tag() -> str:
     return time.strftime("%Y%m%d_%H%M%S", time.localtime())
@@ -22,7 +28,7 @@ def get_config_path() -> Path:
 def default_config() -> dict[str, Any]:
     return {
         "version": 2,
-        "mode": "serial",
+        "mode": None,
         "serial": {
             "baudrate": 115200,
             "running_status": True,
@@ -41,7 +47,7 @@ def default_config() -> dict[str, Any]:
         "midi": {
             "backend": "rtmidi",
             "send_noteoff_on_vel0": True,
-            "outputs": {},
+            "outputs": DEFAULT_OUTPUTS.copy(),
         },
         "logging": {
             "enabled": True,
@@ -140,16 +146,23 @@ def _safe_float(value: Any, fallback: float) -> float:
 
 def validate_and_fix(cfg: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     defaults = default_config()
-    candidate = deep_merge(defaults, cfg if isinstance(cfg, dict) else {})
+    raw_cfg = cfg if isinstance(cfg, dict) else {}
+    candidate = deep_merge(defaults, raw_cfg)
     warnings: list[str] = []
 
     if candidate.get("version") != 2:
         candidate["version"] = 2
         warnings.append("version corregida a 2.")
 
-    if candidate.get("mode") not in {"serial", "udp"}:
-        candidate["mode"] = defaults["mode"]
-        warnings.append("mode invalido; se uso 'serial'.")
+    mode_value = candidate.get("mode")
+    if mode_value is None:
+        candidate["mode"] = None
+        warnings.append("mode no definido; requiere seleccion.")
+    elif isinstance(mode_value, str) and mode_value in {"serial", "udp"}:
+        candidate["mode"] = mode_value
+    else:
+        candidate["mode"] = None
+        warnings.append("mode invalido; requiere seleccion.")
 
     serial_cfg = candidate.get("serial")
     if not isinstance(serial_cfg, dict):
@@ -214,8 +227,14 @@ def validate_and_fix(cfg: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     udp_cfg["rcvbuf_bytes"] = rcvbuf
 
     midi_cfg = candidate.get("midi")
-    if not isinstance(midi_cfg, dict):
+    raw_midi_cfg = raw_cfg.get("midi")
+    if not isinstance(raw_midi_cfg, dict):
         candidate["midi"] = deep_merge(defaults["midi"], {})
+        midi_cfg = candidate["midi"]
+        warnings.append("midi invalido; se restauraron defaults.")
+        raw_midi_cfg = {}
+    elif not isinstance(midi_cfg, dict):
+        candidate["midi"] = deep_merge(defaults["midi"], raw_midi_cfg)
         midi_cfg = candidate["midi"]
         warnings.append("midi invalido; se restauraron defaults.")
 
@@ -227,29 +246,38 @@ def validate_and_fix(cfg: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
         midi_cfg["send_noteoff_on_vel0"] = defaults["midi"]["send_noteoff_on_vel0"]
         warnings.append("midi.send_noteoff_on_vel0 invalido; se restauro default.")
 
-    outputs = midi_cfg.get("outputs")
-    if not isinstance(outputs, dict):
-        midi_cfg["outputs"] = {}
-        warnings.append("midi.outputs invalido; se uso {}.")
+    raw_outputs = raw_midi_cfg.get("outputs")
+    if not isinstance(raw_outputs, dict):
+        midi_cfg["outputs"] = DEFAULT_OUTPUTS.copy()
+        warnings.append("midi.outputs invalido o ausente; se restauraron defaults.")
     else:
         filtered_outputs: dict[str, str] = {}
-        for key, value in outputs.items():
-            key_str = str(key)
-            if key_str.isdigit() and 0 <= int(key_str) <= 255:
-                if isinstance(value, str):
-                    filtered_outputs[key_str] = value
-                else:
-                    filtered_outputs[key_str] = str(value)
-                    warnings.append(
-                        f"midi.outputs['{key_str}'] no era string; se convirtio a string."
-                    )
+        invalid_entries = 0
+        for key, value in raw_outputs.items():
+            if isinstance(key, bool):
+                invalid_entries += 1
+                continue
+            try:
+                bus_id = int(key)
+            except (TypeError, ValueError):
+                invalid_entries += 1
+                continue
+            if bus_id < 0 or bus_id > 255:
+                invalid_entries += 1
+                continue
+            if not isinstance(value, str) or not value.strip():
+                invalid_entries += 1
+                continue
 
-        if outputs and not filtered_outputs:
-            midi_cfg["outputs"] = {}
-            warnings.append("midi.outputs sin claves validas; se dejo vacio.")
+            filtered_outputs[str(bus_id)] = value
+
+        if invalid_entries:
+            warnings.append("midi.outputs tenia entradas invalidas; fueron descartadas.")
+
+        if not filtered_outputs:
+            midi_cfg["outputs"] = DEFAULT_OUTPUTS.copy()
+            warnings.append("midi.outputs vacio; se restauraron defaults.")
         else:
-            if len(filtered_outputs) != len(outputs):
-                warnings.append("midi.outputs tenia claves invalidas; fueron descartadas.")
             midi_cfg["outputs"] = filtered_outputs
 
     log_cfg = candidate.get("logging")
@@ -370,8 +398,7 @@ def load_config() -> tuple[dict[str, Any], list[str], Path]:
     version = detect_version(raw_cfg)
 
     if version == "v2":
-        merged_cfg = deep_merge(default_config(), raw_cfg)
-        fixed_cfg, fix_warnings = validate_and_fix(merged_cfg)
+        fixed_cfg, fix_warnings = validate_and_fix(raw_cfg)
         warnings.extend(fix_warnings)
         if fixed_cfg != raw_cfg:
             save_config(fixed_cfg, cfg_path)

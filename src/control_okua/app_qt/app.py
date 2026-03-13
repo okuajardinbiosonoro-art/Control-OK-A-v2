@@ -8,8 +8,13 @@ from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
 from control_okua.app_qt.main_window import MainWindow
+from control_okua.app_qt.mode_selector_dialog import ModeSelectorDialog
 from control_okua.app_qt.resources import app_icon_path, load_qss, resource_path
-from control_okua.core.config.config_schema import load_config
+from control_okua.core.config.config_schema import load_config, save_config
+
+
+def _is_valid_mode(value: object) -> bool:
+    return isinstance(value, str) and value in {"serial", "udp"}
 
 
 def run_app() -> int:
@@ -27,7 +32,17 @@ def run_app() -> int:
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 
-    window = MainWindow(cfg=cfg, config_path=config_path)
+    if not _is_valid_mode(cfg.get("mode")):
+        selected_mode = ModeSelectorDialog.choose_mode()
+        cfg["mode"] = selected_mode
+        save_config(cfg, config_path)
+        selection_warning = (
+            f"mode no definido/invalid; se selecciono {selected_mode} y se guardo."
+        )
+        warnings.append(selection_warning)
+        print(f"[config] {selection_warning}")
+
+    window = MainWindow(cfg=cfg, config_path=config_path, warnings=warnings)
     window.show()
 
     # Permite validaciones automáticas sin afectar ejecución normal.
