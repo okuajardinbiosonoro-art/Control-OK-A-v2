@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from control_okua.core.profiles.profile_service import (
+    build_profile_ui_summary,
+    infer_profile_from_config,
+)
+
 
 def _mode_label(cfg: dict[str, Any]) -> str:
     mode_value = cfg.get("mode")
@@ -14,6 +19,36 @@ def _mode_label(cfg: dict[str, Any]) -> str:
 
 def build_mode_summary(cfg: dict[str, Any]) -> str:
     return f"Modo actual: {_mode_label(cfg)}"
+
+
+def _active_profile_id(cfg: dict[str, Any]) -> str | None:
+    profile_cfg = cfg.get("profile")
+    if isinstance(profile_cfg, dict):
+        active_profile = profile_cfg.get("active")
+        if isinstance(active_profile, str):
+            return active_profile
+    return infer_profile_from_config(cfg)
+
+
+def build_profile_summary(cfg: dict[str, Any]) -> str:
+    profile_summary = build_profile_ui_summary(_active_profile_id(cfg), cfg)
+    return f"Perfil activo: {profile_summary['short_name']}"
+
+
+def build_profile_mode_summary(cfg: dict[str, Any]) -> str:
+    profile_summary = build_profile_ui_summary(_active_profile_id(cfg), cfg)
+    mode_value = profile_summary.get("mode", "No disponible aún")
+    if mode_value in {"serial", "udp"}:
+        return f"Modo asociado: {str(mode_value).upper()}"
+    return "Modo asociado: No disponible aún"
+
+
+def build_operation_summary(cfg: dict[str, Any]) -> str:
+    profile_summary = build_profile_ui_summary(_active_profile_id(cfg), cfg)
+    operation_text = profile_summary.get("operation_summary", "").strip()
+    if operation_text:
+        return f"Uso esperado: {operation_text}"
+    return "Uso esperado: No disponible aún"
 
 
 def build_transport_summary(cfg: dict[str, Any]) -> str:
@@ -69,6 +104,8 @@ def build_logging_summary(cfg: dict[str, Any]) -> str:
 
 
 def build_general_status_summary(cfg: dict[str, Any], warnings: list[str] | None) -> str:
+    profile_summary = build_profile_ui_summary(_active_profile_id(cfg), cfg)
+    profile_defined = profile_summary.get("short_name") != "Perfil no definido"
     mode_value = cfg.get("mode")
     warnings_count = len(warnings or [])
 
@@ -78,7 +115,12 @@ def build_general_status_summary(cfg: dict[str, Any], warnings: list[str] | None
             f"({warnings_count}) / sesión no iniciada"
         )
 
+    if not profile_defined:
+        if mode_value in {"serial", "udp"}:
+            return "Estado general: perfil pendiente / sesión no iniciada"
+        return "Estado general: perfil incompleto / sesión no iniciada"
+
     if mode_value not in {"serial", "udp"}:
         return "Estado general: modo pendiente / sesión no iniciada"
 
-    return "Estado general: aplicación lista / sesión no iniciada"
+    return "Estado general: aplicación lista / sesión aún no iniciada"

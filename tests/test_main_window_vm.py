@@ -13,6 +13,9 @@ from control_okua.app_qt.viewmodels.main_window_vm import (  # noqa: E402
     build_general_status_summary,
     build_logging_summary,
     build_mode_summary,
+    build_operation_summary,
+    build_profile_mode_summary,
+    build_profile_summary,
     build_transport_summary,
 )
 
@@ -62,10 +65,24 @@ def test_logging_summary_enabled_and_disabled() -> None:
 
 
 def test_general_status_with_and_without_warnings() -> None:
-    cfg = {"mode": "serial"}
+    cfg = {"mode": "serial", "profile": {"active": "serial_local"}}
 
     no_warnings_status = build_general_status_summary(cfg, [])
     with_warnings_status = build_general_status_summary(cfg, ["warning 1"])
 
-    assert no_warnings_status == "Estado general: aplicación lista / sesión no iniciada"
+    assert no_warnings_status == "Estado general: aplicación lista / sesión aún no iniciada"
     assert "advertencias (1)" in with_warnings_status
+
+
+def test_profile_summary_and_mode_for_udp_profile() -> None:
+    cfg = {"mode": "udp", "profile": {"active": "udp_jardin"}}
+
+    assert build_profile_summary(cfg) == "Perfil activo: UDP Jardín"
+    assert build_profile_mode_summary(cfg) == "Modo asociado: UDP"
+    assert "Uso esperado:" in build_operation_summary(cfg)
+
+
+def test_general_status_for_missing_profile() -> None:
+    cfg = {"mode": None, "profile": {"active": None}}
+    status = build_general_status_summary(cfg, [])
+    assert status == "Estado general: perfil incompleto / sesión no iniciada"

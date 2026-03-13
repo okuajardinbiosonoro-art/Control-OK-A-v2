@@ -3,10 +3,16 @@ from control_okua.app_qt.viewmodels.main_window_vm import (
     build_logging_summary,
     build_midi_summary,
     build_mode_summary,
+    build_operation_summary,
+    build_profile_mode_summary,
+    build_profile_summary,
     build_transport_summary,
 )
 
 __all__ = [
+    "build_profile_summary",
+    "build_profile_mode_summary",
+    "build_operation_summary",
     "build_mode_summary",
     "build_transport_summary",
     "build_midi_summary",

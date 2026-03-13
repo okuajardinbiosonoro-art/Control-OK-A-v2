@@ -31,11 +31,13 @@ from control_okua.app_qt.viewmodels import (
     build_logging_summary,
     build_midi_summary,
     build_mode_summary,
+    build_operation_summary,
+    build_profile_mode_summary,
+    build_profile_summary,
     build_transport_summary,
 )
 from control_okua.core.config.config_schema import load_config, save_config
 from control_okua.core.profiles.profile_service import (
-    build_profile_ui_summary,
     infer_profile_from_config,
     is_known_profile_id,
     set_active_profile,
@@ -119,12 +121,14 @@ class MainWindow(QMainWindow):
         cards_layout = QGridLayout(cards_group)
 
         cards = [
-            ("profile", "Perfil operativo"),
-            ("mode", "Modo activo"),
+            ("profile", "Perfil activo"),
+            ("profile_mode", "Modo asociado"),
+            ("operation", "Resumen operativo"),
+            ("mode", "Modo técnico"),
+            ("general", "Estado general"),
             ("transport", "Transporte configurado"),
             ("midi", "MIDI"),
             ("logging", "Logging"),
-            ("general", "Estado general"),
         ]
         for index, (key, title_text) in enumerate(cards):
             row = index // 2
@@ -216,29 +220,32 @@ class MainWindow(QMainWindow):
         return tab
 
     def refresh_ui(self) -> None:
-        active_profile = self._active_profile_id()
-        profile_summary = build_profile_ui_summary(active_profile, self.cfg)
-
+        profile_summary = build_profile_summary(self.cfg)
+        profile_mode_summary = build_profile_mode_summary(self.cfg)
+        operation_summary = build_operation_summary(self.cfg)
         mode_summary = build_mode_summary(self.cfg)
         transport_summary = build_transport_summary(self.cfg)
         midi_summary = build_midi_summary(self.cfg)
         logging_summary = build_logging_summary(self.cfg)
         general_summary = build_general_status_summary(self.cfg, self.warnings)
 
-        profile_card_text = (
-            f"Perfil activo: {profile_summary['short_name']}\n"
-            f"{profile_summary['description']}"
-        )
-        self._operation_summary_labels["profile"].setText(profile_card_text)
+        self._operation_summary_labels["profile"].setText(profile_summary)
+        self._operation_summary_labels["profile_mode"].setText(profile_mode_summary)
+        self._operation_summary_labels["operation"].setText(operation_summary)
         self._operation_summary_labels["mode"].setText(mode_summary)
+        self._operation_summary_labels["general"].setText(general_summary)
         self._operation_summary_labels["transport"].setText(transport_summary)
         self._operation_summary_labels["midi"].setText(midi_summary)
         self._operation_summary_labels["logging"].setText(logging_summary)
-        self._operation_summary_labels["general"].setText(general_summary)
 
         if self.warnings:
             self.operation_subtitle_label.setText(
                 "Aplicación cargada con advertencias. Revise Diagnóstico. "
+                "La sesión aún no está iniciada."
+            )
+        elif "perfil pendiente" in general_summary or "perfil incompleto" in general_summary:
+            self.operation_subtitle_label.setText(
+                "Seleccione un perfil operativo para continuar. "
                 "La sesión aún no está iniciada."
             )
         elif self.cfg.get("mode") in {"serial", "udp"}:
@@ -255,9 +262,7 @@ class MainWindow(QMainWindow):
         else:
             self.warnings_view.setPlainText("Sin advertencias actuales.")
 
-        profile_diag_text = (
-            f"{profile_summary['short_name']} ({profile_summary['effective_mode']})"
-        )
+        profile_diag_text = f"{profile_summary} | {profile_mode_summary}"
         self._diagnostic_summary_labels["profile"].setText(profile_diag_text)
         self._diagnostic_summary_labels["config_path"].setText(str(self.config_path))
         self._diagnostic_summary_labels["mode"].setText(mode_summary)

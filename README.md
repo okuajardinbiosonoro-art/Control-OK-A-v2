@@ -46,8 +46,10 @@ La ventana principal usa flujo operator-first:
 
 En `Operacion` aparecen tarjetas de estado para:
 
-- perfil operativo
-- modo activo
+- perfil activo
+- modo asociado
+- resumen operativo
+- modo tecnico
 - transporte configurado
 - MIDI
 - logging
