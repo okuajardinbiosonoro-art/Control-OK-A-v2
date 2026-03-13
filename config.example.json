@@ -1,4 +1,36 @@
 {
+  "version": 2,
+  "mode": null,
+  "serial": {
+    "baudrate": 115200,
+    "running_status": true,
+    "flush_ms": 5,
+    "max_silence_s": 3.0,
+    "auto_reconnect": true,
+    "port": null
+  },
+  "udp": {
+    "bind_ip": "0.0.0.0",
+    "evt_port": 5005,
+    "stat_port": 5006,
+    "cmd_port": 5007,
+    "rcvbuf_bytes": 262144
+  },
+  "midi": {
+    "backend": "rtmidi",
+    "send_noteoff_on_vel0": true,
+    "outputs": {
+      "0": "loopMIDI Port 1",
+      "1": "loopMIDI Port 2",
+      "2": "loopMIDI Port 3"
+    }
+  },
+  "logging": {
+    "enabled": true,
+    "folder": "logs",
+    "format": "jsonl",
+    "level": "INFO"
+  },
   "ui": {
     "refresh_hz": 10
   },
@@ -6,33 +38,5 @@
     "online_ms": 1500,
     "degraded_ms": 4000,
     "offline_ms": 8000
-  },
-  "version": 2,
-  "midi": {
-    "backend": "rtmidi",
-    "outputs": {},
-    "send_noteoff_on_vel0": true
-  },
-  "mode": "serial",
-  "udp": {
-    "bind_ip": "0.0.0.0",
-    "rcvbuf_bytes": 262144,
-    "evt_port": 5005,
-    "stat_port": 5006,
-    "cmd_port": 5007
-  },
-  "logging": {
-    "folder": "logs",
-    "enabled": true,
-    "format": "jsonl",
-    "level": "INFO"
-  },
-  "serial": {
-    "max_silence_s": 3.0,
-    "running_status": true,
-    "flush_ms": 5,
-    "baudrate": 115200,
-    "auto_reconnect": true,
-    "port": null
   }
 }

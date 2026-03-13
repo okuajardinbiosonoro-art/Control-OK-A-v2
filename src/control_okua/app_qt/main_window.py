@@ -7,19 +7,31 @@ from typing import Any
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
+    QAbstractItemView,
     QFormLayout,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QPushButton,
+    QTabWidget,
+    QTableWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
 
+from control_okua.app_qt.advanced_tools_dialog import AdvancedToolsDialog
 from control_okua.app_qt.mode_selector_dialog import ModeSelectorDialog
-from control_okua.app_qt.widgets import ConfigViewDialog, MidiOutputsWidget
+from control_okua.app_qt.widgets import ConfigViewDialog
+from control_okua.app_qt.viewmodels import (
+    build_general_status_summary,
+    build_logging_summary,
+    build_midi_summary,
+    build_mode_summary,
+    build_transport_summary,
+)
 from control_okua.core.config.config_schema import load_config, save_config
 
 
@@ -38,7 +50,10 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Control OKÚA v2")
         self.resize(1100, 700)
 
-        self._summary_labels: dict[str, QLabel] = {}
+        self._operation_summary_labels: dict[str, QLabel] = {}
+        self._diagnostic_summary_labels: dict[str, QLabel] = {}
+        self._advanced_dialog: AdvancedToolsDialog | None = None
+
         self._build_ui()
         self.refresh_ui()
 
@@ -47,113 +62,189 @@ class MainWindow(QMainWindow):
         root_layout = QVBoxLayout(central)
         self.setCentralWidget(central)
 
-        header_layout = QHBoxLayout()
+        self.tabs = QTabWidget(self)
+        self.tabs.addTab(self._build_operation_tab(), "Operación")
+        self.tabs.addTab(self._build_nodes_tab(), "Nodos")
+        self.tabs.addTab(self._build_diagnostics_tab(), "Diagnóstico")
+        self.tabs.setCurrentIndex(0)
+        root_layout.addWidget(self.tabs)
+
+    def _build_operation_tab(self) -> QWidget:
+        tab = QWidget(self)
+        layout = QVBoxLayout(tab)
+
         self.title_label = QLabel("Control OKÚA v2")
         title_font = self.title_label.font()
-        title_font.setPointSize(title_font.pointSize() + 6)
+        title_font.setPointSize(title_font.pointSize() + 8)
         title_font.setBold(True)
         self.title_label.setFont(title_font)
-        header_layout.addWidget(self.title_label)
+        layout.addWidget(self.title_label)
 
-        self.mode_label = QLabel("Modo: (sin seleccionar)")
-        header_layout.addWidget(self.mode_label)
-        header_layout.addStretch(1)
+        self.operation_subtitle_label = QLabel(
+            "Aplicación lista para operación. La sesión aún no está iniciada."
+        )
+        self.operation_subtitle_label.setWordWrap(True)
+        layout.addWidget(self.operation_subtitle_label)
 
-        self.change_mode_button = QPushButton("Cambiar modo...")
+        quick_actions_group = QGroupBox("Acciones rápidas")
+        quick_actions_layout = QHBoxLayout(quick_actions_group)
+
+        self.change_mode_button = QPushButton("Cambiar modo")
         self.change_mode_button.clicked.connect(self.change_mode)
-        header_layout.addWidget(self.change_mode_button)
+        quick_actions_layout.addWidget(self.change_mode_button)
 
-        self.reload_button = QPushButton("Recargar config")
+        self.reload_button = QPushButton("Recargar configuración")
         self.reload_button.clicked.connect(self.reload_config)
-        header_layout.addWidget(self.reload_button)
+        quick_actions_layout.addWidget(self.reload_button)
 
-        self.open_folder_button = QPushButton("Abrir carpeta")
-        self.open_folder_button.clicked.connect(self.open_config_folder)
-        header_layout.addWidget(self.open_folder_button)
+        self.advanced_tools_button = QPushButton("Herramientas avanzadas")
+        self.advanced_tools_button.clicked.connect(self.open_advanced_tools)
+        quick_actions_layout.addWidget(self.advanced_tools_button)
+        quick_actions_layout.addStretch(1)
 
-        self.view_config_button = QPushButton("Ver config")
-        self.view_config_button.clicked.connect(self.view_config)
-        header_layout.addWidget(self.view_config_button)
+        layout.addWidget(quick_actions_group)
 
-        root_layout.addLayout(header_layout)
+        cards_group = QGroupBox("Estado actual")
+        cards_layout = QGridLayout(cards_group)
 
-        self.config_path_label = QLabel()
-        self.config_path_label.setWordWrap(True)
-        root_layout.addWidget(self.config_path_label)
+        cards = [
+            ("mode", "Modo activo"),
+            ("transport", "Transporte configurado"),
+            ("midi", "MIDI"),
+            ("logging", "Logging"),
+            ("general", "Estado general"),
+        ]
+        for index, (key, title_text) in enumerate(cards):
+            row = index // 2
+            col = index % 2
+            card_group = QGroupBox(title_text)
+            card_layout = QVBoxLayout(card_group)
+            value_label = QLabel("-")
+            value_label.setWordWrap(True)
+            card_layout.addWidget(value_label)
+            cards_layout.addWidget(card_group, row, col)
+            self._operation_summary_labels[key] = value_label
 
-        warnings_group = QGroupBox("Warnings")
+        layout.addWidget(cards_group, 1)
+
+        return tab
+
+    def _build_nodes_tab(self) -> QWidget:
+        tab = QWidget(self)
+        layout = QVBoxLayout(tab)
+
+        title_label = QLabel("Monitoreo de nodos")
+        title_font = title_label.font()
+        title_font.setPointSize(title_font.pointSize() + 2)
+        title_font.setBold(True)
+        title_label.setFont(title_font)
+        layout.addWidget(title_label)
+
+        empty_state_label = QLabel("Aún no hay datos en vivo.")
+        empty_state_label.setWordWrap(True)
+        layout.addWidget(empty_state_label)
+
+        hint_label = QLabel("Los nodos aparecerán cuando la sesión esté en ejecución.")
+        hint_label.setWordWrap(True)
+        layout.addWidget(hint_label)
+
+        self.nodes_table = QTableWidget(0, 9, self)
+        self.nodes_table.setHorizontalHeaderLabels(
+            [
+                "node_id",
+                "label",
+                "tipo",
+                "estado",
+                "último visto",
+                "pps",
+                "pérdida",
+                "RSSI",
+                "último note/vel",
+            ]
+        )
+        self.nodes_table.horizontalHeader().setStretchLastSection(True)
+        self.nodes_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.nodes_table.setSelectionMode(QAbstractItemView.NoSelection)
+        self.nodes_table.verticalHeader().setVisible(False)
+        layout.addWidget(self.nodes_table, 1)
+
+        return tab
+
+    def _build_diagnostics_tab(self) -> QWidget:
+        tab = QWidget(self)
+        layout = QVBoxLayout(tab)
+
+        summary_group = QGroupBox("Resumen técnico")
+        summary_layout = QFormLayout(summary_group)
+
+        fields = [
+            ("config_path", "Archivo config"),
+            ("mode", "Modo"),
+            ("transport", "Transporte"),
+            ("midi", "MIDI"),
+            ("logging", "Logging"),
+            ("general", "Estado"),
+        ]
+        for key, field_name in fields:
+            label = QLabel("-")
+            label.setWordWrap(True)
+            summary_layout.addRow(field_name, label)
+            self._diagnostic_summary_labels[key] = label
+
+        layout.addWidget(summary_group)
+
+        warnings_group = QGroupBox("Advertencias de configuración")
         warnings_layout = QVBoxLayout(warnings_group)
         self.warnings_view = QTextEdit(self)
         self.warnings_view.setReadOnly(True)
         warnings_layout.addWidget(self.warnings_view)
-        root_layout.addWidget(warnings_group)
+        layout.addWidget(warnings_group, 1)
 
-        content_layout = QHBoxLayout()
-        root_layout.addLayout(content_layout, 1)
-
-        summary_group = QGroupBox("Resumen de Config")
-        summary_layout = QFormLayout(summary_group)
-        summary_fields = [
-            ("version", "Version"),
-            ("mode", "Mode"),
-            ("serial.baudrate", "Serial baudrate"),
-            ("serial.flush_ms", "Serial flush_ms"),
-            ("serial.max_silence_s", "Serial max_silence_s"),
-            ("udp.bind_ip", "UDP bind_ip"),
-            ("udp.evt_port", "UDP evt_port"),
-            ("udp.stat_port", "UDP stat_port"),
-            ("udp.cmd_port", "UDP cmd_port"),
-            ("logging.enabled", "Logging enabled"),
-            ("logging.format", "Logging format"),
-            ("logging.folder", "Logging folder"),
-        ]
-        for key, label_text in summary_fields:
-            value_label = QLabel("-")
-            value_label.setWordWrap(True)
-            summary_layout.addRow(label_text, value_label)
-            self._summary_labels[key] = value_label
-
-        content_layout.addWidget(summary_group, 1)
-
-        midi_group = QGroupBox("MIDI Outputs")
-        midi_layout = QVBoxLayout(midi_group)
-        self.midi_outputs_widget = MidiOutputsWidget(self)
-        midi_layout.addWidget(self.midi_outputs_widget)
-        content_layout.addWidget(midi_group, 1)
+        return tab
 
     def refresh_ui(self) -> None:
-        mode_text = self._mode_text(self.cfg.get("mode"))
-        self.mode_label.setText(f"Modo: {mode_text}")
-        self.config_path_label.setText(f"Config path: {self.config_path}")
-        self.statusBar().showMessage(f"Config: {self.config_path} | Mode: {mode_text}")
+        mode_summary = build_mode_summary(self.cfg)
+        transport_summary = build_transport_summary(self.cfg)
+        midi_summary = build_midi_summary(self.cfg)
+        logging_summary = build_logging_summary(self.cfg)
+        general_summary = build_general_status_summary(self.cfg, self.warnings)
+
+        self._operation_summary_labels["mode"].setText(mode_summary)
+        self._operation_summary_labels["transport"].setText(transport_summary)
+        self._operation_summary_labels["midi"].setText(midi_summary)
+        self._operation_summary_labels["logging"].setText(logging_summary)
+        self._operation_summary_labels["general"].setText(general_summary)
+
+        if self.warnings:
+            self.operation_subtitle_label.setText(
+                "Aplicación cargada con advertencias. Revise Diagnóstico. "
+                "La sesión aún no está iniciada."
+            )
+        elif self.cfg.get("mode") in {"serial", "udp"}:
+            self.operation_subtitle_label.setText(
+                "Aplicación lista para operación. La sesión aún no está iniciada."
+            )
+        else:
+            self.operation_subtitle_label.setText(
+                "Seleccione un modo para continuar. La sesión aún no está iniciada."
+            )
 
         if self.warnings:
             self.warnings_view.setPlainText("\n".join(self.warnings))
         else:
-            self.warnings_view.setPlainText("Sin advertencias.")
+            self.warnings_view.setPlainText("Sin advertencias actuales.")
 
-        serial_cfg = self.cfg.get("serial") if isinstance(self.cfg.get("serial"), dict) else {}
-        udp_cfg = self.cfg.get("udp") if isinstance(self.cfg.get("udp"), dict) else {}
-        logging_cfg = self.cfg.get("logging") if isinstance(self.cfg.get("logging"), dict) else {}
+        self._diagnostic_summary_labels["config_path"].setText(str(self.config_path))
+        self._diagnostic_summary_labels["mode"].setText(mode_summary)
+        self._diagnostic_summary_labels["transport"].setText(transport_summary)
+        self._diagnostic_summary_labels["midi"].setText(midi_summary)
+        self._diagnostic_summary_labels["logging"].setText(logging_summary)
+        self._diagnostic_summary_labels["general"].setText(general_summary)
 
-        values = {
-            "version": str(self.cfg.get("version", "-")),
-            "mode": mode_text,
-            "serial.baudrate": str(serial_cfg.get("baudrate", "-")),
-            "serial.flush_ms": str(serial_cfg.get("flush_ms", "-")),
-            "serial.max_silence_s": str(serial_cfg.get("max_silence_s", "-")),
-            "udp.bind_ip": str(udp_cfg.get("bind_ip", "-")),
-            "udp.evt_port": str(udp_cfg.get("evt_port", "-")),
-            "udp.stat_port": str(udp_cfg.get("stat_port", "-")),
-            "udp.cmd_port": str(udp_cfg.get("cmd_port", "-")),
-            "logging.enabled": self._bool_text(logging_cfg.get("enabled")),
-            "logging.format": str(logging_cfg.get("format", "-")),
-            "logging.folder": str(logging_cfg.get("folder", "-")),
-        }
-        for key, label in self._summary_labels.items():
-            label.setText(values.get(key, "-"))
+        self.statusBar().showMessage(f"{mode_summary} | {general_summary}")
 
-        self.midi_outputs_widget.refresh_from_config(self.cfg)
+        if self._advanced_dialog is not None and self._advanced_dialog.isVisible():
+            self._advanced_dialog.set_state(self.cfg, self.config_path, self.warnings)
 
     def change_mode(self) -> None:
         current_mode = self.cfg.get("mode")
@@ -173,6 +264,22 @@ class MainWindow(QMainWindow):
         self.config_path = config_path
         self.refresh_ui()
 
+    def open_advanced_tools(self) -> None:
+        if self._advanced_dialog is None:
+            self._advanced_dialog = AdvancedToolsDialog(
+                on_open_folder=self.open_config_folder,
+                on_view_config=self.view_config,
+                on_reload_config=self.reload_config,
+                state_provider=self._advanced_state,
+                parent=self,
+            )
+
+        self._advanced_dialog.set_state(self.cfg, self.config_path, self.warnings)
+        self._advanced_dialog.exec()
+
+    def _advanced_state(self) -> tuple[dict[str, Any], Path, list[str]]:
+        return self.cfg, self.config_path, self.warnings
+
     def open_config_folder(self) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.config_path.parent)))
 
@@ -182,15 +289,3 @@ class MainWindow(QMainWindow):
 
     def _config_pretty_text(self) -> str:
         return json.dumps(self.cfg, indent=2, ensure_ascii=False)
-
-    @staticmethod
-    def _mode_text(value: object) -> str:
-        if isinstance(value, str) and value in {"serial", "udp"}:
-            return value
-        return "(sin seleccionar)"
-
-    @staticmethod
-    def _bool_text(value: object) -> str:
-        if isinstance(value, bool):
-            return "Si" if value else "No"
-        return "-"
