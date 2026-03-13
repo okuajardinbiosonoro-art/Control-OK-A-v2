@@ -9,6 +9,7 @@ from control_okua.core.profiles.profile_service import (
     infer_profile_from_config,
     is_known_profile_id,
     list_available_profiles,
+    normalize_profile_mode_consistency,
     resolve_profile_to_mode,
     set_active_profile,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "resolve_profile_to_mode",
     "build_profile_ui_summary",
     "infer_profile_from_config",
+    "normalize_profile_mode_consistency",
     "set_active_profile",
     "is_known_profile_id",
 ]

@@ -13,6 +13,7 @@ from control_okua.core.profiles.profile_service import (  # noqa: E402
     build_profile_ui_summary,
     infer_profile_from_config,
     list_available_profiles,
+    normalize_profile_mode_consistency,
     resolve_profile_to_mode,
     set_active_profile,
 )
@@ -89,4 +90,18 @@ def test_validate_and_fix_aligns_mode_from_profile() -> None:
     fixed_cfg, warnings = validate_and_fix(cfg)
 
     assert fixed_cfg["mode"] == "udp"
-    assert any("mode ajustado" in warning for warning in warnings)
+    assert any("se normalizó mode" in warning.lower() for warning in warnings)
+
+
+def test_normalize_profile_mode_consistency_updates_mode_from_profile() -> None:
+    cfg = {
+        "version": 2,
+        "mode": "serial",
+        "profile": {"active": "udp_jardin"},
+    }
+
+    normalized_cfg, warnings = normalize_profile_mode_consistency(cfg)
+
+    assert normalized_cfg["mode"] == "udp"
+    assert cfg["mode"] == "serial"
+    assert any("udp_jardin" in warning for warning in warnings)

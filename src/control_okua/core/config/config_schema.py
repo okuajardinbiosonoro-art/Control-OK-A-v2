@@ -8,7 +8,7 @@ from typing import Any
 
 from control_okua.core.profiles.profile_service import (
     is_known_profile_id,
-    resolve_profile_to_mode,
+    normalize_profile_mode_consistency,
 )
 
 DEFAULT_OUTPUTS: dict[str, str] = {
@@ -165,12 +165,16 @@ def validate_and_fix(cfg: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     mode_value = candidate.get("mode")
     if mode_value is None:
         candidate["mode"] = None
-        warnings.append("mode no definido; requiere seleccion.")
+        warnings.append(
+            "mode no definido; se derivará desde profile.active cuando esté disponible."
+        )
     elif isinstance(mode_value, str) and mode_value in {"serial", "udp"}:
         candidate["mode"] = mode_value
     else:
         candidate["mode"] = None
-        warnings.append("mode invalido; requiere seleccion.")
+        warnings.append(
+            "mode invalido; se derivará desde profile.active cuando esté disponible."
+        )
 
     profile_cfg = candidate.get("profile")
     if not isinstance(profile_cfg, dict):
@@ -185,12 +189,8 @@ def validate_and_fix(cfg: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
         profile_cfg["active"] = None
         warnings.append("profile.active invalido; se uso null.")
 
-    resolved_mode = resolve_profile_to_mode(profile_cfg.get("active"))
-    if resolved_mode in {"serial", "udp"} and candidate.get("mode") != resolved_mode:
-        candidate["mode"] = resolved_mode
-        warnings.append(
-            f"mode ajustado a '{resolved_mode}' por profile.active='{profile_cfg.get('active')}'."
-        )
+    candidate, profile_mode_warnings = normalize_profile_mode_consistency(candidate)
+    warnings.extend(profile_mode_warnings)
 
     serial_cfg = candidate.get("serial")
     if not isinstance(serial_cfg, dict):

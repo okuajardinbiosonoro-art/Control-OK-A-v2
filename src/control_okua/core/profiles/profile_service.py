@@ -81,6 +81,38 @@ def infer_profile_from_config(cfg: dict[str, Any]) -> str | None:
     return None
 
 
+def normalize_profile_mode_consistency(cfg: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    if not isinstance(cfg, dict):
+        raise TypeError("cfg debe ser dict")
+
+    normalized_cfg = deepcopy(cfg)
+    warnings: list[str] = []
+
+    profile_cfg = normalized_cfg.get("profile")
+    if not isinstance(profile_cfg, dict):
+        return normalized_cfg, warnings
+
+    active_profile = profile_cfg.get("active")
+    if not is_known_profile_id(active_profile):
+        return normalized_cfg, warnings
+
+    resolved_mode = resolve_profile_to_mode(active_profile)
+    if resolved_mode not in {"serial", "udp"}:
+        return normalized_cfg, warnings
+
+    previous_mode = normalized_cfg.get("mode")
+    if previous_mode != resolved_mode:
+        previous_mode_text = "null" if previous_mode is None else str(previous_mode)
+        normalized_cfg["mode"] = resolved_mode
+        warnings.append(
+            "Se normalizó "
+            f"mode='{previous_mode_text}' a mode='{resolved_mode}' "
+            f"según el perfil activo '{active_profile}'."
+        )
+
+    return normalized_cfg, warnings
+
+
 def set_active_profile(cfg: dict[str, Any], profile_id: str) -> dict[str, Any]:
     if not isinstance(cfg, dict):
         raise TypeError("cfg debe ser dict")

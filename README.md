@@ -70,7 +70,6 @@ Las acciones tecnicas se movieron a `Herramientas avanzadas`:
 Acciones operativas visibles:
 
 - `Cambiar perfil`: abre selector guiado de perfil operativo.
-- `Cambiar modo`: selector tecnico de compatibilidad (fallback).
 - `Recargar configuracion`.
 - `Iniciar sesion`.
 - `Detener sesion`.
@@ -83,7 +82,14 @@ Acciones operativas visibles:
 - El estado de sesion visible refleja snapshot real (`idle`, `starting`, `running`, `stopping`, `error`).
 - Con los backends placeholder actuales (sin transporte real), `Iniciar sesion` termina en `error` controlado con mensaje legible.
 - `Reiniciar error` devuelve la sesion a estado inactivo.
-- Mientras la sesion esta en `starting`, `running` o `stopping`, la UI bloquea cambios de perfil/modo/recarga de config para evitar inconsistencias.
+- Mientras la sesion esta en `starting`, `running` o `stopping`, la UI bloquea cambios de perfil y recarga de config para evitar inconsistencias.
+
+## Perfil como fuente de verdad (coherencia operacional)
+
+- El operador trabaja por `perfil`, no por `mode`.
+- `mode` se mantiene como dato tecnico derivado para compatibilidad de config/runtime.
+- Al cambiar `profile.active`, la app sincroniza automaticamente `mode` segun el perfil.
+- Si una config antigua trae conflicto entre `profile.active` y `mode`, se normaliza a favor del perfil con advertencia tecnica legible.
 
 ## Config (v2)
 
@@ -105,8 +111,8 @@ Campos principales:
 Notas de consistencia runtime:
 
 - Si `profile.active` es `null` o invalido, la app pide seleccionar perfil al iniciar.
-- Si `profile.active` existe y es valido, el runtime alinea `mode` al perfil esperado.
-- Si no hay perfil activo y `mode` es invalido, se usa el selector de modo tecnico como fallback de compatibilidad.
+- Si `profile.active` existe y es valido, el runtime normaliza `mode` al valor derivado por perfil.
+- Si no hay perfil activo valido, la app mantiene compatibilidad con configs heredadas sin romper el arranque.
 - Si `midi.outputs` llega vacio o invalido, se restauran defaults (`0/1/2 -> loopMIDI Port 1/2/3`).
 
 ## Perfiles operativos
@@ -144,7 +150,7 @@ Compatibilidad:
 
 - En `Operacion`, usar `Cambiar perfil`.
 - El cambio se guarda en `config.json` y refresca la vista.
-- El modo tecnico (`mode`) se mantiene coherente con el perfil seleccionado.
+- El modo tecnico (`mode`) se deriva automaticamente desde el perfil seleccionado.
 
 ## Perfil, modo y configuracion avanzada
 
@@ -196,7 +202,7 @@ Remove-Item Env:CKV2_AUTOCLOSE_MS
 2. Confirmar estado inicial de sesion en `inactiva`.
 3. Pulsar `Iniciar sesion` y verificar `error` controlado (backend placeholder no implementado).
 4. Pulsar `Reiniciar error` y confirmar retorno a estado inactivo.
-5. Validar bloqueo de `Cambiar perfil`/`Cambiar modo`/`Recargar configuracion` cuando la sesion no esta en estado seguro (`starting`, `running`, `stopping`).
+5. Validar bloqueo de `Cambiar perfil`/`Recargar configuracion` cuando la sesion no esta en estado seguro (`starting`, `running`, `stopping`).
 6. Abrir `Herramientas avanzadas` y validar `Ver config`, `Abrir carpeta`, `Recargar config` y `Salidas MIDI`.
 7. Cerrar y reabrir la app sin errores.
 

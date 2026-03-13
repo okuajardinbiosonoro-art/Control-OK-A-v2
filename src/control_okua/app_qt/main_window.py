@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
 )
 
 from control_okua.app_qt.advanced_tools_dialog import AdvancedToolsDialog
-from control_okua.app_qt.mode_selector_dialog import ModeSelectorDialog
 from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
 from control_okua.app_qt.widgets import ConfigViewDialog
 from control_okua.app_qt.viewmodels import (
@@ -117,10 +116,6 @@ class MainWindow(QMainWindow):
 
         quick_actions_group = QGroupBox("Acciones rápidas")
         quick_actions_layout = QHBoxLayout(quick_actions_group)
-
-        self.change_mode_button = QPushButton("Cambiar modo")
-        self.change_mode_button.clicked.connect(self.change_mode)
-        quick_actions_layout.addWidget(self.change_mode_button)
 
         self.change_profile_button = QPushButton("Cambiar perfil")
         self.change_profile_button.clicked.connect(self.change_profile)
@@ -297,7 +292,7 @@ class MainWindow(QMainWindow):
             )
         elif self._session_snapshot.state is SessionState.RUNNING:
             self.operation_subtitle_label.setText(
-                "Sesión en ejecución. Detenga la sesión antes de cambiar perfil, modo o configuración."
+                "Sesión en ejecución. Detenga la sesión antes de cambiar perfil o configuración."
             )
         elif self._session_snapshot.state is SessionState.STOPPING:
             self.operation_subtitle_label.setText(
@@ -323,14 +318,13 @@ class MainWindow(QMainWindow):
             )
         else:
             self.operation_subtitle_label.setText(
-                "Seleccione un modo para continuar. La sesión aún no está iniciada."
+                "Seleccione un perfil operativo para continuar. La sesión aún no está iniciada."
             )
 
         self.start_session_button.setEnabled(session_action_state.can_start_session)
         self.stop_session_button.setEnabled(session_action_state.can_stop_session)
         self.reset_session_error_button.setEnabled(session_action_state.can_reset_error)
 
-        self.change_mode_button.setEnabled(session_action_state.can_edit_configuration)
         self.change_profile_button.setEnabled(session_action_state.can_edit_configuration)
         self.reload_button.setEnabled(session_action_state.can_edit_configuration)
 
@@ -359,23 +353,6 @@ class MainWindow(QMainWindow):
             self._advanced_dialog.reload_button.setEnabled(
                 session_action_state.can_edit_configuration
             )
-
-    def change_mode(self) -> None:
-        if not self._ensure_configuration_change_allowed():
-            return
-
-        current_mode = self.cfg.get("mode")
-        selected_mode = ModeSelectorDialog.choose_mode(self)
-        if selected_mode == current_mode:
-            return
-
-        self.cfg["mode"] = selected_mode
-        inferred_profile = infer_profile_from_config(self.cfg)
-        if isinstance(inferred_profile, str):
-            self.cfg = set_active_profile(self.cfg, inferred_profile)
-        save_config(self.cfg, self.config_path)
-        self.warnings = [f"Modo actualizado desde UI a '{selected_mode}'."]
-        self.session_controller.reload_config(self._session_cfg_provider)
 
     def change_profile(self) -> None:
         if not self._ensure_configuration_change_allowed():
@@ -463,7 +440,7 @@ class MainWindow(QMainWindow):
         if action_state.can_edit_configuration:
             return True
 
-        message = "Detenga la sesión antes de cambiar perfil, modo o recargar configuración."
+        message = "Detenga la sesión antes de cambiar perfil o recargar configuración."
         self.operation_subtitle_label.setText(message)
         self.statusBar().showMessage(message)
         return False
