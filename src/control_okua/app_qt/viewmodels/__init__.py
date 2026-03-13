@@ -6,7 +6,13 @@ from control_okua.app_qt.viewmodels.main_window_vm import (
     build_operation_summary,
     build_profile_mode_summary,
     build_profile_summary,
+    build_session_action_state,
+    build_session_backend_summary,
+    build_session_capabilities_summary,
+    build_session_message_summary,
+    build_session_status_summary,
     build_transport_summary,
+    SessionActionState,
 )
 
 __all__ = [
@@ -18,4 +24,10 @@ __all__ = [
     "build_midi_summary",
     "build_logging_summary",
     "build_general_status_summary",
+    "build_session_status_summary",
+    "build_session_backend_summary",
+    "build_session_message_summary",
+    "build_session_capabilities_summary",
+    "build_session_action_state",
+    "SessionActionState",
 ]

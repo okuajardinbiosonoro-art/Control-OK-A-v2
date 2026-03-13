@@ -68,9 +68,18 @@ Acciones operativas visibles:
 - `Cambiar perfil`: abre selector guiado de perfil operativo.
 - `Cambiar modo`: selector tecnico de compatibilidad (fallback).
 - `Recargar configuracion`.
+- `Iniciar sesion`.
+- `Detener sesion`.
+- `Reiniciar error`.
 - `Herramientas avanzadas`.
 
-La app todavia no inicia una sesion de transporte desde esta UI; por eso se informa estado `sesion no iniciada` o `no disponible aun` donde aplica.
+## Flujo de sesion actual (Ticket 3.3)
+
+- La pestana `Operacion` ahora esta conectada a `SessionController` real.
+- El estado de sesion visible refleja snapshot real (`idle`, `starting`, `running`, `stopping`, `error`).
+- Con los backends placeholder actuales (sin transporte real), `Iniciar sesion` termina en `error` controlado con mensaje legible.
+- `Reiniciar error` devuelve la sesion a estado inactivo.
+- Mientras la sesion esta en `starting`, `running` o `stopping`, la UI bloquea cambios de perfil/modo/recarga de config para evitar inconsistencias.
 
 ## Config (v2)
 

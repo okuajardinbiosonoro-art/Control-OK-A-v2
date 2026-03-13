@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from control_okua.core.profiles.profile_service import (
     build_profile_ui_summary,
     infer_profile_from_config,
 )
+from control_okua.core.session import SessionSnapshot, SessionState
 
 
 def _mode_label(cfg: dict[str, Any]) -> str:
@@ -124,3 +126,70 @@ def build_general_status_summary(cfg: dict[str, Any], warnings: list[str] | None
         return "Estado general: modo pendiente / sesión no iniciada"
 
     return "Estado general: aplicación lista / sesión aún no iniciada"
+
+
+def _session_state_label(state: SessionState) -> str:
+    if state is SessionState.IDLE:
+        return "inactiva"
+    if state is SessionState.STARTING:
+        return "iniciando"
+    if state is SessionState.RUNNING:
+        return "en ejecución"
+    if state is SessionState.STOPPING:
+        return "deteniendo"
+    return "en error"
+
+
+def build_session_status_summary(snapshot: SessionSnapshot) -> str:
+    return f"Estado de sesión: {_session_state_label(snapshot.state)}"
+
+
+def build_session_backend_summary(snapshot: SessionSnapshot) -> str:
+    if snapshot.backend is None:
+        return "Backend esperado: No disponible"
+
+    if snapshot.backend.value == "serial":
+        backend_text = "Serial"
+    elif snapshot.backend.value == "udp":
+        backend_text = "UDP"
+    elif snapshot.backend.value == "lab":
+        backend_text = "LAB (pendiente)"
+    else:
+        backend_text = snapshot.backend.value.upper()
+
+    return f"Backend esperado: {backend_text}"
+
+
+def build_session_message_summary(snapshot: SessionSnapshot) -> str:
+    message = snapshot.message.strip() if isinstance(snapshot.message, str) else ""
+    if not message:
+        message = "Sin mensajes de sesión."
+    return f"Mensaje actual: {message}"
+
+
+def build_session_capabilities_summary(snapshot: SessionSnapshot) -> str:
+    start_text = "Sí" if snapshot.can_start else "No"
+    stop_text = "Sí" if snapshot.can_stop else "No"
+    return f"Puede iniciar: {start_text} | Puede detener: {stop_text}"
+
+
+@dataclass(frozen=True)
+class SessionActionState:
+    can_start_session: bool
+    can_stop_session: bool
+    can_reset_error: bool
+    can_edit_configuration: bool
+
+
+def build_session_action_state(snapshot: SessionSnapshot) -> SessionActionState:
+    can_edit_configuration = snapshot.state not in {
+        SessionState.STARTING,
+        SessionState.RUNNING,
+        SessionState.STOPPING,
+    }
+    return SessionActionState(
+        can_start_session=snapshot.can_start,
+        can_stop_session=snapshot.can_stop,
+        can_reset_error=snapshot.state is SessionState.ERROR,
+        can_edit_configuration=can_edit_configuration,
+    )

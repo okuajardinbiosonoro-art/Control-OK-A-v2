@@ -34,6 +34,11 @@ from control_okua.app_qt.viewmodels import (
     build_operation_summary,
     build_profile_mode_summary,
     build_profile_summary,
+    build_session_action_state,
+    build_session_backend_summary,
+    build_session_capabilities_summary,
+    build_session_message_summary,
+    build_session_status_summary,
     build_transport_summary,
 )
 from control_okua.core.config.config_schema import load_config, save_config
@@ -42,6 +47,8 @@ from control_okua.core.profiles.profile_service import (
     is_known_profile_id,
     set_active_profile,
 )
+from control_okua.core.session import SessionSnapshot, SessionState
+from control_okua.services.session_controller import SessionController
 
 
 class MainWindow(QMainWindow):
@@ -50,6 +57,7 @@ class MainWindow(QMainWindow):
         cfg: dict[str, Any],
         config_path: Path,
         warnings: list[str] | None = None,
+        session_controller: SessionController | None = None,
     ) -> None:
         super().__init__()
         self.cfg = cfg
@@ -62,9 +70,21 @@ class MainWindow(QMainWindow):
         self._operation_summary_labels: dict[str, QLabel] = {}
         self._diagnostic_summary_labels: dict[str, QLabel] = {}
         self._advanced_dialog: AdvancedToolsDialog | None = None
+        self.session_controller = session_controller or SessionController(
+            self._session_cfg_provider,
+            parent=self,
+        )
+        self._session_snapshot: SessionSnapshot = self.session_controller.get_snapshot()
+        self._connect_session_signals()
 
         self._build_ui()
         self.refresh_ui()
+
+    def _connect_session_signals(self) -> None:
+        self.session_controller.session_state_changed.connect(self._on_session_state_changed)
+        self.session_controller.session_snapshot_changed.connect(self._on_session_snapshot_changed)
+        self.session_controller.session_error.connect(self._on_session_error)
+        self.session_controller.session_message.connect(self._on_session_message)
 
     def _build_ui(self) -> None:
         central = QWidget(self)
@@ -117,12 +137,34 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(quick_actions_group)
 
+        session_actions_group = QGroupBox("Control de sesión")
+        session_actions_layout = QHBoxLayout(session_actions_group)
+
+        self.start_session_button = QPushButton("Iniciar sesión")
+        self.start_session_button.clicked.connect(self.start_session)
+        session_actions_layout.addWidget(self.start_session_button)
+
+        self.stop_session_button = QPushButton("Detener sesión")
+        self.stop_session_button.clicked.connect(self.stop_session)
+        session_actions_layout.addWidget(self.stop_session_button)
+
+        self.reset_session_error_button = QPushButton("Reiniciar error")
+        self.reset_session_error_button.clicked.connect(self.reset_session_error)
+        session_actions_layout.addWidget(self.reset_session_error_button)
+        session_actions_layout.addStretch(1)
+
+        layout.addWidget(session_actions_group)
+
         cards_group = QGroupBox("Estado actual")
         cards_layout = QGridLayout(cards_group)
 
         cards = [
             ("profile", "Perfil activo"),
             ("profile_mode", "Modo asociado"),
+            ("session_backend", "Backend esperado"),
+            ("session_state", "Estado de sesión"),
+            ("session_message", "Mensaje de sesión"),
+            ("session_capabilities", "Capacidades de sesión"),
             ("operation", "Resumen operativo"),
             ("mode", "Modo técnico"),
             ("general", "Estado general"),
@@ -228,9 +270,20 @@ class MainWindow(QMainWindow):
         midi_summary = build_midi_summary(self.cfg)
         logging_summary = build_logging_summary(self.cfg)
         general_summary = build_general_status_summary(self.cfg, self.warnings)
+        session_status_summary = build_session_status_summary(self._session_snapshot)
+        session_backend_summary = build_session_backend_summary(self._session_snapshot)
+        session_message_summary = build_session_message_summary(self._session_snapshot)
+        session_capabilities_summary = build_session_capabilities_summary(self._session_snapshot)
+        session_action_state = build_session_action_state(self._session_snapshot)
 
         self._operation_summary_labels["profile"].setText(profile_summary)
         self._operation_summary_labels["profile_mode"].setText(profile_mode_summary)
+        self._operation_summary_labels["session_backend"].setText(session_backend_summary)
+        self._operation_summary_labels["session_state"].setText(session_status_summary)
+        self._operation_summary_labels["session_message"].setText(session_message_summary)
+        self._operation_summary_labels["session_capabilities"].setText(
+            session_capabilities_summary
+        )
         self._operation_summary_labels["operation"].setText(operation_summary)
         self._operation_summary_labels["mode"].setText(mode_summary)
         self._operation_summary_labels["general"].setText(general_summary)
@@ -238,7 +291,23 @@ class MainWindow(QMainWindow):
         self._operation_summary_labels["midi"].setText(midi_summary)
         self._operation_summary_labels["logging"].setText(logging_summary)
 
-        if self.warnings:
+        if self._session_snapshot.state is SessionState.STARTING:
+            self.operation_subtitle_label.setText(
+                "La sesión se está iniciando. Espere antes de cambiar configuración."
+            )
+        elif self._session_snapshot.state is SessionState.RUNNING:
+            self.operation_subtitle_label.setText(
+                "Sesión en ejecución. Detenga la sesión antes de cambiar perfil, modo o configuración."
+            )
+        elif self._session_snapshot.state is SessionState.STOPPING:
+            self.operation_subtitle_label.setText(
+                "La sesión se está deteniendo. Espere antes de cambiar configuración."
+            )
+        elif self._session_snapshot.state is SessionState.ERROR:
+            self.operation_subtitle_label.setText(
+                "Sesión en error. Revise el mensaje de sesión y use 'Reiniciar error'."
+            )
+        elif self.warnings:
             self.operation_subtitle_label.setText(
                 "Aplicación cargada con advertencias. Revise Diagnóstico. "
                 "La sesión aún no está iniciada."
@@ -257,6 +326,14 @@ class MainWindow(QMainWindow):
                 "Seleccione un modo para continuar. La sesión aún no está iniciada."
             )
 
+        self.start_session_button.setEnabled(session_action_state.can_start_session)
+        self.stop_session_button.setEnabled(session_action_state.can_stop_session)
+        self.reset_session_error_button.setEnabled(session_action_state.can_reset_error)
+
+        self.change_mode_button.setEnabled(session_action_state.can_edit_configuration)
+        self.change_profile_button.setEnabled(session_action_state.can_edit_configuration)
+        self.reload_button.setEnabled(session_action_state.can_edit_configuration)
+
         if self.warnings:
             self.warnings_view.setPlainText("\n".join(self.warnings))
         else:
@@ -269,14 +346,24 @@ class MainWindow(QMainWindow):
         self._diagnostic_summary_labels["transport"].setText(transport_summary)
         self._diagnostic_summary_labels["midi"].setText(midi_summary)
         self._diagnostic_summary_labels["logging"].setText(logging_summary)
-        self._diagnostic_summary_labels["general"].setText(general_summary)
+        self._diagnostic_summary_labels["general"].setText(
+            f"{general_summary} | {session_status_summary}"
+        )
 
-        self.statusBar().showMessage(f"{mode_summary} | {general_summary}")
+        self.statusBar().showMessage(
+            f"{mode_summary} | {session_status_summary} | {self._session_snapshot.message}"
+        )
 
         if self._advanced_dialog is not None and self._advanced_dialog.isVisible():
             self._advanced_dialog.set_state(self.cfg, self.config_path, self.warnings)
+            self._advanced_dialog.reload_button.setEnabled(
+                session_action_state.can_edit_configuration
+            )
 
     def change_mode(self) -> None:
+        if not self._ensure_configuration_change_allowed():
+            return
+
         current_mode = self.cfg.get("mode")
         selected_mode = ModeSelectorDialog.choose_mode(self)
         if selected_mode == current_mode:
@@ -288,9 +375,12 @@ class MainWindow(QMainWindow):
             self.cfg = set_active_profile(self.cfg, inferred_profile)
         save_config(self.cfg, self.config_path)
         self.warnings = [f"Modo actualizado desde UI a '{selected_mode}'."]
-        self.refresh_ui()
+        self.session_controller.reload_config(self._session_cfg_provider)
 
     def change_profile(self) -> None:
+        if not self._ensure_configuration_change_allowed():
+            return
+
         current_profile = self._active_profile_id()
         selected_profile = ProfileSelectorDialog.choose_profile(
             current_profile_id=current_profile,
@@ -304,14 +394,26 @@ class MainWindow(QMainWindow):
         self.cfg = set_active_profile(self.cfg, selected_profile)
         save_config(self.cfg, self.config_path)
         self.warnings = [f"Perfil actualizado desde UI a '{selected_profile}'."]
-        self.refresh_ui()
+        self.session_controller.reload_config(self._session_cfg_provider)
 
     def reload_config(self) -> None:
+        if not self._ensure_configuration_change_allowed():
+            return
+
         cfg, warnings, config_path = load_config()
         self.cfg = cfg
         self.warnings = warnings
         self.config_path = config_path
-        self.refresh_ui()
+        self.session_controller.reload_config(self._session_cfg_provider)
+
+    def start_session(self) -> None:
+        self.session_controller.start_session()
+
+    def stop_session(self) -> None:
+        self.session_controller.stop_session()
+
+    def reset_session_error(self) -> None:
+        self.session_controller.reset_error()
 
     def open_advanced_tools(self) -> None:
         if self._advanced_dialog is None:
@@ -324,6 +426,9 @@ class MainWindow(QMainWindow):
             )
 
         self._advanced_dialog.set_state(self.cfg, self.config_path, self.warnings)
+        self._advanced_dialog.reload_button.setEnabled(
+            build_session_action_state(self._session_snapshot).can_edit_configuration
+        )
         self._advanced_dialog.exec()
 
     def _advanced_state(self) -> tuple[dict[str, Any], Path, list[str]]:
@@ -349,3 +454,34 @@ class MainWindow(QMainWindow):
             return active_profile
 
         return infer_profile_from_config(self.cfg)
+
+    def _session_cfg_provider(self) -> dict[str, Any]:
+        return self.cfg
+
+    def _ensure_configuration_change_allowed(self) -> bool:
+        action_state = build_session_action_state(self._session_snapshot)
+        if action_state.can_edit_configuration:
+            return True
+
+        message = "Detenga la sesión antes de cambiar perfil, modo o recargar configuración."
+        self.operation_subtitle_label.setText(message)
+        self.statusBar().showMessage(message)
+        return False
+
+    def _on_session_state_changed(self, _state_value: str) -> None:
+        self.refresh_ui()
+
+    def _on_session_snapshot_changed(self, snapshot: object) -> None:
+        if isinstance(snapshot, SessionSnapshot):
+            self._session_snapshot = snapshot
+        self.refresh_ui()
+
+    def _on_session_error(self, message: str) -> None:
+        self.operation_subtitle_label.setText(
+            "Sesión en error. Revise el mensaje de sesión y use 'Reiniciar error'."
+        )
+        self.statusBar().showMessage(f"Error de sesión: {message}")
+
+    def _on_session_message(self, message: str) -> None:
+        if message.strip():
+            self.statusBar().showMessage(message)
