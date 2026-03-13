@@ -1,6 +1,9 @@
 {
   "version": 2,
   "mode": null,
+  "profile": {
+    "active": null
+  },
   "serial": {
     "baudrate": 115200,
     "running_status": true,

@@ -73,6 +73,7 @@ La app todavia no inicia una sesion de transporte desde esta UI; por eso se info
 Campos principales:
 
 - `mode`: `"serial"` o `"udp"` (puede iniciar como `null` antes de seleccionar).
+- `profile.active`: perfil operativo activo (`serial_local`, `udp_jardin`, `lab_sim`) o `null`.
 - `serial`: baudrate, running_status, flush_ms, max_silence_s, auto_reconnect, port.
 - `udp`: bind_ip, evt_port (5005), stat_port (5006), cmd_port (5007), rcvbuf_bytes.
 - `midi.outputs`: mapping explicito de buses (`"0"`..`"255"`) a nombre de puerto.
@@ -81,7 +82,29 @@ Campos principales:
 Notas de consistencia runtime:
 
 - Si `mode` es invalido o `null`, la app pide seleccionar modo al iniciar y persiste el valor.
+- Si `profile.active` existe y es valido, el runtime alinea `mode` al perfil esperado.
 - Si `midi.outputs` llega vacio o invalido, se restauran defaults (`0/1/2 -> loopMIDI Port 1/2/3`).
+
+## Perfiles operativos
+
+El sistema soporta una capa de perfiles operativos para trabajar sin pensar primero en JSON tecnico:
+
+- `serial_local`: uso con Maestro conectado por USB/Serial.
+- `udp_jardin`: uso en instalacion OKUA por red UDP.
+- `lab_sim`: uso de laboratorio/simulacion; la sesion/simulador aun no estan integrados.
+
+Cada perfil define:
+
+- nombre corto
+- descripcion
+- modo esperado (`serial` o `udp`)
+- nivel de uso
+- resumen operativo para UI
+
+Compatibilidad:
+
+- Si `profile.active` falta, se infiere desde `mode` cuando es posible.
+- Si no se puede inferir, queda `null` sin romper el arranque.
 
 ## Validacion y pruebas
 
@@ -97,6 +120,14 @@ Con `pytest` instalado:
 
 ```powershell
 python -m pytest -q tests/test_main_window_vm.py
+```
+
+### Test puro de perfiles operativos
+
+Con `pytest` instalado:
+
+```powershell
+python -m pytest -q tests/test_profile_service.py
 ```
 
 ### Abrir la app
