@@ -10,7 +10,7 @@ from control_okua.core.session import (
     SessionBackendContract,
     SessionSpec,
 )
-from control_okua.services.backends import SerialSessionBackend
+from control_okua.services.backends import SerialSessionBackend, UdpSessionBackend
 
 
 class SessionBackendError(RuntimeError):
@@ -65,7 +65,6 @@ class SessionBackendFactory:
     """Factory used by SessionController to resolve a backend from SessionSpec."""
 
     _DEFAULT_UNAVAILABLE_REASONS: dict[BackendKind, str] = {
-        BackendKind.UDP: "UDP backend aún no implementado en este ticket.",
         BackendKind.LAB: "Lab backend aún no implementado en este ticket.",
     }
 
@@ -93,6 +92,12 @@ class SessionBackendFactory:
         if spec.backend is BackendKind.SERIAL:
             cfg = self._get_effective_cfg()
             return SerialSessionBackend(cfg)
+        if spec.backend is BackendKind.UDP:
+            cfg = self._get_effective_cfg()
+            return UdpSessionBackend(cfg)
+        if spec.backend is BackendKind.LAB and spec.mode == "udp":
+            cfg = self._get_effective_cfg()
+            return UdpSessionBackend(cfg)
 
         reason = self._DEFAULT_UNAVAILABLE_REASONS.get(
             spec.backend,
