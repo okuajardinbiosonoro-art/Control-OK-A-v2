@@ -56,14 +56,16 @@ def build_operation_summary(cfg: dict[str, Any]) -> str:
 def build_transport_summary(cfg: dict[str, Any]) -> str:
     mode_value = cfg.get("mode")
     if mode_value == "serial":
-        serial_cfg = cfg.get("serial") if isinstance(cfg.get("serial"), dict) else {}
+        raw_serial_cfg = cfg.get("serial")
+        serial_cfg: dict[str, Any] = raw_serial_cfg if isinstance(raw_serial_cfg, dict) else {}
         baudrate = serial_cfg.get("baudrate", "-")
         port = serial_cfg.get("port")
         port_text = port if isinstance(port, str) and port.strip() else "sin puerto asignado"
         return f"Transporte configurado: Serial ({port_text}, {baudrate} baudios)"
 
     if mode_value == "udp":
-        udp_cfg = cfg.get("udp") if isinstance(cfg.get("udp"), dict) else {}
+        raw_udp_cfg = cfg.get("udp")
+        udp_cfg: dict[str, Any] = raw_udp_cfg if isinstance(raw_udp_cfg, dict) else {}
         bind_ip = udp_cfg.get("bind_ip", "0.0.0.0")
         evt_port = udp_cfg.get("evt_port", "-")
         stat_port = udp_cfg.get("stat_port", "-")
@@ -77,7 +79,8 @@ def build_transport_summary(cfg: dict[str, Any]) -> str:
 
 
 def build_midi_summary(cfg: dict[str, Any]) -> str:
-    midi_cfg = cfg.get("midi") if isinstance(cfg.get("midi"), dict) else {}
+    raw_midi_cfg = cfg.get("midi")
+    midi_cfg: dict[str, Any] = raw_midi_cfg if isinstance(raw_midi_cfg, dict) else {}
     outputs = midi_cfg.get("outputs")
     backend = midi_cfg.get("backend")
 
@@ -94,7 +97,10 @@ def build_midi_summary(cfg: dict[str, Any]) -> str:
 
 
 def build_logging_summary(cfg: dict[str, Any]) -> str:
-    logging_cfg = cfg.get("logging") if isinstance(cfg.get("logging"), dict) else {}
+    raw_logging_cfg = cfg.get("logging")
+    logging_cfg: dict[str, Any] = (
+        raw_logging_cfg if isinstance(raw_logging_cfg, dict) else {}
+    )
     enabled = logging_cfg.get("enabled")
 
     if isinstance(enabled, bool):

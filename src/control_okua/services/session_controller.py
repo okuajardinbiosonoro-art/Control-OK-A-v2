@@ -77,18 +77,29 @@ class SessionController(QObject):
             )
             return False
 
+        backend_kind = self._current_spec.backend
+        if backend_kind is None:
+            detail = "SessionSpec no define backend esperado."
+            self._apply_transition(
+                SessionEvent.START_FAILED,
+                detail=detail,
+                spec=self._current_spec,
+                message=f"No se pudo iniciar sesion: {detail}",
+            )
+            return False
+
         try:
             backend = self._backend_factory.build_backend_for_spec(self._current_spec)
             availability = backend.availability()
             if not availability.is_implemented:
                 raise BackendUnavailableError(
                     availability.reason
-                    or f"Backend '{self._current_spec.backend.value}' no implementado."
+                    or f"Backend '{backend_kind.value}' no implementado."
                 )
             if not availability.is_available:
                 raise BackendUnavailableError(
                     availability.reason
-                    or f"Backend '{self._current_spec.backend.value}' no disponible."
+                    or f"Backend '{backend_kind.value}' no disponible."
                 )
             backend.start(self._current_spec)
         except Exception as exc:
