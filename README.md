@@ -42,7 +42,7 @@ La ventana principal usa flujo operator-first:
 
 - Pestaña inicial `Operacion` con resumen operativo y acciones rapidas.
 - Pestaña `Nodos` con estructura preparada (tabla vacia y estado sin datos en vivo).
-- Pestaña `Diagnostico` con resumen tecnico y advertencias de configuracion.
+- Pestaña `Diagnostico` con resumen tecnico, advertencias de configuracion y detalle del ultimo preflight.
 
 En `Operacion` aparecen tarjetas de estado para:
 
@@ -58,6 +58,13 @@ En `Operacion` aparecen tarjetas de estado para:
 - MIDI
 - logging
 - estado general
+
+En `Operacion` tambien aparece el bloque `Preparacion de sesion`, que resume:
+
+- readiness actual (`Lista`, `Lista con advertencias`, `No lista`)
+- resumen corto del ultimo preflight
+- conteo de bloqueos/advertencias
+- motivo principal y nota de separacion entre readiness/config y runtime/backend
 
 Las acciones tecnicas se movieron a `Herramientas avanzadas`:
 
@@ -76,12 +83,15 @@ Acciones operativas visibles:
 - `Reiniciar error`.
 - `Herramientas avanzadas`.
 
-## Flujo de sesion actual (Ticket 3.3)
+## Flujo de sesion y readiness (Tickets 3.3 + 4.x)
 
-- La pestana `Operacion` ahora esta conectada a `SessionController` real.
-- El estado de sesion visible refleja snapshot real (`idle`, `starting`, `running`, `stopping`, `error`).
-- Con los backends placeholder actuales (sin transporte real), `Iniciar sesion` termina en `error` controlado con mensaje legible.
-- `Reiniciar error` devuelve la sesion a estado inactivo.
+- La pestana `Operacion` esta conectada a `SessionController` real y muestra snapshot de sesion (`idle`, `starting`, `running`, `stopping`, `error`).
+- Antes de intentar backend, `SessionController` ejecuta preflight/readiness puro.
+- Si readiness esta `blocked`, no intenta backend y la sesion pasa a `error` controlado con motivo de configuracion.
+- Si readiness esta `ready` o `ready_with_warnings`, se intenta backend; con placeholders actuales, el inicio puede terminar en `error` honesto por backend no implementado.
+- `Operacion` muestra el resumen de readiness y `Diagnostico` muestra findings (severidad, codigo, mensaje, detalle).
+- La UI distingue fallo por readiness/configuracion vs fallo posterior de backend/runtime.
+- `Reiniciar error` devuelve la sesion a estado inactivo y refresca readiness visible.
 - Mientras la sesion esta en `starting`, `running` o `stopping`, la UI bloquea cambios de perfil y recarga de config para evitar inconsistencias.
 
 ## Perfil como fuente de verdad (coherencia operacional)
@@ -200,11 +210,13 @@ Remove-Item Env:CKV2_AUTOCLOSE_MS
 
 1. Verificar que la primera pestaña sea `Operacion`.
 2. Confirmar estado inicial de sesion en `inactiva`.
-3. Pulsar `Iniciar sesion` y verificar `error` controlado (backend placeholder no implementado).
-4. Pulsar `Reiniciar error` y confirmar retorno a estado inactivo.
-5. Validar bloqueo de `Cambiar perfil`/`Recargar configuracion` cuando la sesion no esta en estado seguro (`starting`, `running`, `stopping`).
-6. Abrir `Herramientas avanzadas` y validar `Ver config`, `Abrir carpeta`, `Recargar config` y `Salidas MIDI`.
-7. Cerrar y reabrir la app sin errores.
+3. Verificar bloque `Preparacion de sesion` en `Operacion` y bloque de preflight en `Diagnostico`.
+4. Caso config valida declarativa: readiness `Lista` o `Lista con advertencias`; al iniciar, validar posible error posterior por backend placeholder no implementado.
+5. Caso config invalida para readiness: validar estado `No lista` y findings bloqueantes en `Diagnostico`.
+6. Pulsar `Reiniciar error` y confirmar retorno a estado inactivo con refresco visual coherente.
+7. Validar bloqueo de `Cambiar perfil`/`Recargar configuracion` cuando la sesion no esta en estado seguro (`starting`, `running`, `stopping`).
+8. Abrir `Herramientas avanzadas` y validar `Ver config`, `Abrir carpeta`, `Recargar config` y `Salidas MIDI`.
+9. Cerrar y reabrir la app sin errores.
 
 ## Prueba MIDI (LoopMIDI / Ableton)
 
