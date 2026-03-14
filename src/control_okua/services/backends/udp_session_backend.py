@@ -6,6 +6,11 @@ import time
 from typing import Any, Callable, Protocol
 
 from control_okua.core.midi import MidiRouter
+from control_okua.core.registry import (
+    NodeRegistry,
+    NodeRegistrySummary,
+    NodeSnapshot,
+)
 from control_okua.core.session import BackendAvailability, BackendKind, SessionSpec
 from control_okua.core.udp import OkuaEvtPacket, OkuaStatPacket
 from control_okua.transports.udp import (
@@ -148,6 +153,7 @@ class UdpSessionBackend:
         self._last_stat: UdpStatRuntimeSummary | None = None
         self._opened_buses: tuple[int, ...] = ()
         self._last_transport_snapshot: UdpTransportSnapshot | None = None
+        self._node_registry: NodeRegistry | None = None
 
     def start(self, spec: SessionSpec) -> None:
         if not spec.is_valid:
@@ -164,6 +170,7 @@ class UdpSessionBackend:
         self._last_evt = None
         self._last_stat = None
         self._opened_buses = ()
+        self._node_registry = NodeRegistry(clock=self._clock)
 
         router = self._router_builder(self._cfg)
         transport: UdpTransportLike | None = None
@@ -189,6 +196,7 @@ class UdpSessionBackend:
                 self._transport = None
                 self._router = None
                 self._opened_buses = ()
+                self._node_registry = None
             try:
                 router.close()
             except Exception:
@@ -228,6 +236,9 @@ class UdpSessionBackend:
             self._transport = None
             self._router = None
             self._opened_buses = ()
+            if self._node_registry is not None:
+                self._node_registry.clear()
+            self._node_registry = None
             if stop_error is not None:
                 self._last_error = stop_error
 
@@ -292,6 +303,24 @@ class UdpSessionBackend:
                 transport=transport_snapshot,
             )
 
+    def get_node_registry_summary(self, now: float | None = None) -> NodeRegistrySummary | None:
+        with self._lock:
+            if self._node_registry is None:
+                return None
+            return self._node_registry.get_summary(now=now)
+
+    def get_node_snapshots(self, now: float | None = None) -> list[NodeSnapshot]:
+        with self._lock:
+            if self._node_registry is None:
+                return []
+            return self._node_registry.get_all_node_snapshots(now=now)
+
+    def get_node_snapshot(self, node_id: int, now: float | None = None) -> NodeSnapshot | None:
+        with self._lock:
+            if self._node_registry is None:
+                return None
+            return self._node_registry.get_node_snapshot(node_id=node_id, now=now)
+
     def _build_transport(self) -> UdpTransportLike:
         kwargs: dict[str, Any] = {
             "config": UdpTransportConfig.from_config(self._cfg),
@@ -308,6 +337,10 @@ class UdpSessionBackend:
         if router is None:
             return
 
+        with self._lock:
+            if self._node_registry is not None:
+                self._node_registry.observe_evt(event.packet, received_at=event.received_ts)
+
         try:
             route_udp_evt_to_midi_router(router, event.packet)
         except Exception as exc:
@@ -323,6 +356,8 @@ class UdpSessionBackend:
 
     def _on_stat_packet(self, event: UdpReceivedStatPacket) -> None:
         with self._lock:
+            if self._node_registry is not None:
+                self._node_registry.observe_stat(event.packet, received_at=event.received_ts)
             self._last_activity_ts = self._clock()
             self._last_stat = _build_stat_summary(event)
             self._capture_transport_snapshot_locked()

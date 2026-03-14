@@ -183,6 +183,8 @@ class _FakeSerialTransport:
 def test_controller_starts_in_idle() -> None:
     controller = SessionController(_build_cfg("serial_local", "serial"))
     assert controller.get_state() is SessionState.IDLE
+    assert controller.get_node_snapshots() == []
+    assert controller.get_node_registry_summary() is None
 
 
 def test_get_snapshot_is_coherent_on_init() -> None:
@@ -403,3 +405,27 @@ def test_controller_serial_flow_routes_messages_to_midi_router() -> None:
 
     assert ("note_off", 0, 0, 60, 0) in router.sent
     assert runtime_snapshot is not None
+
+
+def test_controller_non_udp_backend_exposes_safe_empty_node_api() -> None:
+    holder: dict[str, _FakeSerialTransport] = {}
+    router = _FakeMidiRouter()
+
+    def _transport_builder(**kwargs):
+        transport = _FakeSerialTransport(**kwargs)
+        holder["transport"] = transport
+        return transport
+
+    serial_backend = SerialSessionBackend(
+        _build_serial_cfg(),
+        router_builder=lambda _cfg: router,
+        transport_builder=_transport_builder,
+    )
+    backend_factory = _RecordingBackendFactory(backend=serial_backend)
+    controller = SessionController(_build_serial_cfg(), backend_factory=backend_factory)
+
+    assert controller.start_session() is True
+    assert controller.get_node_snapshots() == []
+    assert controller.get_node_registry_summary() is None
+    assert controller.get_node_snapshot(10) is None
+    assert controller.stop_session() is True

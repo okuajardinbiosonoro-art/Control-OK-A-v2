@@ -238,15 +238,26 @@ def test_controller_udp_backend_reaches_running_routes_evt_and_updates_stat_runt
     holder["transport"].emit_stat()
 
     runtime_snapshot = controller.get_backend_runtime_snapshot()
+    node_summary = controller.get_node_registry_summary(now=102.0)
+    node_snapshots = controller.get_node_snapshots(now=102.0)
+    node_70 = controller.get_node_snapshot(70, now=102.0)
+    node_90 = controller.get_node_snapshot(90, now=102.0)
     assert runtime_snapshot is not None
     assert runtime_snapshot.messages_routed >= 1
     assert runtime_snapshot.last_stat is not None
     assert runtime_snapshot.total_evt_packets >= 1
     assert runtime_snapshot.total_stat_packets >= 1
+    assert node_summary is not None
+    assert node_summary.total_nodes >= 2
+    assert len(node_snapshots) >= 2
+    assert node_70 is not None
+    assert node_90 is not None
     assert ("note_off", 1, 0, 65, 0) in router.sent
 
     assert controller.stop_session() is True
     assert controller.get_state() is SessionState.IDLE
+    assert controller.get_node_snapshots() == []
+    assert controller.get_node_registry_summary() is None
     assert backend_factory.build_calls == 1
 
 
@@ -269,3 +280,32 @@ def test_controller_udp_backend_start_failure_never_reports_running() -> None:
     assert result is False
     assert controller.get_state() is SessionState.ERROR
     assert "running" not in states
+
+
+def test_controller_udp_restart_has_no_ghost_nodes() -> None:
+    holder: dict[str, _FakeUdpTransport] = {}
+
+    def _transport_builder(**kwargs):
+        transport = _FakeUdpTransport(**kwargs)
+        holder["transport"] = transport
+        return transport
+
+    backend = UdpSessionBackend(
+        _build_udp_cfg(),
+        router_builder=lambda _cfg: _FakeMidiRouter(),
+        transport_builder=_transport_builder,
+    )
+    backend_factory = _RecordingBackendFactory(backend=backend)
+    controller = SessionController(_build_udp_cfg(), backend_factory=backend_factory)
+
+    assert controller.start_session() is True
+    holder["transport"].emit_evt()
+    assert controller.get_node_snapshot(70, now=101.0) is not None
+    assert controller.stop_session() is True
+
+    assert controller.start_session() is True
+    restarted_summary = controller.get_node_registry_summary(now=101.0)
+    assert restarted_summary is not None
+    assert restarted_summary.total_nodes == 0
+    assert controller.get_node_snapshot(70, now=101.0) is None
+    assert controller.stop_session() is True

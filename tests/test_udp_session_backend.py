@@ -189,14 +189,22 @@ class _FakeUdpTransport:
             self._on_event(UdpRuntimeEvent(level=level, message=message))
 
 
-def _evt_packet(*, bus: int = 1, ch: int = 2, note: int = 64, vel: int = 100) -> OkuaEvtPacket:
+def _evt_packet(
+    *,
+    node_id: int = 33,
+    seq: int = 88,
+    bus: int = 1,
+    ch: int = 2,
+    note: int = 64,
+    vel: int = 100,
+) -> OkuaEvtPacket:
     return OkuaEvtPacket(
         header=OkuaHeader(
             magic=OKUA_MAGIC,
             version=OKUA_VERSION,
             packet_type=OkuaPacketType.EVT,
-            node_id=33,
-            seq=88,
+            node_id=node_id,
+            seq=seq,
         ),
         midi_bus=bus,
         midi_ch=ch,
@@ -209,14 +217,14 @@ def _evt_packet(*, bus: int = 1, ch: int = 2, note: int = 64, vel: int = 100) ->
     )
 
 
-def _stat_packet() -> OkuaStatPacket:
+def _stat_packet(*, node_id: int = 44, seq: int = 99) -> OkuaStatPacket:
     return OkuaStatPacket(
         header=OkuaHeader(
             magic=OKUA_MAGIC,
             version=OKUA_VERSION,
             packet_type=OkuaPacketType.STAT,
-            node_id=44,
-            seq=99,
+            node_id=node_id,
+            seq=seq,
         ),
         uptime_s=777,
         rssi_dbm=-50,
@@ -259,11 +267,90 @@ def test_udp_backend_start_stop_and_runtime_snapshot() -> None:
     assert snapshot.total_evt_packets >= 1
     assert snapshot.total_stat_packets >= 1
     assert ("note_on", 1, 2, 64, 100) in router.sent
+    node_summary = backend.get_node_registry_summary(now=12.0)
+    node_snapshots = backend.get_node_snapshots(now=12.0)
+    assert node_summary is not None
+    assert node_summary.total_nodes >= 2
+    assert len(node_snapshots) >= 2
 
     backend.stop()
     stopped_snapshot = backend.runtime_snapshot()
     assert stopped_snapshot.is_running is False
     assert router.close_called == 1
+
+
+def test_udp_backend_node_registry_starts_clean_and_updates_with_evt_stat() -> None:
+    holder: dict[str, _FakeUdpTransport] = {}
+    backend = UdpSessionBackend(
+        _cfg(),
+        router_builder=lambda _cfg_value: _FakeMidiRouter(),
+        transport_builder=lambda **kwargs: holder.setdefault("transport", _FakeUdpTransport(**kwargs)),
+    )
+    backend.start(_udp_spec())
+
+    empty_summary = backend.get_node_registry_summary(now=1.0)
+    assert empty_summary is not None
+    assert empty_summary.total_nodes == 0
+    assert backend.get_node_snapshots(now=1.0) == []
+
+    holder["transport"].emit_evt(_evt_packet(node_id=200, seq=10, note=70, vel=101))
+    holder["transport"].emit_stat(_stat_packet(node_id=200, seq=20))
+    snapshot = backend.get_node_snapshot(200, now=12.0)
+
+    assert snapshot is not None
+    assert snapshot.last_seq_evt == 10
+    assert snapshot.last_seq_stat == 20
+    assert snapshot.last_note == 70
+    assert snapshot.reported_pps_x10 == 120
+    backend.stop()
+
+
+def test_udp_backend_tracks_multiple_nodes_in_registry() -> None:
+    holder: dict[str, _FakeUdpTransport] = {}
+    backend = UdpSessionBackend(
+        _cfg(),
+        router_builder=lambda _cfg_value: _FakeMidiRouter(),
+        transport_builder=lambda **kwargs: holder.setdefault("transport", _FakeUdpTransport(**kwargs)),
+    )
+    backend.start(_udp_spec())
+
+    holder["transport"].emit_evt(_evt_packet(node_id=301, seq=1))
+    holder["transport"].emit_evt(_evt_packet(node_id=302, seq=1))
+    holder["transport"].emit_stat(_stat_packet(node_id=303, seq=1))
+
+    snapshots = backend.get_node_snapshots(now=15.0)
+    ids = {item.node_id for item in snapshots}
+    assert ids == {301, 302, 303}
+    backend.stop()
+
+
+def test_udp_backend_registry_is_not_exposed_after_stop_and_no_ghosts_on_restart() -> None:
+    holder: dict[str, _FakeUdpTransport] = {}
+
+    def _build_transport(**kwargs):
+        transport = _FakeUdpTransport(**kwargs)
+        holder["transport"] = transport
+        return transport
+
+    backend = UdpSessionBackend(
+        _cfg(),
+        router_builder=lambda _cfg_value: _FakeMidiRouter(),
+        transport_builder=_build_transport,
+    )
+    backend.start(_udp_spec())
+    holder["transport"].emit_evt(_evt_packet(node_id=401, seq=1))
+    assert backend.get_node_snapshot(401, now=20.0) is not None
+    backend.stop()
+
+    assert backend.get_node_snapshots(now=20.0) == []
+    assert backend.get_node_registry_summary(now=20.0) is None
+
+    backend.start(_udp_spec())
+    restarted_summary = backend.get_node_registry_summary(now=21.0)
+    assert restarted_summary is not None
+    assert restarted_summary.total_nodes == 0
+    assert backend.get_node_snapshot(401, now=21.0) is None
+    backend.stop()
 
 
 def test_udp_backend_start_failure_does_not_leave_running_state() -> None:

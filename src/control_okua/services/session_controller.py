@@ -80,6 +80,45 @@ class SessionController(QObject):
                 return None
         return None
 
+    def get_node_registry_summary(self, now: float | None = None) -> object | None:
+        backend = self._active_backend
+        if backend is None:
+            return None
+        reader = getattr(backend, "get_node_registry_summary", None)
+        if callable(reader):
+            try:
+                return reader(now=now)
+            except Exception:
+                return None
+        return None
+
+    def get_node_snapshots(self, now: float | None = None) -> list[object]:
+        backend = self._active_backend
+        if backend is None:
+            return []
+        reader = getattr(backend, "get_node_snapshots", None)
+        if callable(reader):
+            try:
+                snapshots = reader(now=now)
+            except Exception:
+                return []
+            if isinstance(snapshots, list):
+                return snapshots
+            return []
+        return []
+
+    def get_node_snapshot(self, node_id: int, now: float | None = None) -> object | None:
+        backend = self._active_backend
+        if backend is None:
+            return None
+        reader = getattr(backend, "get_node_snapshot", None)
+        if callable(reader):
+            try:
+                return reader(node_id=node_id, now=now)
+            except Exception:
+                return None
+        return None
+
     def start_session(self) -> bool:
         transition = self._apply_transition(
             SessionEvent.REQUEST_START,
