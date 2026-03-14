@@ -4,6 +4,11 @@ from typing import Any, Callable
 
 from PySide6.QtCore import QObject, Signal
 
+from control_okua.core.preflight import (
+    PreflightReport,
+    ReadinessLevel,
+    run_preflight_checks,
+)
 from control_okua.core.session import (
     SessionErrorInfo,
     SessionEvent,
@@ -29,6 +34,7 @@ class SessionController(QObject):
     session_snapshot_changed = Signal(object)
     session_error = Signal(str)
     session_message = Signal(str)
+    preflight_report_changed = Signal(object)
 
     def __init__(
         self,
@@ -41,12 +47,10 @@ class SessionController(QObject):
         self._backend_factory = backend_factory or SessionBackendFactory()
         self._active_backend = None
 
-        self._current_spec = self._resolve_spec()
-        startup_message = (
-            "Sesion lista para iniciar."
-            if self._current_spec.is_valid
-            else f"Sesion no iniciable: {self._current_spec.reason}"
-        )
+        initial_cfg = self._get_cfg()
+        self._last_preflight_report = self._run_preflight(initial_cfg, emit_signal=False)
+        self._current_spec = self._resolve_spec_from_cfg(initial_cfg)
+        startup_message = self._build_startup_message(self._current_spec, self._last_preflight_report)
         self._snapshot = build_session_snapshot(
             initial_session_state(),
             self._current_spec,
@@ -59,6 +63,9 @@ class SessionController(QObject):
     def get_state(self) -> SessionState:
         return self._snapshot.state
 
+    def get_last_preflight_report(self) -> PreflightReport:
+        return self._last_preflight_report
+
     def start_session(self) -> bool:
         transition = self._apply_transition(
             SessionEvent.REQUEST_START,
@@ -67,7 +74,25 @@ class SessionController(QObject):
         if not transition.is_valid:
             return False
 
-        self._current_spec = self._resolve_spec()
+        cfg = self._get_cfg()
+        preflight_report = self._run_preflight(cfg, emit_signal=True)
+        self._current_spec = self._resolve_spec_from_cfg(cfg)
+
+        if preflight_report.readiness is ReadinessLevel.BLOCKED:
+            detail = self._preflight_block_reason(preflight_report)
+            self._apply_transition(
+                SessionEvent.START_FAILED,
+                detail=detail,
+                spec=self._current_spec,
+                message=f"No se puede iniciar la sesion: {detail}",
+            )
+            return False
+
+        if preflight_report.readiness is ReadinessLevel.READY_WITH_WARNINGS:
+            self.session_message.emit(
+                "La sesion esta lista con advertencias; intentando iniciar backend..."
+            )
+
         if not self._current_spec.is_valid:
             self._apply_transition(
                 SessionEvent.START_FAILED,
@@ -171,22 +196,42 @@ class SessionController(QObject):
             return False
 
         self._active_backend = None
-        self._current_spec = self._resolve_spec()
+        cfg = self._get_cfg()
+        preflight_report = self._run_preflight(cfg, emit_signal=True)
+        self._current_spec = self._resolve_spec_from_cfg(cfg)
+        message = "Estado de sesion reiniciado."
+        if preflight_report.readiness is ReadinessLevel.BLOCKED:
+            reason = self._preflight_block_reason(preflight_report)
+            message = f"Estado de sesion reiniciado. Preflight bloqueado: {reason}"
+        elif preflight_report.readiness is ReadinessLevel.READY_WITH_WARNINGS:
+            message = "Estado de sesion reiniciado. Configuracion lista con advertencias."
+
         self._publish_snapshot(
             self.get_state(),
             self._current_spec,
-            message="Estado de sesion reiniciado.",
+            message=message,
             error=None,
         )
         return True
 
     def reload_config(self, cfg_provider_or_cfg: dict[str, Any] | ConfigProvider) -> SessionSnapshot:
         self._cfg_provider = self._normalize_cfg_provider(cfg_provider_or_cfg)
-        self._current_spec = self._resolve_spec()
+        cfg = self._get_cfg()
+        preflight_report = self._run_preflight(cfg, emit_signal=True)
+        self._current_spec = self._resolve_spec_from_cfg(cfg)
+        message = "Configuracion de sesion actualizada."
+        if preflight_report.readiness is ReadinessLevel.BLOCKED:
+            message = (
+                "Configuracion de sesion actualizada. "
+                f"Preflight bloqueado: {self._preflight_block_reason(preflight_report)}"
+            )
+        elif preflight_report.readiness is ReadinessLevel.READY_WITH_WARNINGS:
+            message = "Configuracion de sesion actualizada. Lista con advertencias."
+
         self._publish_snapshot(
             self.get_state(),
             self._current_spec,
-            message="Configuracion de sesion actualizada.",
+            message=message,
             error=self._snapshot.error,
         )
         return self._snapshot
@@ -231,7 +276,38 @@ class SessionController(QObject):
             self.session_error.emit(rendered_error)
 
     def _resolve_spec(self) -> SessionSpec:
-        return build_session_request_from_profile(self._get_cfg())
+        return self._resolve_spec_from_cfg(self._get_cfg())
+
+    @staticmethod
+    def _resolve_spec_from_cfg(cfg: dict[str, Any]) -> SessionSpec:
+        return build_session_request_from_profile(cfg)
+
+    @staticmethod
+    def _preflight_block_reason(report: PreflightReport) -> str:
+        for finding in report.findings:
+            if finding.is_blocking:
+                return finding.message
+        for finding in report.findings:
+            if finding.severity.value == "error":
+                return finding.message
+        return "la sesion no esta lista segun el preflight."
+
+    @staticmethod
+    def _build_startup_message(spec: SessionSpec, report: PreflightReport) -> str:
+        if report.readiness is ReadinessLevel.BLOCKED:
+            return f"Sesion no iniciable: {SessionController._preflight_block_reason(report)}"
+        if report.readiness is ReadinessLevel.READY_WITH_WARNINGS:
+            return "Sesion lista con advertencias."
+        if spec.is_valid:
+            return "Sesion lista para iniciar."
+        return f"Sesion no iniciable: {spec.reason}"
+
+    def _run_preflight(self, cfg: dict[str, Any], *, emit_signal: bool) -> PreflightReport:
+        report = run_preflight_checks(cfg)
+        self._last_preflight_report = report
+        if emit_signal:
+            self.preflight_report_changed.emit(report)
+        return report
 
     def _get_cfg(self) -> dict[str, Any]:
         try:
