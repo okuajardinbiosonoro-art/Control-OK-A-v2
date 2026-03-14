@@ -10,6 +10,7 @@ from control_okua.core.profiles.profile_service import (
     build_profile_ui_summary,
     infer_profile_from_config,
 )
+from control_okua.core.registry import NodeStatus
 from control_okua.core.session import SessionSnapshot, SessionState
 
 
@@ -809,6 +810,155 @@ def build_diagnostic_udp_rows(
         UdpRuntimeDiagnosticRow("Último STAT", _format_udp_stat_summary(runtime_snapshot)),
         UdpRuntimeDiagnosticRow("Último error", last_error),
     ]
+
+
+@dataclass(frozen=True)
+class NodesTabViewState:
+    title: str
+    hint: str
+    summary: str
+    show_table: bool
+
+
+def _node_attr(snapshot: object, name: str) -> Any:
+    return getattr(snapshot, name, None)
+
+
+def node_status_key(snapshot: object) -> str:
+    raw_status = _node_attr(snapshot, "status")
+    if raw_status is None:
+        return "offline"
+    if hasattr(raw_status, "value"):
+        return str(raw_status.value).strip().lower()
+    return str(raw_status).strip().lower()
+
+
+def format_node_status(snapshot: object) -> str:
+    status_key = node_status_key(snapshot)
+    if status_key == NodeStatus.ONLINE.value:
+        return "En línea"
+    if status_key == NodeStatus.DEGRADED.value:
+        return "Degradado"
+    return "Fuera de línea"
+
+
+def format_node_last_seen(snapshot: object, now_monotonic: float | None = None) -> str:
+    last_seen = _safe_float(_node_attr(snapshot, "last_seen_pc_ts"))
+    if last_seen is None:
+        return "—"
+    now_value = now_monotonic if now_monotonic is not None else time.monotonic()
+    delta_s = max(0.0, now_value - last_seen)
+    return f"hace {delta_s:.1f} s"
+
+
+def format_node_pps(snapshot: object) -> str:
+    pps_evt = _safe_float(_node_attr(snapshot, "pps_evt"))
+    pps_stat = _safe_float(_node_attr(snapshot, "pps_stat"))
+    if pps_evt is None and pps_stat is None:
+        return "—"
+    evt_value = 0.0 if pps_evt is None else pps_evt
+    stat_value = 0.0 if pps_stat is None else pps_stat
+    return f"EVT {evt_value:.1f} | STAT {stat_value:.1f}"
+
+
+def format_node_loss(snapshot: object) -> str:
+    loss_evt = _safe_float(_node_attr(snapshot, "loss_evt_pct"))
+    loss_stat = _safe_float(_node_attr(snapshot, "loss_stat_pct"))
+    if loss_evt is None and loss_stat is None:
+        return "—"
+    evt_value = 0.0 if loss_evt is None else loss_evt
+    stat_value = 0.0 if loss_stat is None else loss_stat
+    return f"EVT {evt_value:.1f}% | STAT {stat_value:.1f}%"
+
+
+def format_node_rssi(snapshot: object) -> str:
+    rssi = _node_attr(snapshot, "rssi_dbm")
+    if rssi is None:
+        return "—"
+    return f"{rssi} dBm"
+
+
+def format_node_last_note_velocity(snapshot: object) -> str:
+    note = _node_attr(snapshot, "last_note")
+    velocity = _node_attr(snapshot, "last_velocity")
+    if note is None or velocity is None:
+        return "—"
+    return f"{note} / {velocity}"
+
+
+def format_node_label(snapshot: object) -> str:
+    label = _node_attr(snapshot, "label")
+    if not isinstance(label, str):
+        return "—"
+    stripped = label.strip()
+    return stripped if stripped else "—"
+
+
+def format_node_type(snapshot: object) -> str:
+    node_type = _node_attr(snapshot, "node_type")
+    if not isinstance(node_type, str):
+        return "—"
+    stripped = node_type.strip()
+    return stripped if stripped else "—"
+
+
+def sort_node_snapshots_by_id(snapshots: list[object] | None) -> list[object]:
+    if not isinstance(snapshots, list):
+        return []
+    return sorted(
+        snapshots,
+        key=lambda snapshot: _safe_int(_node_attr(snapshot, "node_id"), default=2147483647),
+    )
+
+
+def build_nodes_summary_text(summary: object | None) -> str:
+    if summary is None:
+        return "Resumen de nodos: no disponible."
+
+    total_nodes = _safe_int(_node_attr(summary, "total_nodes"), default=0)
+    online_count = _safe_int(_node_attr(summary, "online_count"), default=0)
+    degraded_count = _safe_int(_node_attr(summary, "degraded_count"), default=0)
+    offline_count = _safe_int(_node_attr(summary, "offline_count"), default=0)
+    total_pps_evt = _safe_float(_node_attr(summary, "total_pps_evt"))
+    total_pps_stat = _safe_float(_node_attr(summary, "total_pps_stat"))
+
+    evt_text = "0.0" if total_pps_evt is None else f"{total_pps_evt:.1f}"
+    stat_text = "0.0" if total_pps_stat is None else f"{total_pps_stat:.1f}"
+    return (
+        f"Nodos: {total_nodes} | En línea: {online_count} | Degradado: {degraded_count} | "
+        f"Fuera de línea: {offline_count} | PPS EVT: {evt_text} | PPS STAT: {stat_text}"
+    )
+
+
+def build_nodes_tab_view_state(
+    session_snapshot: SessionSnapshot,
+    summary: object | None,
+    *,
+    shown_nodes: int,
+) -> NodesTabViewState:
+    if not _is_udp_session(session_snapshot) or session_snapshot.state is not SessionState.RUNNING:
+        return NodesTabViewState(
+            title="La tabla de nodos está disponible para sesiones UDP.",
+            hint="Inicia una sesión UDP para ver nodos en vivo.",
+            summary="Resumen de nodos: no disponible.",
+            show_table=False,
+        )
+
+    total_nodes = _safe_int(_node_attr(summary, "total_nodes"), default=shown_nodes)
+    if total_nodes <= 0:
+        return NodesTabViewState(
+            title="Aún no hay nodos en vivo.",
+            hint="Los nodos aparecerán cuando se reciba tráfico EVT/STAT.",
+            summary=build_nodes_summary_text(summary),
+            show_table=False,
+        )
+
+    return NodesTabViewState(
+        title="Nodos en vivo detectados.",
+        hint="Actualización automática cada ~1 s mientras la sesión UDP esté corriendo.",
+        summary=build_nodes_summary_text(summary),
+        show_table=True,
+    )
 
 
 @dataclass(frozen=True)

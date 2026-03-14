@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QTabWidget,
+    QTableView,
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
@@ -25,9 +27,11 @@ from PySide6.QtWidgets import (
 )
 
 from control_okua.app_qt.advanced_tools_dialog import AdvancedToolsDialog
+from control_okua.app_qt.models import NodeTableModel
 from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
 from control_okua.app_qt.widgets import ConfigViewDialog
 from control_okua.app_qt.viewmodels import (
+    build_nodes_tab_view_state,
     PreflightDiagnosticRow,
     SerialRuntimeDiagnosticRow,
     UdpRuntimeDiagnosticRow,
@@ -40,6 +44,7 @@ from control_okua.app_qt.viewmodels import (
     build_operation_serial_block,
     build_operation_udp_block,
     build_operation_summary,
+    sort_node_snapshots_by_id,
     build_preflight_counts,
     build_preflight_diagnostic_rows,
     build_preflight_primary_message,
@@ -93,6 +98,7 @@ class MainWindow(QMainWindow):
         self._details_scroll_area: QScrollArea | None = None
         self._details_columns = 0
         self._advanced_dialog: AdvancedToolsDialog | None = None
+        self._node_table_model: NodeTableModel | None = None
         self.session_controller = session_controller or SessionController(
             self._session_cfg_provider,
             parent=self,
@@ -350,28 +356,21 @@ class MainWindow(QMainWindow):
         title_label.setFont(title_font)
         layout.addWidget(title_label)
 
-        empty_state_label = QLabel("Aún no hay datos en vivo.")
-        empty_state_label.setWordWrap(True)
-        layout.addWidget(empty_state_label)
+        self.nodes_state_label = QLabel("La tabla de nodos está disponible para sesiones UDP.")
+        self.nodes_state_label.setWordWrap(True)
+        layout.addWidget(self.nodes_state_label)
 
-        hint_label = QLabel("Los nodos aparecerán cuando la sesión esté en ejecución.")
-        hint_label.setWordWrap(True)
-        layout.addWidget(hint_label)
+        self.nodes_hint_label = QLabel("Inicia una sesión UDP para ver nodos en vivo.")
+        self.nodes_hint_label.setWordWrap(True)
+        layout.addWidget(self.nodes_hint_label)
 
-        self.nodes_table = QTableWidget(0, 9, self)
-        self.nodes_table.setHorizontalHeaderLabels(
-            [
-                "node_id",
-                "label",
-                "tipo",
-                "estado",
-                "último visto",
-                "pps",
-                "pérdida",
-                "RSSI",
-                "último note/vel",
-            ]
-        )
+        self.nodes_summary_label = QLabel("Resumen de nodos: no disponible.")
+        self.nodes_summary_label.setWordWrap(True)
+        layout.addWidget(self.nodes_summary_label)
+
+        self.nodes_table = QTableView(self)
+        self._node_table_model = NodeTableModel(self.nodes_table)
+        self.nodes_table.setModel(self._node_table_model)
         self.nodes_table.horizontalHeader().setStretchLastSection(True)
         self.nodes_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.nodes_table.setSelectionMode(QAbstractItemView.NoSelection)
@@ -602,6 +601,7 @@ class MainWindow(QMainWindow):
         runtime_snapshot = self.session_controller.get_backend_runtime_snapshot()
         self._refresh_serial_runtime_views(runtime_snapshot)
         self._refresh_udp_runtime_views(runtime_snapshot)
+        self._refresh_nodes_views()
 
         self.statusBar().showMessage(
             f"{preflight_status} | {session_status_summary} | {self._session_snapshot.message}"
@@ -753,6 +753,7 @@ class MainWindow(QMainWindow):
             self._refresh_serial_runtime_views(runtime_snapshot)
         if is_udp_mode:
             self._refresh_udp_runtime_views(runtime_snapshot)
+            self._refresh_nodes_views()
 
     def _refresh_preflight_findings_table(self, rows: list[PreflightDiagnosticRow]) -> None:
         self.preflight_findings_table.setRowCount(len(rows))
@@ -847,3 +848,25 @@ class MainWindow(QMainWindow):
                 1,
                 QTableWidgetItem(str(row.value)),
             )
+
+    def _refresh_nodes_views(self) -> None:
+        now_monotonic = time.monotonic()
+        raw_snapshots = self.session_controller.get_node_snapshots(now=now_monotonic)
+        snapshots = sort_node_snapshots_by_id(raw_snapshots)
+        summary = self.session_controller.get_node_registry_summary(now=now_monotonic)
+        view_state = build_nodes_tab_view_state(
+            self._session_snapshot,
+            summary,
+            shown_nodes=len(snapshots),
+        )
+
+        if self._node_table_model is not None:
+            self._node_table_model.set_snapshots(
+                snapshots,
+                now_monotonic=now_monotonic,
+            )
+
+        self.nodes_state_label.setText(view_state.title)
+        self.nodes_hint_label.setText(view_state.hint)
+        self.nodes_summary_label.setText(view_state.summary)
+        self.nodes_table.setVisible(view_state.show_table)

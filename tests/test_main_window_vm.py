@@ -12,6 +12,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from control_okua.app_qt.viewmodels.main_window_vm import (  # noqa: E402
+    build_nodes_tab_view_state,
     build_diagnostic_serial_rows,
     build_diagnostic_udp_rows,
     build_general_status_summary,
@@ -28,8 +29,18 @@ from control_okua.app_qt.viewmodels.main_window_vm import (  # noqa: E402
     build_preflight_summary_text,
     build_profile_mode_summary,
     build_profile_summary,
+    format_node_label,
+    format_node_last_note_velocity,
+    format_node_last_seen,
+    format_node_loss,
+    format_node_pps,
+    format_node_rssi,
+    format_node_status,
+    format_node_type,
+    sort_node_snapshots_by_id,
     build_transport_summary,
 )
+from control_okua.core.registry import NodeSnapshot, NodeStatus  # noqa: E402
 from control_okua.core.preflight import (  # noqa: E402
     PreflightCheckCode,
     PreflightFinding,
@@ -175,6 +186,44 @@ def _build_lab_udp_snapshot(state: SessionState, message: str) -> SessionSnapsho
         error=None,
         can_start=state is SessionState.IDLE,
         can_stop=state is SessionState.RUNNING,
+    )
+
+
+def _node_snapshot(
+    *,
+    node_id: int,
+    status: NodeStatus,
+    last_seen_pc_ts: float | None = 100.0,
+    pps_evt: float = 0.0,
+    pps_stat: float = 0.0,
+    loss_evt_pct: float = 0.0,
+    loss_stat_pct: float = 0.0,
+    rssi_dbm: int | None = None,
+    note: int | None = None,
+    vel: int | None = None,
+    label: str | None = None,
+    node_type: str | None = None,
+) -> NodeSnapshot:
+    return NodeSnapshot(
+        node_id=node_id,
+        label=label,
+        node_type=node_type,
+        last_seen_pc_ts=last_seen_pc_ts,
+        last_seq_evt=1,
+        last_seq_stat=1,
+        pps_evt=pps_evt,
+        pps_stat=pps_stat,
+        loss_evt_pct=loss_evt_pct,
+        loss_stat_pct=loss_stat_pct,
+        rssi_dbm=rssi_dbm,
+        last_note=note,
+        last_velocity=vel,
+        last_evt_ts_ms=123,
+        last_evt_flags=1,
+        last_state_flags=1,
+        last_uptime_s=100,
+        reported_pps_x10=20,
+        status=status,
     )
 
 
@@ -577,3 +626,105 @@ def test_operation_udp_block_supports_lab_profile_with_udp_runtime() -> None:
     )
     assert "Activo" in block.status_label
     assert block.evt_packets == "EVT recibidos: 128"
+
+
+def test_node_status_format_is_coherent() -> None:
+    online = format_node_status(_node_snapshot(node_id=1, status=NodeStatus.ONLINE))
+    degraded = format_node_status(_node_snapshot(node_id=2, status=NodeStatus.DEGRADED))
+    offline = format_node_status(_node_snapshot(node_id=3, status=NodeStatus.OFFLINE))
+    assert online == "En línea"
+    assert degraded == "Degradado"
+    assert offline == "Fuera de línea"
+
+
+def test_node_last_seen_format_is_coherent() -> None:
+    seen = format_node_last_seen(
+        _node_snapshot(node_id=10, status=NodeStatus.ONLINE, last_seen_pc_ts=100.0),
+        now_monotonic=100.3,
+    )
+    missing = format_node_last_seen(
+        _node_snapshot(node_id=11, status=NodeStatus.ONLINE, last_seen_pc_ts=None),
+        now_monotonic=100.3,
+    )
+    assert seen == "hace 0.3 s"
+    assert missing == "—"
+
+
+def test_node_pps_loss_and_rssi_format_is_coherent() -> None:
+    snapshot = _node_snapshot(
+        node_id=20,
+        status=NodeStatus.ONLINE,
+        pps_evt=1.25,
+        pps_stat=0.5,
+        loss_evt_pct=3.2,
+        loss_stat_pct=0.0,
+        rssi_dbm=-65,
+    )
+    assert format_node_pps(snapshot) == "EVT 1.2 | STAT 0.5"
+    assert format_node_loss(snapshot) == "EVT 3.2% | STAT 0.0%"
+    assert format_node_rssi(snapshot) == "-65 dBm"
+
+
+def test_node_note_velocity_and_optional_metadata_format_are_coherent() -> None:
+    with_values = _node_snapshot(
+        node_id=30,
+        status=NodeStatus.ONLINE,
+        note=64,
+        vel=100,
+        label="Nodo A",
+        node_type="Fruta",
+    )
+    without_values = _node_snapshot(
+        node_id=31,
+        status=NodeStatus.ONLINE,
+        note=None,
+        vel=None,
+        label=None,
+        node_type=None,
+    )
+    assert format_node_last_note_velocity(with_values) == "64 / 100"
+    assert format_node_last_note_velocity(without_values) == "—"
+    assert format_node_label(with_values) == "Nodo A"
+    assert format_node_type(with_values) == "Fruta"
+    assert format_node_label(without_values) == "—"
+    assert format_node_type(without_values) == "—"
+
+
+def test_nodes_tab_state_non_udp_is_clear_no_aplica() -> None:
+    state = build_nodes_tab_view_state(
+        _build_snapshot(SessionState.RUNNING, "Sesion serial"),
+        summary=None,
+        shown_nodes=0,
+    )
+    assert state.show_table is False
+    assert "disponible para sesiones udp" in state.title.lower()
+    assert "inicia una sesión udp" in state.hint.lower()
+
+
+def test_nodes_tab_state_udp_running_without_nodes_is_clear() -> None:
+    summary = SimpleNamespace(
+        total_nodes=0,
+        online_count=0,
+        degraded_count=0,
+        offline_count=0,
+        total_pps_evt=0.0,
+        total_pps_stat=0.0,
+    )
+    state = build_nodes_tab_view_state(
+        _build_udp_snapshot(SessionState.RUNNING, "Sesion udp"),
+        summary=summary,
+        shown_nodes=0,
+    )
+    assert state.show_table is False
+    assert "aún no hay nodos en vivo" in state.title.lower()
+    assert "tráfico evt/stat" in state.hint.lower()
+
+
+def test_node_snapshots_sort_is_stable_by_node_id() -> None:
+    snapshots = [
+        _node_snapshot(node_id=22, status=NodeStatus.ONLINE),
+        _node_snapshot(node_id=7, status=NodeStatus.ONLINE),
+        _node_snapshot(node_id=15, status=NodeStatus.ONLINE),
+    ]
+    sorted_ids = [item.node_id for item in sort_node_snapshots_by_id(snapshots)]
+    assert sorted_ids == [7, 15, 22]
