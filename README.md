@@ -42,7 +42,7 @@ La ventana principal usa flujo operator-first:
 
 - Pestaña inicial `Operacion` con resumen operativo y acciones rapidas.
 - Pestaña `Nodos` con estructura preparada (tabla vacia y estado sin datos en vivo).
-- Pestaña `Diagnostico` con resumen tecnico, advertencias de configuracion y detalle del ultimo preflight.
+- Pestaña `Diagnostico` con resumen tecnico, advertencias de configuracion, detalle del ultimo preflight y runtime serial.
 
 En `Operacion` aparecen tarjetas de estado para:
 
@@ -66,6 +66,13 @@ En `Operacion` tambien aparece el bloque `Preparacion de sesion`, que resume:
 - conteo de bloqueos/advertencias
 - motivo principal y nota de separacion entre readiness/config y runtime/backend
 
+En `Operacion` tambien aparece el bloque `Actividad serial`, con resumen compacto de:
+
+- estado serial (`Activo`, `Sin actividad reciente`, `Con error`, `No disponible`)
+- puerto actual (si aplica)
+- mensajes procesados
+- ultimo error y actividad reciente
+
 Las acciones tecnicas se movieron a `Herramientas avanzadas`:
 
 - ruta de `config.json`
@@ -88,11 +95,21 @@ Acciones operativas visibles:
 - La pestana `Operacion` esta conectada a `SessionController` real y muestra snapshot de sesion (`idle`, `starting`, `running`, `stopping`, `error`).
 - Antes de intentar backend, `SessionController` ejecuta preflight/readiness puro.
 - Si readiness esta `blocked`, no intenta backend y la sesion pasa a `error` controlado con motivo de configuracion.
-- Si readiness esta `ready` o `ready_with_warnings`, se intenta backend; con placeholders actuales, el inicio puede terminar en `error` honesto por backend no implementado.
+- Si readiness esta `ready` o `ready_with_warnings`, se intenta backend.
 - `Operacion` muestra el resumen de readiness y `Diagnostico` muestra findings (severidad, codigo, mensaje, detalle).
 - La UI distingue fallo por readiness/configuracion vs fallo posterior de backend/runtime.
 - `Reiniciar error` devuelve la sesion a estado inactivo y refresca readiness visible.
 - Mientras la sesion esta en `starting`, `running` o `stopping`, la UI bloquea cambios de perfil y recarga de config para evitar inconsistencias.
+
+## Flujo serial real (Tickets 5.1 a 5.3)
+
+- Existe parser incremental MIDI por bytes (`MidiByteStreamParser`) para stream serial.
+- Existe `SerialTransportAdapter` real con lectura, parseo y metricas runtime.
+- El backend serial real se integra en el lifecycle de sesion via `SessionBackendFactory` + `SessionController`.
+- El flujo en arquitectura es: `Serial -> parser -> backend serial -> MidiRouter`.
+- `SessionController` solo deja la sesion en `running` si el backend serial arranca realmente.
+- `Operacion` muestra actividad serial resumida y `Diagnostico` muestra detalle tecnico de runtime serial.
+- UDP y LAB siguen en placeholders honestos en esta etapa.
 
 ## Perfil como fuente de verdad (coherencia operacional)
 
@@ -210,13 +227,16 @@ Remove-Item Env:CKV2_AUTOCLOSE_MS
 
 1. Verificar que la primera pestaña sea `Operacion`.
 2. Confirmar estado inicial de sesion en `inactiva`.
-3. Verificar bloque `Preparacion de sesion` en `Operacion` y bloque de preflight en `Diagnostico`.
-4. Caso config valida declarativa: readiness `Lista` o `Lista con advertencias`; al iniciar, validar posible error posterior por backend placeholder no implementado.
-5. Caso config invalida para readiness: validar estado `No lista` y findings bloqueantes en `Diagnostico`.
-6. Pulsar `Reiniciar error` y confirmar retorno a estado inactivo con refresco visual coherente.
-7. Validar bloqueo de `Cambiar perfil`/`Recargar configuracion` cuando la sesion no esta en estado seguro (`starting`, `running`, `stopping`).
-8. Abrir `Herramientas avanzadas` y validar `Ver config`, `Abrir carpeta`, `Recargar config` y `Salidas MIDI`.
-9. Cerrar y reabrir la app sin errores.
+3. Verificar bloque `Preparacion de sesion` y bloque `Actividad serial` en `Operacion`.
+4. Verificar en `Diagnostico` el bloque de preflight y el bloque de runtime serial.
+5. Caso serial con config valida declarativa: readiness `Lista` o `Lista con advertencias`; al iniciar, validar:
+   - si hay puerto/hardware disponible, sesion serial en `running`
+   - si no hay puerto/hardware disponible, error runtime serial legible y sin `running` falso
+6. Caso config invalida para readiness: validar estado `No lista` y findings bloqueantes en `Diagnostico`.
+7. Pulsar `Reiniciar error` y confirmar retorno a estado inactivo con refresco visual coherente.
+8. Validar bloqueo de `Cambiar perfil`/`Recargar configuracion` cuando la sesion no esta en estado seguro (`starting`, `running`, `stopping`).
+9. Abrir `Herramientas avanzadas` y validar `Ver config`, `Abrir carpeta`, `Recargar config` y `Salidas MIDI`.
+10. Cerrar y reabrir la app sin errores.
 
 ## Prueba MIDI (LoopMIDI / Ableton)
 
