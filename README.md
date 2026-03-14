@@ -119,6 +119,24 @@ Acciones operativas visibles:
 - `Estado actual` concentra el detalle largo de sesion de forma responsive para evitar saturar `Operacion`.
 - `NodeRegistry` se reinicia por sesion UDP, evitando nodos fantasmas entre stop/restart.
 
+## Recording por sesion y replay basico (Tickets 8.x)
+
+- El recording por sesion ya esta integrado al lifecycle real via `SessionController` cuando `logging.enabled=true`.
+- El formato canonico de evidencia es `JSONL` (archivo `session.jsonl` por sesion).
+- Los artefactos por sesion se guardan en `logs/sessions/<session_id>/`:
+  - `session.jsonl`
+  - `report.json`
+- El flujo puede dejar evidencia util incluso si `start_session()` falla (por preflight bloqueado o error de backend).
+- `report.json` resume metadatos finales de sesion y contadores agregados observados durante el intento/ejecucion.
+- El replay basico ya existe y se alimenta desde `session.jsonl`, usando como fuente canonica:
+  - `event_type = midi_event`
+  - `ts_rel_ms` para timing relativo
+- El replay ignora eventos no musicales para reproduccion (ej. `udp_evt`, `serial_message`, runtime snapshots), que se mantienen para analisis/post-mortem.
+- La separacion de responsabilidades queda en:
+  - lifecycle real: `SessionController` + backends
+  - recording: `core/recording` (writer + accumulator + report)
+  - replay: `core/recording` (loader/extractor/replayer basico)
+
 ## Perfil como fuente de verdad (coherencia operacional)
 
 - El operador trabaja por `perfil`, no por `mode`.
