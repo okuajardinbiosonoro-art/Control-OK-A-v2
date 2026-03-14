@@ -44,7 +44,9 @@ class SessionController(QObject):
     ) -> None:
         super().__init__(parent)
         self._cfg_provider = self._normalize_cfg_provider(cfg_provider_or_cfg)
-        self._backend_factory = backend_factory or SessionBackendFactory()
+        self._backend_factory = backend_factory or SessionBackendFactory(
+            cfg_provider=self._get_cfg
+        )
         self._active_backend = None
 
         initial_cfg = self._get_cfg()
@@ -65,6 +67,18 @@ class SessionController(QObject):
 
     def get_last_preflight_report(self) -> PreflightReport:
         return self._last_preflight_report
+
+    def get_backend_runtime_snapshot(self) -> object | None:
+        backend = self._active_backend
+        if backend is None:
+            return None
+        runtime_snapshot = getattr(backend, "runtime_snapshot", None)
+        if callable(runtime_snapshot):
+            try:
+                return runtime_snapshot()
+            except Exception:
+                return None
+        return None
 
     def start_session(self) -> bool:
         transition = self._apply_transition(

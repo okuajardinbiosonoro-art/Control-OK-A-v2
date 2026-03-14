@@ -19,12 +19,37 @@ from control_okua.core.session import (  # noqa: E402
     SessionState,
 )
 from control_okua.services.session_controller import SessionController  # noqa: E402
+from control_okua.services.backends import SerialSessionBackend  # noqa: E402
+from control_okua.transports.serial import (  # noqa: E402
+    SerialRuntimeEvent,
+    SerialTransportConfig,
+    SerialTransportSnapshot,
+)
 
 
 def _build_cfg(profile_id: str | None, mode: str | None = None) -> dict[str, Any]:
     return {
         "profile": {"active": profile_id},
         "mode": mode,
+    }
+
+
+def _build_serial_cfg() -> dict[str, Any]:
+    return {
+        "profile": {"active": "serial_local"},
+        "mode": "serial",
+        "serial": {
+            "port": "COM_TEST",
+            "baudrate": 115200,
+            "flush_ms": 5,
+            "running_status": True,
+            "max_silence_s": 3.0,
+        },
+        "midi": {
+            "backend": "rtmidi",
+            "outputs": {"0": "loopMIDI Port 1"},
+            "send_noteoff_on_vel0": True,
+        },
     }
 
 
@@ -55,16 +80,104 @@ class _FakeBackend:
 
 
 class _RecordingBackendFactory:
-    def __init__(self, backend: _FakeBackend, on_build: Callable[[], None] | None = None) -> None:
+    def __init__(self, backend: Any, on_build: Callable[[], None] | None = None) -> None:
         self._backend = backend
         self._on_build = on_build
         self.build_calls = 0
 
-    def build_backend_for_spec(self, spec: SessionSpec) -> _FakeBackend:
+    def build_backend_for_spec(self, spec: SessionSpec) -> Any:
         self.build_calls += 1
         if self._on_build is not None:
             self._on_build()
         return self._backend
+
+
+class _FakeMidiRouter:
+    def __init__(self) -> None:
+        self._buses = [0]
+        self.sent: list[tuple[Any, ...]] = []
+
+    def open(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+    def opened_buses(self) -> list[int]:
+        return list(self._buses)
+
+    def send_note_on(self, bus: int, ch: int, note: int, vel: int) -> None:
+        if vel == 0:
+            self.send_note_off(bus=bus, ch=ch, note=note, vel=0)
+            return
+        self.sent.append(("note_on", bus, ch, note, vel))
+
+    def send_note_off(self, bus: int, ch: int, note: int, vel: int = 0) -> None:
+        self.sent.append(("note_off", bus, ch, note, vel))
+
+    def send_raw_midi(self, bus: int, data: bytes | list[int] | tuple[int, ...]) -> None:
+        self.sent.append(("raw", bus, tuple(int(value) for value in data)))
+
+
+class _FakeSerialTransport:
+    def __init__(
+        self,
+        *,
+        config: SerialTransportConfig,
+        on_message=None,
+        on_event=None,
+        start_result: bool = True,
+    ) -> None:
+        self._config = config
+        self._on_message = on_message
+        self._on_event = on_event
+        self._start_result = start_result
+        self._running = False
+        self.messages_parsed = 0
+        self.bytes_received = 0
+
+    def start(self) -> bool:
+        self._running = self._start_result
+        return self._start_result
+
+    def stop(self) -> None:
+        self._running = False
+
+    def is_running(self) -> bool:
+        return self._running
+
+    def snapshot(self) -> SerialTransportSnapshot:
+        return SerialTransportSnapshot(
+            port=self._config.port,
+            baudrate=self._config.baudrate,
+            is_running=self._running,
+            is_open=self._running,
+            bytes_received=self.bytes_received,
+            messages_parsed=self.messages_parsed,
+            parse_errors=0,
+            read_errors=0,
+            last_activity_ts=None,
+            last_error=None,
+        )
+
+    def emit_message(self, status: int, data: tuple[int, ...], message_type: str, channel: int | None) -> None:
+        self.messages_parsed += 1
+        self.bytes_received += 1 + len(data)
+        if self._on_message is not None:
+            from control_okua.core.midi import ParsedMidiMessage
+
+            self._on_message(
+                ParsedMidiMessage(
+                    status=status,
+                    data=data,
+                    message_type=message_type,
+                    channel=channel,
+                )
+            )
+
+    def emit_error(self, message: str) -> None:
+        if self._on_event is not None:
+            self._on_event(SerialRuntimeEvent(level="error", message=message))
 
 
 def test_controller_starts_in_idle() -> None:
@@ -218,3 +331,75 @@ def test_preflight_signal_and_messages_reflect_blocked_start() -> None:
     assert any(report.readiness is ReadinessLevel.BLOCKED for report in reports)
     assert any("no se puede iniciar la sesion" in message.lower() for message in messages)
     assert any("fallo al iniciar backend de sesion" in err.lower() for err in errors)
+
+
+def test_controller_serial_real_backend_reaches_running_and_stops_cleanly() -> None:
+    holder: dict[str, _FakeSerialTransport] = {}
+    router = _FakeMidiRouter()
+
+    def _transport_builder(**kwargs):
+        transport = _FakeSerialTransport(**kwargs)
+        holder["transport"] = transport
+        return transport
+
+    serial_backend = SerialSessionBackend(
+        _build_serial_cfg(),
+        router_builder=lambda _cfg: router,
+        transport_builder=_transport_builder,
+    )
+    backend_factory = _RecordingBackendFactory(backend=serial_backend)
+    controller = SessionController(_build_serial_cfg(), backend_factory=backend_factory)
+
+    start_result = controller.start_session()
+    runtime_snapshot = controller.get_backend_runtime_snapshot()
+    stop_result = controller.stop_session()
+
+    assert start_result is True
+    assert controller.get_state() is SessionState.IDLE
+    assert stop_result is True
+    assert backend_factory.build_calls == 1
+    assert runtime_snapshot is not None
+
+
+def test_controller_serial_real_backend_failure_never_reports_running() -> None:
+    serial_backend = SerialSessionBackend(
+        _build_serial_cfg(),
+        router_builder=lambda _cfg: _FakeMidiRouter(),
+        transport_builder=lambda **kwargs: _FakeSerialTransport(**kwargs, start_result=False),
+    )
+    backend_factory = _RecordingBackendFactory(backend=serial_backend)
+    controller = SessionController(_build_serial_cfg(), backend_factory=backend_factory)
+    states: list[str] = []
+    controller.session_state_changed.connect(states.append)
+
+    result = controller.start_session()
+
+    assert result is False
+    assert controller.get_state() is SessionState.ERROR
+    assert "running" not in states
+
+
+def test_controller_serial_flow_routes_messages_to_midi_router() -> None:
+    holder: dict[str, _FakeSerialTransport] = {}
+    router = _FakeMidiRouter()
+
+    def _transport_builder(**kwargs):
+        transport = _FakeSerialTransport(**kwargs)
+        holder["transport"] = transport
+        return transport
+
+    serial_backend = SerialSessionBackend(
+        _build_serial_cfg(),
+        router_builder=lambda _cfg: router,
+        transport_builder=_transport_builder,
+    )
+    backend_factory = _RecordingBackendFactory(backend=serial_backend)
+    controller = SessionController(_build_serial_cfg(), backend_factory=backend_factory)
+
+    assert controller.start_session() is True
+    holder["transport"].emit_message(0x90, (60, 0), "note_on", channel=0)
+    runtime_snapshot = controller.get_backend_runtime_snapshot()
+    assert controller.stop_session() is True
+
+    assert ("note_off", 0, 0, 60, 0) in router.sent
+    assert runtime_snapshot is not None

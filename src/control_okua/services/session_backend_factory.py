@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
+from control_okua.core.config.config_schema import validate_and_fix
 from control_okua.core.session import (
     BackendAvailability,
     BackendKind,
     SessionBackendContract,
     SessionSpec,
 )
+from control_okua.services.backends import SerialSessionBackend
 
 
 class SessionBackendError(RuntimeError):
@@ -56,19 +58,24 @@ class UnavailableSessionBackend:
 
 
 BackendBuilder = Callable[[SessionSpec], SessionBackendContract]
+ConfigProvider = Callable[[], dict[str, Any]]
 
 
 class SessionBackendFactory:
     """Factory used by SessionController to resolve a backend from SessionSpec."""
 
     _DEFAULT_UNAVAILABLE_REASONS: dict[BackendKind, str] = {
-        BackendKind.SERIAL: "Serial backend aún no implementado en este ticket.",
         BackendKind.UDP: "UDP backend aún no implementado en este ticket.",
         BackendKind.LAB: "Lab backend aún no implementado en este ticket.",
     }
 
-    def __init__(self, builders: dict[BackendKind, BackendBuilder] | None = None) -> None:
+    def __init__(
+        self,
+        builders: dict[BackendKind, BackendBuilder] | None = None,
+        cfg_provider: ConfigProvider | None = None,
+    ) -> None:
         self._builders = builders.copy() if builders else {}
+        self._cfg_provider = cfg_provider or (lambda: {})
 
     def register_builder(self, backend_kind: BackendKind, builder: BackendBuilder) -> None:
         self._builders[backend_kind] = builder
@@ -83,8 +90,21 @@ class SessionBackendFactory:
         if builder is not None:
             return builder(spec)
 
+        if spec.backend is BackendKind.SERIAL:
+            cfg = self._get_effective_cfg()
+            return SerialSessionBackend(cfg)
+
         reason = self._DEFAULT_UNAVAILABLE_REASONS.get(
             spec.backend,
             f"Backend '{spec.backend.value}' no implementado.",
         )
         return UnavailableSessionBackend(kind=spec.backend, reason=reason)
+
+    def _get_effective_cfg(self) -> dict[str, Any]:
+        try:
+            cfg = self._cfg_provider()
+        except Exception:
+            cfg = {}
+        raw_cfg = cfg if isinstance(cfg, dict) else {}
+        effective_cfg, _warnings = validate_and_fix(raw_cfg)
+        return effective_cfg

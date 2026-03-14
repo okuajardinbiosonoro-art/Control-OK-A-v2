@@ -10,6 +10,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from control_okua.core.session import BackendKind, SessionSpec  # noqa: E402
+from control_okua.services.backends import SerialSessionBackend  # noqa: E402
 from control_okua.services.session_backend_factory import (  # noqa: E402
     BackendUnavailableError,
     SessionBackendFactory,
@@ -30,9 +31,17 @@ def _build_valid_spec(backend: BackendKind) -> SessionSpec:
 
 def test_factory_returns_backend_for_serial_spec() -> None:
     spec = _build_valid_spec(BackendKind.SERIAL)
-    backend = SessionBackendFactory().build_backend_for_spec(spec)
+    cfg = {
+        "profile": {"active": "serial_local"},
+        "serial": {"port": "COM_TEST", "baudrate": 115200, "flush_ms": 5, "running_status": True},
+        "midi": {"outputs": {"0": "loopMIDI Port 1"}, "backend": "rtmidi"},
+    }
+    backend = SessionBackendFactory(cfg_provider=lambda: cfg).build_backend_for_spec(spec)
     assert backend.kind is BackendKind.SERIAL
-    assert isinstance(backend, UnavailableSessionBackend)
+    assert isinstance(backend, SerialSessionBackend)
+    availability = backend.availability()
+    assert availability.is_implemented is True
+    assert availability.is_available is True
 
 
 def test_unavailable_backend_reports_honest_availability() -> None:
