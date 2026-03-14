@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
+from control_okua.core.preflight import PreflightReport, ReadinessLevel
 from control_okua.core.profiles.profile_service import (
     build_profile_ui_summary,
     infer_profile_from_config,
@@ -177,6 +179,126 @@ def build_session_capabilities_summary(snapshot: SessionSnapshot) -> str:
     start_text = "Sí" if snapshot.can_start else "No"
     stop_text = "Sí" if snapshot.can_stop else "No"
     return f"Puede iniciar: {start_text} | Puede detener: {stop_text}"
+
+
+@dataclass(frozen=True)
+class PreflightDiagnosticRow:
+    severity: str
+    code: str
+    message: str
+    details: str
+
+
+def build_preflight_status_label(report: PreflightReport | None) -> str:
+    if report is None:
+        return "Preparación de sesión: Sin evaluación"
+    if report.readiness is ReadinessLevel.READY:
+        return "Preparación de sesión: Lista"
+    if report.readiness is ReadinessLevel.READY_WITH_WARNINGS:
+        return "Preparación de sesión: Lista con advertencias"
+    return "Preparación de sesión: No lista"
+
+
+def build_preflight_summary_text(report: PreflightReport | None) -> str:
+    if report is None:
+        return "Resumen: autodiagnóstico aún no ejecutado."
+    summary = report.summary.strip()
+    if not summary:
+        return "Resumen: sin datos de readiness."
+    return f"Resumen: {summary}"
+
+
+def build_preflight_counts(report: PreflightReport | None) -> str:
+    if report is None:
+        return "Bloqueos: - | Advertencias: - | Info: -"
+    return (
+        f"Bloqueos: {report.blocking_count} | "
+        f"Advertencias: {report.warning_count} | "
+        f"Info: {report.info_count}"
+    )
+
+
+def _first_finding_message(report: PreflightReport, *, prefer_blocking: bool) -> str | None:
+    for finding in report.findings:
+        if prefer_blocking and finding.is_blocking:
+            return finding.message
+        if not prefer_blocking and finding.severity.value == "warning":
+            return finding.message
+    for finding in report.findings:
+        if finding.severity.value == "error":
+            return finding.message
+    if report.findings:
+        return report.findings[0].message
+    return None
+
+
+def build_preflight_primary_message(report: PreflightReport | None) -> str:
+    if report is None:
+        return "Autodiagnóstico aún no ejecutado."
+
+    if report.readiness is ReadinessLevel.BLOCKED:
+        message = _first_finding_message(report, prefer_blocking=True)
+        if message:
+            return f"Motivo principal: {message}"
+        return "Motivo principal: la sesión no está lista por configuración."
+
+    if report.readiness is ReadinessLevel.READY_WITH_WARNINGS:
+        message = _first_finding_message(report, prefer_blocking=False)
+        if message:
+            return f"Advertencia principal: {message}"
+        return "Advertencia principal: hay observaciones no bloqueantes."
+
+    return "Motivo principal: configuración válida para intentar iniciar sesión."
+
+
+def build_preflight_runtime_note(
+    report: PreflightReport | None,
+    snapshot: SessionSnapshot,
+) -> str:
+    if report is None:
+        return "Sin evaluación de readiness."
+
+    if report.readiness is ReadinessLevel.BLOCKED:
+        return "Inicio bloqueado por readiness/configuración."
+
+    if snapshot.state is SessionState.ERROR:
+        message = snapshot.message.casefold()
+        if "backend" in message:
+            return "Readiness OK; el error actual es de backend/runtime."
+        return "Readiness OK; el error actual es del ciclo de sesión."
+
+    return "Readiness evaluado; sin bloqueo declarativo."
+
+
+def _format_finding_details(details: dict[str, Any] | None) -> str:
+    if not isinstance(details, dict) or not details:
+        return "-"
+    parts: list[str] = []
+    for key in sorted(details):
+        raw_value = details[key]
+        if isinstance(raw_value, (dict, list, tuple)):
+            value_text = json.dumps(raw_value, ensure_ascii=False)
+        else:
+            value_text = str(raw_value)
+        parts.append(f"{key}={value_text}")
+    return " | ".join(parts)
+
+
+def build_preflight_diagnostic_rows(report: PreflightReport | None) -> list[PreflightDiagnosticRow]:
+    if report is None:
+        return []
+
+    rows: list[PreflightDiagnosticRow] = []
+    for finding in report.findings:
+        rows.append(
+            PreflightDiagnosticRow(
+                severity=finding.severity.value.upper(),
+                code=finding.code.value,
+                message=finding.message,
+                details=_format_finding_details(finding.details),
+            )
+        )
+    return rows
 
 
 @dataclass(frozen=True)

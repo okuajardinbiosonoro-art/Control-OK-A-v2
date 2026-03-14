@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QTabWidget,
     QTableWidget,
+    QTableWidgetItem,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -26,11 +27,18 @@ from control_okua.app_qt.advanced_tools_dialog import AdvancedToolsDialog
 from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
 from control_okua.app_qt.widgets import ConfigViewDialog
 from control_okua.app_qt.viewmodels import (
+    PreflightDiagnosticRow,
     build_general_status_summary,
     build_logging_summary,
     build_midi_summary,
     build_mode_summary,
     build_operation_summary,
+    build_preflight_counts,
+    build_preflight_diagnostic_rows,
+    build_preflight_primary_message,
+    build_preflight_runtime_note,
+    build_preflight_status_label,
+    build_preflight_summary_text,
     build_profile_mode_summary,
     build_profile_summary,
     build_session_action_state,
@@ -40,6 +48,7 @@ from control_okua.app_qt.viewmodels import (
     build_session_status_summary,
     build_transport_summary,
 )
+from control_okua.core.preflight import PreflightReport
 from control_okua.core.config.config_schema import load_config, save_config
 from control_okua.core.profiles.profile_service import (
     infer_profile_from_config,
@@ -67,6 +76,7 @@ class MainWindow(QMainWindow):
         self.resize(1100, 700)
 
         self._operation_summary_labels: dict[str, QLabel] = {}
+        self._operation_readiness_labels: dict[str, QLabel] = {}
         self._diagnostic_summary_labels: dict[str, QLabel] = {}
         self._advanced_dialog: AdvancedToolsDialog | None = None
         self.session_controller = session_controller or SessionController(
@@ -74,6 +84,7 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         self._session_snapshot: SessionSnapshot = self.session_controller.get_snapshot()
+        self._preflight_report: PreflightReport | None = self.session_controller.get_last_preflight_report()
         self._connect_session_signals()
 
         self._build_ui()
@@ -84,6 +95,7 @@ class MainWindow(QMainWindow):
         self.session_controller.session_snapshot_changed.connect(self._on_session_snapshot_changed)
         self.session_controller.session_error.connect(self._on_session_error)
         self.session_controller.session_message.connect(self._on_session_message)
+        self.session_controller.preflight_report_changed.connect(self._on_preflight_report_changed)
 
     def _build_ui(self) -> None:
         central = QWidget(self)
@@ -149,6 +161,22 @@ class MainWindow(QMainWindow):
         session_actions_layout.addStretch(1)
 
         layout.addWidget(session_actions_group)
+
+        readiness_group = QGroupBox("Preparación de sesión")
+        readiness_layout = QFormLayout(readiness_group)
+        readiness_fields = [
+            ("status", "Estado"),
+            ("summary", "Resumen"),
+            ("counts", "Conteos"),
+            ("primary", "Mensaje principal"),
+            ("runtime_note", "Nota runtime"),
+        ]
+        for key, field_name in readiness_fields:
+            label = QLabel("-")
+            label.setWordWrap(True)
+            readiness_layout.addRow(field_name, label)
+            self._operation_readiness_labels[key] = label
+        layout.addWidget(readiness_group)
 
         cards_group = QGroupBox("Estado actual")
         cards_layout = QGridLayout(cards_group)
@@ -247,6 +275,34 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(summary_group)
 
+        preflight_group = QGroupBox("Readiness / preflight")
+        preflight_layout = QVBoxLayout(preflight_group)
+
+        preflight_summary_form = QFormLayout()
+        self.preflight_diag_status_label = QLabel("-")
+        self.preflight_diag_status_label.setWordWrap(True)
+        preflight_summary_form.addRow("Readiness", self.preflight_diag_status_label)
+
+        self.preflight_diag_summary_label = QLabel("-")
+        self.preflight_diag_summary_label.setWordWrap(True)
+        preflight_summary_form.addRow("Resumen", self.preflight_diag_summary_label)
+
+        self.preflight_diag_counts_label = QLabel("-")
+        self.preflight_diag_counts_label.setWordWrap(True)
+        preflight_summary_form.addRow("Conteos", self.preflight_diag_counts_label)
+        preflight_layout.addLayout(preflight_summary_form)
+
+        self.preflight_findings_table = QTableWidget(0, 4, self)
+        self.preflight_findings_table.setHorizontalHeaderLabels(
+            ["Severidad", "Código", "Mensaje", "Detalle"]
+        )
+        self.preflight_findings_table.horizontalHeader().setStretchLastSection(True)
+        self.preflight_findings_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.preflight_findings_table.setSelectionMode(QAbstractItemView.NoSelection)
+        self.preflight_findings_table.verticalHeader().setVisible(False)
+        preflight_layout.addWidget(self.preflight_findings_table)
+        layout.addWidget(preflight_group)
+
         warnings_group = QGroupBox("Advertencias de configuración")
         warnings_layout = QVBoxLayout(warnings_group)
         self.warnings_view = QTextEdit(self)
@@ -270,6 +326,15 @@ class MainWindow(QMainWindow):
         session_message_summary = build_session_message_summary(self._session_snapshot)
         session_capabilities_summary = build_session_capabilities_summary(self._session_snapshot)
         session_action_state = build_session_action_state(self._session_snapshot)
+        preflight_status = build_preflight_status_label(self._preflight_report)
+        preflight_summary = build_preflight_summary_text(self._preflight_report)
+        preflight_counts = build_preflight_counts(self._preflight_report)
+        preflight_primary = build_preflight_primary_message(self._preflight_report)
+        preflight_runtime_note = build_preflight_runtime_note(
+            self._preflight_report,
+            self._session_snapshot,
+        )
+        preflight_rows = build_preflight_diagnostic_rows(self._preflight_report)
 
         self._operation_summary_labels["profile"].setText(profile_summary)
         self._operation_summary_labels["profile_mode"].setText(profile_mode_summary)
@@ -285,6 +350,11 @@ class MainWindow(QMainWindow):
         self._operation_summary_labels["transport"].setText(transport_summary)
         self._operation_summary_labels["midi"].setText(midi_summary)
         self._operation_summary_labels["logging"].setText(logging_summary)
+        self._operation_readiness_labels["status"].setText(preflight_status)
+        self._operation_readiness_labels["summary"].setText(preflight_summary)
+        self._operation_readiness_labels["counts"].setText(preflight_counts)
+        self._operation_readiness_labels["primary"].setText(preflight_primary)
+        self._operation_readiness_labels["runtime_note"].setText(preflight_runtime_note)
 
         if self._session_snapshot.state is SessionState.STARTING:
             self.operation_subtitle_label.setText(
@@ -343,9 +413,13 @@ class MainWindow(QMainWindow):
         self._diagnostic_summary_labels["general"].setText(
             f"{general_summary} | {session_status_summary}"
         )
+        self.preflight_diag_status_label.setText(preflight_status)
+        self.preflight_diag_summary_label.setText(preflight_summary)
+        self.preflight_diag_counts_label.setText(preflight_counts)
+        self._refresh_preflight_findings_table(preflight_rows)
 
         self.statusBar().showMessage(
-            f"{mode_summary} | {session_status_summary} | {self._session_snapshot.message}"
+            f"{preflight_status} | {session_status_summary} | {self._session_snapshot.message}"
         )
 
         if self._advanced_dialog is not None and self._advanced_dialog.isVisible():
@@ -451,6 +525,7 @@ class MainWindow(QMainWindow):
     def _on_session_snapshot_changed(self, snapshot: object) -> None:
         if isinstance(snapshot, SessionSnapshot):
             self._session_snapshot = snapshot
+        self._preflight_report = self.session_controller.get_last_preflight_report()
         self.refresh_ui()
 
     def _on_session_error(self, message: str) -> None:
@@ -462,3 +537,24 @@ class MainWindow(QMainWindow):
     def _on_session_message(self, message: str) -> None:
         if message.strip():
             self.statusBar().showMessage(message)
+
+    def _on_preflight_report_changed(self, report: object) -> None:
+        if isinstance(report, PreflightReport):
+            self._preflight_report = report
+        self.refresh_ui()
+
+    def _refresh_preflight_findings_table(self, rows: list[PreflightDiagnosticRow]) -> None:
+        self.preflight_findings_table.setRowCount(len(rows))
+        for row_index, row in enumerate(rows):
+            self.preflight_findings_table.setItem(
+                row_index, 0, QTableWidgetItem(str(row.severity))
+            )
+            self.preflight_findings_table.setItem(
+                row_index, 1, QTableWidgetItem(str(row.code))
+            )
+            self.preflight_findings_table.setItem(
+                row_index, 2, QTableWidgetItem(str(row.message))
+            )
+            self.preflight_findings_table.setItem(
+                row_index, 3, QTableWidgetItem(str(row.details))
+            )

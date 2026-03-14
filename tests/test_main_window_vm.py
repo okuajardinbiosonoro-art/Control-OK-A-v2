@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Iterable
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -14,9 +15,27 @@ from control_okua.app_qt.viewmodels.main_window_vm import (  # noqa: E402
     build_logging_summary,
     build_mode_summary,
     build_operation_summary,
+    build_preflight_counts,
+    build_preflight_diagnostic_rows,
+    build_preflight_primary_message,
+    build_preflight_runtime_note,
+    build_preflight_status_label,
+    build_preflight_summary_text,
     build_profile_mode_summary,
     build_profile_summary,
     build_transport_summary,
+)
+from control_okua.core.preflight import (  # noqa: E402
+    PreflightCheckCode,
+    PreflightFinding,
+    PreflightReport,
+    PreflightSeverity,
+    ReadinessLevel,
+)
+from control_okua.core.session import (  # noqa: E402
+    BackendKind,
+    SessionSnapshot,
+    SessionState,
 )
 
 
@@ -86,3 +105,141 @@ def test_general_status_for_missing_profile() -> None:
     cfg = {"mode": None, "profile": {"active": None}}
     status = build_general_status_summary(cfg, [])
     assert status == "Estado general: perfil incompleto / sesión no iniciada"
+
+
+def _build_report(
+    readiness: ReadinessLevel,
+    findings: Iterable[PreflightFinding] = (),
+) -> PreflightReport:
+    findings_tuple = tuple(findings)
+    blocking_count = sum(1 for finding in findings_tuple if finding.is_blocking)
+    warning_count = sum(
+        1 for finding in findings_tuple if finding.severity is PreflightSeverity.WARNING
+    )
+    info_count = sum(
+        1 for finding in findings_tuple if finding.severity is PreflightSeverity.INFO
+    )
+    return PreflightReport(
+        readiness=readiness,
+        findings=findings_tuple,
+        blocking_count=blocking_count,
+        warning_count=warning_count,
+        info_count=info_count,
+        summary=f"Readiness: {readiness.value}",
+        can_start=readiness is not ReadinessLevel.BLOCKED,
+        profile_id="serial_local",
+        derived_mode="serial",
+        backend_kind="serial",
+        session_spec_valid=True,
+    )
+
+
+def _build_snapshot(state: SessionState, message: str) -> SessionSnapshot:
+    return SessionSnapshot(
+        state=state,
+        active_profile="serial_local",
+        mode="serial",
+        backend=BackendKind.SERIAL,
+        message=message,
+        error=None,
+        can_start=state is SessionState.IDLE,
+        can_stop=state is SessionState.RUNNING,
+    )
+
+
+def test_preflight_helpers_render_when_report_is_missing() -> None:
+    status = build_preflight_status_label(None)
+    summary = build_preflight_summary_text(None)
+    counts = build_preflight_counts(None)
+    primary = build_preflight_primary_message(None)
+
+    assert status == "Preparación de sesión: Sin evaluación"
+    assert "autodiagnóstico" in summary.lower()
+    assert "bloqueos: -" in counts.lower()
+    assert "aún no ejecutado" in primary.lower()
+
+
+def test_preflight_helpers_render_ready_ready_with_warnings_and_blocked() -> None:
+    ready_report = _build_report(ReadinessLevel.READY)
+    warn_report = _build_report(
+        ReadinessLevel.READY_WITH_WARNINGS,
+        findings=(
+            PreflightFinding(
+                code=PreflightCheckCode.LOGGING_DISABLED,
+                severity=PreflightSeverity.WARNING,
+                message="Logging deshabilitado por configuracion.",
+                is_blocking=False,
+            ),
+        ),
+    )
+    blocked_report = _build_report(
+        ReadinessLevel.BLOCKED,
+        findings=(
+            PreflightFinding(
+                code=PreflightCheckCode.PROFILE_MISSING,
+                severity=PreflightSeverity.ERROR,
+                message="profile.active no esta definido.",
+                is_blocking=True,
+            ),
+        ),
+    )
+
+    assert build_preflight_status_label(ready_report).endswith("Lista")
+    assert "advertencias" in build_preflight_status_label(warn_report).lower()
+    assert build_preflight_status_label(blocked_report).endswith("No lista")
+    assert "readiness: ready" in build_preflight_summary_text(ready_report).lower()
+    assert "advertencia principal" in build_preflight_primary_message(warn_report).lower()
+    assert "motivo principal" in build_preflight_primary_message(blocked_report).lower()
+
+
+def test_preflight_counts_and_diagnostic_rows_are_coherent() -> None:
+    report = _build_report(
+        ReadinessLevel.BLOCKED,
+        findings=(
+            PreflightFinding(
+                code=PreflightCheckCode.PROFILE_MISSING,
+                severity=PreflightSeverity.ERROR,
+                message="profile.active no esta definido.",
+                details={"path": "profile.active"},
+                is_blocking=True,
+            ),
+            PreflightFinding(
+                code=PreflightCheckCode.LOGGING_DISABLED,
+                severity=PreflightSeverity.WARNING,
+                message="Logging deshabilitado por configuracion.",
+                details=None,
+                is_blocking=False,
+            ),
+        ),
+    )
+
+    counts = build_preflight_counts(report)
+    rows = build_preflight_diagnostic_rows(report)
+
+    assert "Bloqueos: 1" in counts
+    assert "Advertencias: 1" in counts
+    assert len(rows) == 2
+    assert rows[0].severity == "ERROR"
+    assert rows[0].code == "profile_missing"
+    assert "profile.active" in rows[0].details
+    assert rows[1].details == "-"
+
+
+def test_preflight_runtime_note_separates_readiness_ok_from_backend_error() -> None:
+    ready_report = _build_report(ReadinessLevel.READY_WITH_WARNINGS)
+    backend_error_snapshot = _build_snapshot(
+        SessionState.ERROR,
+        "No se pudo iniciar sesion: Backend 'serial' no implementado.",
+    )
+    blocked_report = _build_report(ReadinessLevel.BLOCKED)
+    blocked_snapshot = _build_snapshot(
+        SessionState.ERROR,
+        "No se puede iniciar la sesion: profile.active no esta definido.",
+    )
+
+    backend_note = build_preflight_runtime_note(ready_report, backend_error_snapshot)
+    blocked_note = build_preflight_runtime_note(blocked_report, blocked_snapshot)
+
+    assert "readiness ok" in backend_note.lower()
+    assert "backend" in backend_note.lower()
+    assert "inicio bloqueado" in blocked_note.lower()
