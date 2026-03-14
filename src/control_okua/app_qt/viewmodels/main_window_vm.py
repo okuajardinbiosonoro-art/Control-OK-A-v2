@@ -543,6 +543,275 @@ def build_diagnostic_serial_rows(
 
 
 @dataclass(frozen=True)
+class UdpRuntimeOperationBlock:
+    status_label: str
+    summary: str
+    bind: str
+    ports: str
+    evt_packets: str
+    stat_packets: str
+    last_error: str
+    recent_activity: str
+
+
+@dataclass(frozen=True)
+class UdpRuntimeDiagnosticRow:
+    field: str
+    value: str
+
+
+def _is_udp_session(snapshot: SessionSnapshot) -> bool:
+    backend = snapshot.backend
+    if snapshot.mode == "udp":
+        return True
+    if backend is None:
+        return False
+    return backend.value in {"udp", "lab"}
+
+
+def _udp_runtime_status_text(
+    runtime_snapshot: object | None,
+    session_snapshot: SessionSnapshot,
+    *,
+    now_monotonic: float | None = None,
+    recent_window_s: float = 5.0,
+) -> str:
+    if not _is_udp_session(session_snapshot):
+        return "No disponible"
+
+    if runtime_snapshot is None:
+        return "No disponible"
+
+    last_error = str(_runtime_attr(runtime_snapshot, "last_error") or "").strip()
+    if not last_error:
+        last_error = str(_transport_attr(runtime_snapshot, "last_error") or "").strip()
+    if last_error:
+        return "Con error"
+
+    is_running = bool(_runtime_attr(runtime_snapshot, "is_running"))
+    if not is_running:
+        return "No disponible"
+
+    if _has_recent_activity(
+        runtime_snapshot,
+        now_monotonic=now_monotonic,
+        recent_window_s=recent_window_s,
+    ):
+        return "Activo"
+    return "Sin actividad reciente"
+
+
+def build_operation_udp_block(
+    runtime_snapshot: object | None,
+    session_snapshot: SessionSnapshot,
+    *,
+    now_monotonic: float | None = None,
+    recent_window_s: float = 5.0,
+) -> UdpRuntimeOperationBlock:
+    status_text = _udp_runtime_status_text(
+        runtime_snapshot,
+        session_snapshot,
+        now_monotonic=now_monotonic,
+        recent_window_s=recent_window_s,
+    )
+    status_label = f"Estado UDP: {status_text}"
+
+    if not _is_udp_session(session_snapshot):
+        return UdpRuntimeOperationBlock(
+            status_label=status_label,
+            summary="Actividad UDP no aplica para la sesión actual.",
+            bind="Bind: -",
+            ports="Puertos: -",
+            evt_packets="EVT recibidos: -",
+            stat_packets="STAT recibidos: -",
+            last_error="Último error: -",
+            recent_activity="Actividad reciente: -",
+        )
+
+    if runtime_snapshot is None:
+        return UdpRuntimeOperationBlock(
+            status_label=status_label,
+            summary="Runtime UDP no disponible para la sesión actual.",
+            bind="Bind: -",
+            ports="Puertos: -",
+            evt_packets="EVT recibidos: -",
+            stat_packets="STAT recibidos: -",
+            last_error="Último error: -",
+            recent_activity="Actividad reciente: -",
+        )
+
+    bind_ip = str(_transport_attr(runtime_snapshot, "bind_ip") or "-")
+    evt_port = _transport_attr(runtime_snapshot, "evt_port")
+    stat_port = _transport_attr(runtime_snapshot, "stat_port")
+    evt_port_text = str(evt_port) if evt_port is not None else "-"
+    stat_port_text = str(stat_port) if stat_port is not None else "-"
+    total_evt = _safe_int(
+        _runtime_attr(runtime_snapshot, "total_evt_packets"),
+        default=_safe_int(_transport_attr(runtime_snapshot, "total_evt_packets"), default=0),
+    )
+    total_stat = _safe_int(
+        _runtime_attr(runtime_snapshot, "total_stat_packets"),
+        default=_safe_int(_transport_attr(runtime_snapshot, "total_stat_packets"), default=0),
+    )
+    last_error = str(_runtime_attr(runtime_snapshot, "last_error") or "").strip()
+    if not last_error:
+        last_error = str(_transport_attr(runtime_snapshot, "last_error") or "").strip()
+    last_error_text = last_error or "Sin errores"
+    recent_text = (
+        "Sí"
+        if _has_recent_activity(
+            runtime_snapshot,
+            now_monotonic=now_monotonic,
+            recent_window_s=recent_window_s,
+        )
+        else "No"
+    )
+
+    if status_text == "Activo":
+        summary = "Flujo UDP activo con tráfico reciente."
+    elif status_text == "Sin actividad reciente":
+        summary = "Backend UDP corriendo sin tráfico reciente."
+    elif status_text == "Con error":
+        summary = "Backend UDP con error runtime; revisar detalle técnico."
+    else:
+        summary = "Runtime UDP no disponible para la sesión actual."
+
+    return UdpRuntimeOperationBlock(
+        status_label=status_label,
+        summary=summary,
+        bind=f"Bind: {bind_ip}",
+        ports=f"Puertos: EVT {evt_port_text} / STAT {stat_port_text}",
+        evt_packets=f"EVT recibidos: {total_evt}",
+        stat_packets=f"STAT recibidos: {total_stat}",
+        last_error=f"Último error: {last_error_text}",
+        recent_activity=f"Actividad reciente: {recent_text}",
+    )
+
+
+def _format_udp_evt_summary(runtime_snapshot: object | None) -> str:
+    summary = _runtime_attr(runtime_snapshot, "last_evt")
+    if summary is None:
+        return "-"
+
+    node_id = _runtime_attr(summary, "node_id")
+    seq = _runtime_attr(summary, "seq")
+    midi_bus = _runtime_attr(summary, "midi_bus")
+    midi_ch = _runtime_attr(summary, "midi_ch")
+    note = _runtime_attr(summary, "note")
+    vel = _runtime_attr(summary, "vel")
+    source_ip = _runtime_attr(summary, "source_ip")
+    source_port = _runtime_attr(summary, "source_port")
+    return (
+        f"node={node_id} seq={seq} bus={midi_bus} ch={midi_ch} "
+        f"note={note} vel={vel} src={source_ip}:{source_port}"
+    )
+
+
+def _format_udp_stat_summary(runtime_snapshot: object | None) -> str:
+    summary = _runtime_attr(runtime_snapshot, "last_stat")
+    if summary is None:
+        return "-"
+
+    node_id = _runtime_attr(summary, "node_id")
+    seq = _runtime_attr(summary, "seq")
+    uptime_s = _runtime_attr(summary, "uptime_s")
+    rssi_dbm = _runtime_attr(summary, "rssi_dbm")
+    pps_x10 = _runtime_attr(summary, "pps_x10")
+    vbat_mv = _runtime_attr(summary, "vbat_mv")
+    source_ip = _runtime_attr(summary, "source_ip")
+    source_port = _runtime_attr(summary, "source_port")
+    return (
+        f"node={node_id} seq={seq} uptime={uptime_s}s rssi={rssi_dbm}dBm "
+        f"pps_x10={pps_x10} vbat={vbat_mv}mV src={source_ip}:{source_port}"
+    )
+
+
+def build_diagnostic_udp_rows(
+    runtime_snapshot: object | None,
+    session_snapshot: SessionSnapshot,
+    *,
+    now_monotonic: float | None = None,
+    recent_window_s: float = 5.0,
+) -> list[UdpRuntimeDiagnosticRow]:
+    status_text = _udp_runtime_status_text(
+        runtime_snapshot,
+        session_snapshot,
+        now_monotonic=now_monotonic,
+        recent_window_s=recent_window_s,
+    )
+
+    if not _is_udp_session(session_snapshot):
+        return [
+            UdpRuntimeDiagnosticRow("Estado UDP", status_text),
+            UdpRuntimeDiagnosticRow("Runtime", "No aplica para la sesión actual."),
+        ]
+
+    if runtime_snapshot is None:
+        return [
+            UdpRuntimeDiagnosticRow("Estado UDP", status_text),
+            UdpRuntimeDiagnosticRow("Runtime", "No disponible."),
+        ]
+
+    bind_ip = str(_transport_attr(runtime_snapshot, "bind_ip") or "-")
+    evt_port = str(_transport_attr(runtime_snapshot, "evt_port") or "-")
+    stat_port = str(_transport_attr(runtime_snapshot, "stat_port") or "-")
+    is_running = "Sí" if bool(_runtime_attr(runtime_snapshot, "is_running")) else "No"
+    total_evt = _safe_int(
+        _runtime_attr(runtime_snapshot, "total_evt_packets"),
+        default=_safe_int(_transport_attr(runtime_snapshot, "total_evt_packets"), default=0),
+    )
+    total_stat = _safe_int(
+        _runtime_attr(runtime_snapshot, "total_stat_packets"),
+        default=_safe_int(_transport_attr(runtime_snapshot, "total_stat_packets"), default=0),
+    )
+    total_bytes = _safe_int(
+        _runtime_attr(runtime_snapshot, "total_bytes_received"),
+        default=_safe_int(_transport_attr(runtime_snapshot, "total_bytes_received"), default=0),
+    )
+    parse_errors = _safe_int(
+        _runtime_attr(runtime_snapshot, "parse_errors"),
+        default=_safe_int(_transport_attr(runtime_snapshot, "parse_errors"), default=0),
+    )
+    socket_errors = _safe_int(
+        _runtime_attr(runtime_snapshot, "socket_errors"),
+        default=_safe_int(_transport_attr(runtime_snapshot, "socket_errors"), default=0),
+    )
+    messages_routed = _safe_int(_runtime_attr(runtime_snapshot, "messages_routed"), default=0)
+    last_packet_summary = str(_runtime_attr(runtime_snapshot, "last_packet_summary") or "").strip()
+    if not last_packet_summary:
+        last_packet_summary = str(_transport_attr(runtime_snapshot, "last_packet_summary") or "").strip()
+    if not last_packet_summary:
+        last_packet_summary = "-"
+    last_error = str(_runtime_attr(runtime_snapshot, "last_error") or "").strip()
+    if not last_error:
+        last_error = str(_transport_attr(runtime_snapshot, "last_error") or "").strip()
+    if not last_error:
+        last_error = "Sin errores"
+
+    return [
+        UdpRuntimeDiagnosticRow("Estado UDP", status_text),
+        UdpRuntimeDiagnosticRow("Bind IP", bind_ip),
+        UdpRuntimeDiagnosticRow("Puerto EVT", evt_port),
+        UdpRuntimeDiagnosticRow("Puerto STAT", stat_port),
+        UdpRuntimeDiagnosticRow("Corriendo", is_running),
+        UdpRuntimeDiagnosticRow("EVT totales", str(total_evt)),
+        UdpRuntimeDiagnosticRow("STAT totales", str(total_stat)),
+        UdpRuntimeDiagnosticRow("Bytes recibidos", str(total_bytes)),
+        UdpRuntimeDiagnosticRow("Mensajes MIDI ruteados", str(messages_routed)),
+        UdpRuntimeDiagnosticRow("Errores de parseo", str(parse_errors)),
+        UdpRuntimeDiagnosticRow("Errores de socket", str(socket_errors)),
+        UdpRuntimeDiagnosticRow(
+            "Última actividad",
+            _format_last_activity(runtime_snapshot, now_monotonic=now_monotonic),
+        ),
+        UdpRuntimeDiagnosticRow("Último paquete", last_packet_summary),
+        UdpRuntimeDiagnosticRow("Último EVT", _format_udp_evt_summary(runtime_snapshot)),
+        UdpRuntimeDiagnosticRow("Último STAT", _format_udp_stat_summary(runtime_snapshot)),
+        UdpRuntimeDiagnosticRow("Último error", last_error),
+    ]
+
+
+@dataclass(frozen=True)
 class SessionActionState:
     can_start_session: bool
     can_stop_session: bool

@@ -29,12 +29,15 @@ from control_okua.app_qt.widgets import ConfigViewDialog
 from control_okua.app_qt.viewmodels import (
     PreflightDiagnosticRow,
     SerialRuntimeDiagnosticRow,
+    UdpRuntimeDiagnosticRow,
     build_general_status_summary,
     build_diagnostic_serial_rows,
+    build_diagnostic_udp_rows,
     build_logging_summary,
     build_midi_summary,
     build_mode_summary,
     build_operation_serial_block,
+    build_operation_udp_block,
     build_operation_summary,
     build_preflight_counts,
     build_preflight_diagnostic_rows,
@@ -81,6 +84,7 @@ class MainWindow(QMainWindow):
         self._operation_summary_labels: dict[str, QLabel] = {}
         self._operation_readiness_labels: dict[str, QLabel] = {}
         self._operation_serial_labels: dict[str, QLabel] = {}
+        self._operation_udp_labels: dict[str, QLabel] = {}
         self._diagnostic_summary_labels: dict[str, QLabel] = {}
         self._advanced_dialog: AdvancedToolsDialog | None = None
         self.session_controller = session_controller or SessionController(
@@ -93,7 +97,7 @@ class MainWindow(QMainWindow):
         self._serial_runtime_refresh_timer = QTimer(self)
         self._serial_runtime_refresh_timer.setInterval(1000)
         self._serial_runtime_refresh_timer.timeout.connect(
-            self._on_serial_runtime_refresh_tick
+            self._on_runtime_refresh_tick
         )
         self._serial_runtime_refresh_timer.start()
 
@@ -204,6 +208,25 @@ class MainWindow(QMainWindow):
             serial_layout.addRow(field_name, label)
             self._operation_serial_labels[key] = label
         layout.addWidget(serial_group)
+
+        udp_group = QGroupBox("Actividad UDP")
+        udp_layout = QFormLayout(udp_group)
+        udp_fields = [
+            ("status", "Estado"),
+            ("summary", "Resumen"),
+            ("bind", "Bind"),
+            ("ports", "Puertos"),
+            ("evt", "EVT"),
+            ("stat", "STAT"),
+            ("error", "Último error"),
+            ("recent", "Actividad reciente"),
+        ]
+        for key, field_name in udp_fields:
+            label = QLabel("-")
+            label.setWordWrap(True)
+            udp_layout.addRow(field_name, label)
+            self._operation_udp_labels[key] = label
+        layout.addWidget(udp_group)
 
         cards_group = QGroupBox("Estado actual")
         cards_layout = QGridLayout(cards_group)
@@ -341,6 +364,17 @@ class MainWindow(QMainWindow):
         serial_runtime_layout.addWidget(self.serial_runtime_table)
         layout.addWidget(serial_runtime_group)
 
+        udp_runtime_group = QGroupBox("Runtime UDP")
+        udp_runtime_layout = QVBoxLayout(udp_runtime_group)
+        self.udp_runtime_table = QTableWidget(0, 2, self)
+        self.udp_runtime_table.setHorizontalHeaderLabels(["Campo", "Valor"])
+        self.udp_runtime_table.horizontalHeader().setStretchLastSection(True)
+        self.udp_runtime_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.udp_runtime_table.setSelectionMode(QAbstractItemView.NoSelection)
+        self.udp_runtime_table.verticalHeader().setVisible(False)
+        udp_runtime_layout.addWidget(self.udp_runtime_table)
+        layout.addWidget(udp_runtime_group)
+
         warnings_group = QGroupBox("Advertencias de configuración")
         warnings_layout = QVBoxLayout(warnings_group)
         self.warnings_view = QTextEdit(self)
@@ -455,7 +489,9 @@ class MainWindow(QMainWindow):
         self.preflight_diag_summary_label.setText(preflight_summary)
         self.preflight_diag_counts_label.setText(preflight_counts)
         self._refresh_preflight_findings_table(preflight_rows)
-        self._refresh_serial_runtime_views()
+        runtime_snapshot = self.session_controller.get_backend_runtime_snapshot()
+        self._refresh_serial_runtime_views(runtime_snapshot)
+        self._refresh_udp_runtime_views(runtime_snapshot)
 
         self.statusBar().showMessage(
             f"{preflight_status} | {session_status_summary} | {self._session_snapshot.message}"
@@ -582,14 +618,19 @@ class MainWindow(QMainWindow):
             self._preflight_report = report
         self.refresh_ui()
 
-    def _on_serial_runtime_refresh_tick(self) -> None:
-        backend = self._session_snapshot.backend
-        is_serial_backend = backend is not None and backend.value == "serial"
-        if not is_serial_backend:
-            return
+    def _on_runtime_refresh_tick(self) -> None:
         if self._session_snapshot.state is not SessionState.RUNNING:
             return
-        self._refresh_serial_runtime_views()
+
+        runtime_snapshot = self.session_controller.get_backend_runtime_snapshot()
+        backend = self._session_snapshot.backend
+        is_serial_backend = backend is not None and backend.value == "serial"
+        is_udp_mode = self._session_snapshot.mode == "udp"
+
+        if is_serial_backend:
+            self._refresh_serial_runtime_views(runtime_snapshot)
+        if is_udp_mode:
+            self._refresh_udp_runtime_views(runtime_snapshot)
 
     def _refresh_preflight_findings_table(self, rows: list[PreflightDiagnosticRow]) -> None:
         self.preflight_findings_table.setRowCount(len(rows))
@@ -607,8 +648,9 @@ class MainWindow(QMainWindow):
                 row_index, 3, QTableWidgetItem(str(row.details))
             )
 
-    def _refresh_serial_runtime_views(self) -> None:
-        runtime_snapshot = self.session_controller.get_backend_runtime_snapshot()
+    def _refresh_serial_runtime_views(self, runtime_snapshot: object | None = None) -> None:
+        if runtime_snapshot is None:
+            runtime_snapshot = self.session_controller.get_backend_runtime_snapshot()
         operation_serial = build_operation_serial_block(
             runtime_snapshot,
             self._session_snapshot,
@@ -628,6 +670,28 @@ class MainWindow(QMainWindow):
         self._operation_serial_labels["recent"].setText(operation_serial.recent_activity)
         self._refresh_serial_runtime_table(diagnostic_serial_rows)
 
+    def _refresh_udp_runtime_views(self, runtime_snapshot: object | None = None) -> None:
+        if runtime_snapshot is None:
+            runtime_snapshot = self.session_controller.get_backend_runtime_snapshot()
+        operation_udp = build_operation_udp_block(
+            runtime_snapshot,
+            self._session_snapshot,
+        )
+        diagnostic_udp_rows = build_diagnostic_udp_rows(
+            runtime_snapshot,
+            self._session_snapshot,
+        )
+
+        self._operation_udp_labels["status"].setText(operation_udp.status_label)
+        self._operation_udp_labels["summary"].setText(operation_udp.summary)
+        self._operation_udp_labels["bind"].setText(operation_udp.bind)
+        self._operation_udp_labels["ports"].setText(operation_udp.ports)
+        self._operation_udp_labels["evt"].setText(operation_udp.evt_packets)
+        self._operation_udp_labels["stat"].setText(operation_udp.stat_packets)
+        self._operation_udp_labels["error"].setText(operation_udp.last_error)
+        self._operation_udp_labels["recent"].setText(operation_udp.recent_activity)
+        self._refresh_udp_runtime_table(diagnostic_udp_rows)
+
     def _refresh_serial_runtime_table(
         self,
         rows: list[SerialRuntimeDiagnosticRow],
@@ -640,6 +704,23 @@ class MainWindow(QMainWindow):
                 QTableWidgetItem(str(row.field)),
             )
             self.serial_runtime_table.setItem(
+                row_index,
+                1,
+                QTableWidgetItem(str(row.value)),
+            )
+
+    def _refresh_udp_runtime_table(
+        self,
+        rows: list[UdpRuntimeDiagnosticRow],
+    ) -> None:
+        self.udp_runtime_table.setRowCount(len(rows))
+        for row_index, row in enumerate(rows):
+            self.udp_runtime_table.setItem(
+                row_index,
+                0,
+                QTableWidgetItem(str(row.field)),
+            )
+            self.udp_runtime_table.setItem(
                 row_index,
                 1,
                 QTableWidgetItem(str(row.value)),

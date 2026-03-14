@@ -13,10 +13,12 @@ if str(SRC_DIR) not in sys.path:
 
 from control_okua.app_qt.viewmodels.main_window_vm import (  # noqa: E402
     build_diagnostic_serial_rows,
+    build_diagnostic_udp_rows,
     build_general_status_summary,
     build_logging_summary,
     build_mode_summary,
     build_operation_serial_block,
+    build_operation_udp_block,
     build_operation_summary,
     build_preflight_counts,
     build_preflight_diagnostic_rows,
@@ -163,6 +165,19 @@ def _build_udp_snapshot(state: SessionState, message: str) -> SessionSnapshot:
     )
 
 
+def _build_lab_udp_snapshot(state: SessionState, message: str) -> SessionSnapshot:
+    return SessionSnapshot(
+        state=state,
+        active_profile="lab_sim",
+        mode="udp",
+        backend=BackendKind.LAB,
+        message=message,
+        error=None,
+        can_start=state is SessionState.IDLE,
+        can_stop=state is SessionState.RUNNING,
+    )
+
+
 def _runtime_snapshot(
     *,
     is_running: bool = True,
@@ -192,6 +207,73 @@ def _runtime_snapshot(
         last_error=last_error,
         last_event=last_event,
         default_bus=0,
+        transport=transport,
+    )
+
+
+def _udp_runtime_snapshot(
+    *,
+    is_running: bool = True,
+    bind_ip: str = "127.0.0.1",
+    evt_port: int = 5005,
+    stat_port: int = 5006,
+    total_evt_packets: int = 128,
+    total_stat_packets: int = 64,
+    total_bytes_received: int = 4096,
+    parse_errors: int = 0,
+    socket_errors: int = 0,
+    messages_routed: int = 120,
+    last_activity_ts: float | None = 100.0,
+    last_packet_summary: str | None = "STAT node=10 seq=30",
+    last_error: str | None = None,
+):
+    transport = SimpleNamespace(
+        bind_ip=bind_ip,
+        evt_port=evt_port,
+        stat_port=stat_port,
+        is_running=is_running,
+        total_evt_packets=total_evt_packets,
+        total_stat_packets=total_stat_packets,
+        total_bytes_received=total_bytes_received,
+        parse_errors=parse_errors,
+        socket_errors=socket_errors,
+        last_activity_ts=last_activity_ts,
+        last_packet_summary=last_packet_summary,
+        last_error=last_error,
+    )
+    last_evt = SimpleNamespace(
+        node_id=10,
+        seq=20,
+        midi_bus=1,
+        midi_ch=0,
+        note=60,
+        vel=100,
+        source_ip="127.0.0.1",
+        source_port=5005,
+    )
+    last_stat = SimpleNamespace(
+        node_id=10,
+        seq=30,
+        uptime_s=111,
+        rssi_dbm=-42,
+        pps_x10=80,
+        vbat_mv=3700,
+        source_ip="127.0.0.1",
+        source_port=5006,
+    )
+    return SimpleNamespace(
+        is_running=is_running,
+        messages_routed=messages_routed,
+        last_activity_ts=last_activity_ts,
+        last_error=last_error,
+        total_evt_packets=total_evt_packets,
+        total_stat_packets=total_stat_packets,
+        total_bytes_received=total_bytes_received,
+        parse_errors=parse_errors,
+        socket_errors=socket_errors,
+        last_packet_summary=last_packet_summary,
+        last_evt=last_evt,
+        last_stat=last_stat,
         transport=transport,
     )
 
@@ -383,3 +465,115 @@ def test_diagnostic_serial_rows_distinguish_non_serial_session() -> None:
     pairs = {row.field: row.value for row in rows}
     assert pairs["Estado serial"] == "No disponible"
     assert "no aplica" in pairs["Runtime"].lower()
+
+
+def test_operation_udp_block_for_runtime_not_available() -> None:
+    block = build_operation_udp_block(
+        None,
+        _build_udp_snapshot(SessionState.IDLE, "Sesion inactiva"),
+    )
+    assert "No disponible" in block.status_label
+    assert "no disponible" in block.summary.lower()
+
+
+def test_operation_udp_block_for_active_runtime() -> None:
+    runtime = _udp_runtime_snapshot(last_activity_ts=100.0)
+    block = build_operation_udp_block(
+        runtime,
+        _build_udp_snapshot(SessionState.RUNNING, "Sesion iniciada"),
+        now_monotonic=101.0,
+    )
+
+    assert "Activo" in block.status_label
+    assert block.bind == "Bind: 127.0.0.1"
+    assert "EVT 5005 / STAT 5006" in block.ports
+    assert block.evt_packets == "EVT recibidos: 128"
+    assert block.stat_packets == "STAT recibidos: 64"
+    assert block.recent_activity == "Actividad reciente: Sí"
+
+
+def test_operation_udp_block_for_runtime_error() -> None:
+    runtime = _udp_runtime_snapshot(last_error="Error de recepcion UDP en EVT")
+    block = build_operation_udp_block(
+        runtime,
+        _build_udp_snapshot(SessionState.RUNNING, "Sesion iniciada"),
+        now_monotonic=120.0,
+    )
+    assert "Con error" in block.status_label
+    assert "recepcion udp" in block.last_error.lower()
+
+
+def test_operation_udp_block_for_running_without_recent_activity() -> None:
+    runtime = _udp_runtime_snapshot(last_activity_ts=100.0, last_error=None)
+    block = build_operation_udp_block(
+        runtime,
+        _build_udp_snapshot(SessionState.RUNNING, "Sesion iniciada"),
+        now_monotonic=110.0,
+    )
+    assert "Sin actividad reciente" in block.status_label
+    assert block.recent_activity == "Actividad reciente: No"
+
+
+def test_operation_udp_block_for_non_udp_session() -> None:
+    runtime = _udp_runtime_snapshot()
+    block = build_operation_udp_block(
+        runtime,
+        _build_snapshot(SessionState.RUNNING, "Sesion serial"),
+    )
+    assert "No disponible" in block.status_label
+    assert "no aplica" in block.summary.lower()
+
+
+def test_diagnostic_udp_rows_include_technical_fields() -> None:
+    runtime = _udp_runtime_snapshot(
+        total_evt_packets=150,
+        total_stat_packets=75,
+        total_bytes_received=8888,
+        parse_errors=3,
+        socket_errors=2,
+        messages_routed=149,
+        last_activity_ts=100.0,
+        last_packet_summary="EVT node=10 seq=20",
+    )
+    rows = build_diagnostic_udp_rows(
+        runtime,
+        _build_udp_snapshot(SessionState.RUNNING, "Sesion UDP"),
+        now_monotonic=102.0,
+    )
+    pairs = {row.field: row.value for row in rows}
+
+    assert pairs["Estado UDP"] in {"Activo", "Sin actividad reciente", "Con error"}
+    assert pairs["Bind IP"] == "127.0.0.1"
+    assert pairs["Puerto EVT"] == "5005"
+    assert pairs["Puerto STAT"] == "5006"
+    assert pairs["Corriendo"] == "Sí"
+    assert pairs["EVT totales"] == "150"
+    assert pairs["STAT totales"] == "75"
+    assert pairs["Bytes recibidos"] == "8888"
+    assert pairs["Mensajes MIDI ruteados"] == "149"
+    assert pairs["Errores de parseo"] == "3"
+    assert pairs["Errores de socket"] == "2"
+    assert "hace" in pairs["Última actividad"]
+    assert "node=10" in pairs["Último EVT"]
+    assert "vbat=3700" in pairs["Último STAT"]
+
+
+def test_diagnostic_udp_rows_distinguish_non_udp_session() -> None:
+    rows = build_diagnostic_udp_rows(
+        None,
+        _build_snapshot(SessionState.IDLE, "Sesion inactiva"),
+    )
+    pairs = {row.field: row.value for row in rows}
+    assert pairs["Estado UDP"] == "No disponible"
+    assert "no aplica" in pairs["Runtime"].lower()
+
+
+def test_operation_udp_block_supports_lab_profile_with_udp_runtime() -> None:
+    runtime = _udp_runtime_snapshot()
+    block = build_operation_udp_block(
+        runtime,
+        _build_lab_udp_snapshot(SessionState.RUNNING, "Sesion LAB sobre UDP"),
+        now_monotonic=101.0,
+    )
+    assert "Activo" in block.status_label
+    assert block.evt_packets == "EVT recibidos: 128"
