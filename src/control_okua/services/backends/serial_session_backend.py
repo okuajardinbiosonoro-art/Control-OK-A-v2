@@ -51,6 +51,7 @@ class SerialTransportLike(Protocol):
 
 RouterBuilder = Callable[[dict[str, Any]], MidiRouterLike]
 TransportBuilder = Callable[..., SerialTransportLike]
+RecordEventSink = Callable[[str, dict[str, Any]], None]
 
 
 class SerialBackendStartError(RuntimeError):
@@ -101,12 +102,14 @@ class SerialSessionBackend:
         transport_builder: TransportBuilder | None = None,
         serial_port_factory: Callable[[SerialTransportConfig], Any] | None = None,
         clock: Callable[[], float] | None = None,
+        record_event_sink: RecordEventSink | None = None,
     ) -> None:
         self._cfg = cfg if isinstance(cfg, dict) else {}
         self._router_builder = router_builder or MidiRouter.from_config
         self._transport_builder = transport_builder or SerialTransportAdapter
         self._serial_port_factory = serial_port_factory
         self._clock = clock or time.monotonic
+        self._record_event_sink = record_event_sink
 
         self._lock = threading.Lock()
         self._router: MidiRouterLike | None = None
@@ -117,6 +120,9 @@ class SerialSessionBackend:
         self._last_error: str | None = None
         self._last_event: str | None = None
         self._last_transport_snapshot: SerialTransportSnapshot | None = None
+
+    def set_record_event_sink(self, sink: RecordEventSink | None) -> None:
+        self._record_event_sink = sink
 
     def start(self, spec: SessionSpec) -> None:
         if not spec.is_valid:
@@ -244,6 +250,19 @@ class SerialSessionBackend:
         if router is None or bus is None:
             return
 
+        serial_payload = {
+            "status": int(message.status),
+            "message_type": str(message.message_type),
+            "channel": message.channel,
+            "data": [int(value) for value in message.data],
+            "raw_bytes": [int(value) for value in message.raw_bytes],
+        }
+        self._emit_record_event("serial_message", serial_payload)
+
+        midi_payload = _build_midi_event_payload(message=message, bus=bus)
+        if midi_payload is not None:
+            self._emit_record_event("midi_event", midi_payload)
+
         try:
             route_serial_message_to_midi_router(router, message, bus=bus)
         except Exception as exc:
@@ -262,6 +281,14 @@ class SerialSessionBackend:
             if event.level.lower() == "error":
                 self._last_error = event.message
             self._capture_transport_snapshot_locked()
+        self._emit_record_event(
+            "backend_runtime",
+            {
+                "source": "serial_event",
+                "level": str(event.level),
+                "message": str(event.message),
+            },
+        )
 
     @staticmethod
     def _resolve_default_bus(router: MidiRouterLike) -> int:
@@ -285,3 +312,39 @@ class SerialSessionBackend:
 
     def _capture_transport_snapshot_locked(self) -> None:
         _ = self._snapshot_transport_locked()
+
+    def _emit_record_event(self, event_type: str, payload: dict[str, Any]) -> None:
+        sink = self._record_event_sink
+        if sink is None:
+            return
+        try:
+            sink(event_type, payload)
+        except Exception:
+            # Recording must never break backend runtime behavior.
+            return
+
+
+def _build_midi_event_payload(message: ParsedMidiMessage, *, bus: int) -> dict[str, Any] | None:
+    if message.channel is None:
+        return None
+    if len(message.data) < 2:
+        return None
+    note = int(message.data[0])
+    velocity = int(message.data[1])
+    message_type = str(message.message_type)
+
+    if message_type == "note_on":
+        event_kind = "note_off" if velocity == 0 else "note_on"
+    elif message_type == "note_off":
+        event_kind = "note_off"
+    else:
+        return None
+
+    return {
+        "source": "serial",
+        "event_kind": event_kind,
+        "bus": int(bus),
+        "channel": int(message.channel),
+        "note": note,
+        "velocity": velocity,
+    }

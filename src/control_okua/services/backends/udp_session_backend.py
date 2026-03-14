@@ -59,6 +59,7 @@ class UdpTransportLike(Protocol):
 
 RouterBuilder = Callable[[dict[str, Any]], MidiRouterLike]
 TransportBuilder = Callable[..., UdpTransportLike]
+RecordEventSink = Callable[[str, dict[str, Any]], None]
 
 
 class UdpBackendStartError(RuntimeError):
@@ -135,12 +136,14 @@ class UdpSessionBackend:
         transport_builder: TransportBuilder | None = None,
         socket_factory: Callable[[], Any] | None = None,
         clock: Callable[[], float] | None = None,
+        record_event_sink: RecordEventSink | None = None,
     ) -> None:
         self._cfg = cfg if isinstance(cfg, dict) else {}
         self._router_builder = router_builder or MidiRouter.from_config
         self._transport_builder = transport_builder or UdpTransportAdapter
         self._socket_factory = socket_factory
         self._clock = clock or time.monotonic
+        self._record_event_sink = record_event_sink
 
         self._lock = threading.Lock()
         self._router: MidiRouterLike | None = None
@@ -154,6 +157,9 @@ class UdpSessionBackend:
         self._opened_buses: tuple[int, ...] = ()
         self._last_transport_snapshot: UdpTransportSnapshot | None = None
         self._node_registry: NodeRegistry | None = None
+
+    def set_record_event_sink(self, sink: RecordEventSink | None) -> None:
+        self._record_event_sink = sink
 
     def start(self, spec: SessionSpec) -> None:
         if not spec.is_valid:
@@ -337,6 +343,37 @@ class UdpSessionBackend:
         if router is None:
             return
 
+        evt_payload = {
+            "node_id": int(event.packet.header.node_id),
+            "seq": int(event.packet.header.seq),
+            "midi_bus": int(event.packet.midi_bus),
+            "midi_ch": int(event.packet.midi_ch),
+            "note": int(event.packet.note),
+            "vel": int(event.packet.vel),
+            "ts_ms": int(event.packet.ts_ms),
+            "rssi_dbm": int(event.packet.rssi_dbm),
+            "flags": int(event.packet.flags),
+            "source_ip": str(event.source_ip),
+            "source_port": int(event.source_port),
+            "received_ts": float(event.received_ts),
+        }
+        self._emit_record_event("udp_evt", evt_payload)
+
+        midi_event_kind = "note_off" if int(event.packet.vel) == 0 else "note_on"
+        self._emit_record_event(
+            "midi_event",
+            {
+                "source": "udp_evt",
+                "event_kind": midi_event_kind,
+                "bus": int(event.packet.midi_bus),
+                "channel": int(event.packet.midi_ch),
+                "note": int(event.packet.note),
+                "velocity": int(event.packet.vel),
+                "node_id": int(event.packet.header.node_id),
+                "seq": int(event.packet.header.seq),
+            },
+        )
+
         with self._lock:
             if self._node_registry is not None:
                 self._node_registry.observe_evt(event.packet, received_at=event.received_ts)
@@ -355,6 +392,21 @@ class UdpSessionBackend:
             self._capture_transport_snapshot_locked()
 
     def _on_stat_packet(self, event: UdpReceivedStatPacket) -> None:
+        self._emit_record_event(
+            "udp_stat",
+            {
+                "node_id": int(event.packet.header.node_id),
+                "seq": int(event.packet.header.seq),
+                "uptime_s": int(event.packet.uptime_s),
+                "rssi_dbm": int(event.packet.rssi_dbm),
+                "state_flags": int(event.packet.state_flags),
+                "pps_x10": int(event.packet.pps_x10),
+                "vbat_mv": int(event.packet.vbat_mv),
+                "source_ip": str(event.source_ip),
+                "source_port": int(event.source_port),
+                "received_ts": float(event.received_ts),
+            },
+        )
         with self._lock:
             if self._node_registry is not None:
                 self._node_registry.observe_stat(event.packet, received_at=event.received_ts)
@@ -368,6 +420,14 @@ class UdpSessionBackend:
             if event.level.lower() == "error":
                 self._last_error = event.message
             self._capture_transport_snapshot_locked()
+        self._emit_record_event(
+            "backend_runtime",
+            {
+                "source": "udp_event",
+                "level": str(event.level),
+                "message": str(event.message),
+            },
+        )
 
     def _snapshot_transport_locked(self) -> UdpTransportSnapshot | None:
         transport = self._transport
@@ -382,6 +442,16 @@ class UdpSessionBackend:
 
     def _capture_transport_snapshot_locked(self) -> None:
         _ = self._snapshot_transport_locked()
+
+    def _emit_record_event(self, event_type: str, payload: dict[str, Any]) -> None:
+        sink = self._record_event_sink
+        if sink is None:
+            return
+        try:
+            sink(event_type, payload)
+        except Exception:
+            # Recording must never break backend runtime behavior.
+            return
 
 
 def _is_udp_compatible_spec(spec: SessionSpec) -> bool:

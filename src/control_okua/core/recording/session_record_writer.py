@@ -47,6 +47,10 @@ class JsonlSessionRecorder:
         return self._session_id
 
     @property
+    def base_sessions_dir(self) -> Path:
+        return self._base_sessions_dir
+
+    @property
     def paths(self) -> SessionArtifactPaths | None:
         return self._paths
 
@@ -57,6 +61,10 @@ class JsonlSessionRecorder:
     @property
     def opened_at_utc(self) -> str | None:
         return self._opened_at_utc
+
+    @property
+    def start_monotonic(self) -> float | None:
+        return self._start_monotonic
 
     def open_session(self, *, session_id: str | None = None) -> SessionArtifactPaths:
         if self.is_open:
