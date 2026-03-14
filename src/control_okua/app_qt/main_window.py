@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QPushButton,
+    QScrollArea,
     QTabWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -81,11 +82,16 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Control OKÚA v2")
         self.resize(1100, 700)
 
-        self._operation_summary_labels: dict[str, QLabel] = {}
+        self._operation_compact_labels: dict[str, QLabel] = {}
+        self._details_summary_labels: dict[str, QLabel] = {}
         self._operation_readiness_labels: dict[str, QLabel] = {}
         self._operation_serial_labels: dict[str, QLabel] = {}
         self._operation_udp_labels: dict[str, QLabel] = {}
         self._diagnostic_summary_labels: dict[str, QLabel] = {}
+        self._details_cards: list[QGroupBox] = []
+        self._details_cards_layout: QGridLayout | None = None
+        self._details_scroll_area: QScrollArea | None = None
+        self._details_columns = 0
         self._advanced_dialog: AdvancedToolsDialog | None = None
         self.session_controller = session_controller or SessionController(
             self._session_cfg_provider,
@@ -118,6 +124,7 @@ class MainWindow(QMainWindow):
 
         self.tabs = QTabWidget(self)
         self.tabs.addTab(self._build_operation_tab(), "Operación")
+        self.tabs.addTab(self._build_session_details_tab(), "Estado actual")
         self.tabs.addTab(self._build_nodes_tab(), "Nodos")
         self.tabs.addTab(self._build_diagnostics_tab(), "Diagnóstico")
         self.tabs.setCurrentIndex(0)
@@ -125,7 +132,12 @@ class MainWindow(QMainWindow):
 
     def _build_operation_tab(self) -> QWidget:
         tab = QWidget(self)
-        layout = QVBoxLayout(tab)
+        tab_layout = QVBoxLayout(tab)
+        operation_scroll = QScrollArea(self)
+        operation_scroll.setWidgetResizable(True)
+
+        operation_content = QWidget(self)
+        layout = QVBoxLayout(operation_content)
 
         self.title_label = QLabel("Control OKÚA v2")
         title_font = self.title_label.font()
@@ -155,26 +167,38 @@ class MainWindow(QMainWindow):
         self.advanced_tools_button.clicked.connect(self.open_advanced_tools)
         quick_actions_layout.addWidget(self.advanced_tools_button)
         quick_actions_layout.addStretch(1)
-
         layout.addWidget(quick_actions_group)
 
         session_actions_group = QGroupBox("Control de sesión")
         session_actions_layout = QHBoxLayout(session_actions_group)
-
         self.start_session_button = QPushButton("Iniciar sesión")
         self.start_session_button.clicked.connect(self.start_session)
         session_actions_layout.addWidget(self.start_session_button)
-
         self.stop_session_button = QPushButton("Detener sesión")
         self.stop_session_button.clicked.connect(self.stop_session)
         session_actions_layout.addWidget(self.stop_session_button)
-
         self.reset_session_error_button = QPushButton("Reiniciar error")
         self.reset_session_error_button.clicked.connect(self.reset_session_error)
         session_actions_layout.addWidget(self.reset_session_error_button)
         session_actions_layout.addStretch(1)
-
         layout.addWidget(session_actions_group)
+
+        compact_group = QGroupBox("Resumen operativo")
+        compact_layout = QFormLayout(compact_group)
+        compact_fields = [
+            ("profile", "Perfil activo"),
+            ("profile_mode", "Modo asociado"),
+            ("session_state", "Estado de sesión"),
+            ("session_backend", "Backend esperado"),
+            ("session_message", "Mensaje de sesión"),
+            ("general", "Estado general"),
+        ]
+        for key, field_name in compact_fields:
+            label = QLabel("-")
+            label.setWordWrap(True)
+            compact_layout.addRow(field_name, label)
+            self._operation_compact_labels[key] = label
+        layout.addWidget(compact_group)
 
         readiness_group = QGroupBox("Preparación de sesión")
         readiness_layout = QFormLayout(readiness_group)
@@ -227,37 +251,92 @@ class MainWindow(QMainWindow):
             udp_layout.addRow(field_name, label)
             self._operation_udp_labels[key] = label
         layout.addWidget(udp_group)
+        layout.addStretch(1)
 
-        cards_group = QGroupBox("Estado actual")
-        cards_layout = QGridLayout(cards_group)
+        operation_scroll.setWidget(operation_content)
+        tab_layout.addWidget(operation_scroll)
+        return tab
 
-        cards = [
-            ("profile", "Perfil activo"),
-            ("profile_mode", "Modo asociado"),
-            ("session_backend", "Backend esperado"),
-            ("session_state", "Estado de sesión"),
-            ("session_message", "Mensaje de sesión"),
-            ("session_capabilities", "Capacidades de sesión"),
-            ("operation", "Resumen operativo"),
-            ("mode", "Modo técnico"),
-            ("general", "Estado general"),
-            ("transport", "Transporte configurado"),
-            ("midi", "MIDI"),
-            ("logging", "Logging"),
+    def _build_session_details_tab(self) -> QWidget:
+        tab = QWidget(self)
+        layout = QVBoxLayout(tab)
+
+        title_label = QLabel("Detalles de sesión")
+        title_font = title_label.font()
+        title_font.setPointSize(title_font.pointSize() + 2)
+        title_font.setBold(True)
+        title_label.setFont(title_font)
+        layout.addWidget(title_label)
+
+        hint_label = QLabel(
+            "Resumen técnico completo del estado actual. "
+            "Esta vista se adapta automáticamente y mantiene scroll interno."
+        )
+        hint_label.setWordWrap(True)
+        layout.addWidget(hint_label)
+
+        self._details_scroll_area = QScrollArea(self)
+        self._details_scroll_area.setWidgetResizable(True)
+        details_content = QWidget(self)
+        self._details_cards_layout = QGridLayout(details_content)
+        self._details_cards_layout.setContentsMargins(0, 0, 0, 0)
+        self._details_cards_layout.setHorizontalSpacing(12)
+        self._details_cards_layout.setVerticalSpacing(12)
+
+        card_specs = [
+            (
+                "Sesión",
+                [
+                    ("profile", "Perfil activo"),
+                    ("profile_mode", "Modo asociado"),
+                    ("session_state", "Estado de sesión"),
+                    ("session_message", "Mensaje de sesión"),
+                ],
+            ),
+            (
+                "Backend",
+                [
+                    ("session_backend", "Backend esperado"),
+                    ("transport", "Transporte"),
+                    ("mode", "Modo técnico"),
+                ],
+            ),
+            (
+                "Capacidades",
+                [
+                    ("session_capabilities", "Capacidades"),
+                    ("operation", "Uso esperado"),
+                ],
+            ),
+            (
+                "MIDI y Logging",
+                [
+                    ("midi", "MIDI"),
+                    ("logging", "Logging"),
+                ],
+            ),
+            (
+                "Estado general",
+                [
+                    ("general", "Estado general"),
+                ],
+            ),
         ]
-        for index, (key, title_text) in enumerate(cards):
-            row = index // 2
-            col = index % 2
-            card_group = QGroupBox(title_text)
-            card_layout = QVBoxLayout(card_group)
-            value_label = QLabel("-")
-            value_label.setWordWrap(True)
-            card_layout.addWidget(value_label)
-            cards_layout.addWidget(card_group, row, col)
-            self._operation_summary_labels[key] = value_label
 
-        layout.addWidget(cards_group, 1)
+        self._details_cards = []
+        for title, fields in card_specs:
+            card = QGroupBox(title)
+            card_layout = QFormLayout(card)
+            for key, field_name in fields:
+                label = QLabel("-")
+                label.setWordWrap(True)
+                card_layout.addRow(field_name, label)
+                self._details_summary_labels[key] = label
+            self._details_cards.append(card)
 
+        self._details_scroll_area.setWidget(details_content)
+        layout.addWidget(self._details_scroll_area, 1)
+        self._reflow_details_cards(force=True)
         return tab
 
     def _build_nodes_tab(self) -> QWidget:
@@ -384,6 +463,36 @@ class MainWindow(QMainWindow):
 
         return tab
 
+    def resizeEvent(self, event) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        self._reflow_details_cards()
+
+    def _reflow_details_cards(self, *, force: bool = False) -> None:
+        layout = self._details_cards_layout
+        if layout is None:
+            return
+
+        tabs_width = self.tabs.width() if hasattr(self, "tabs") else self.width()
+        viewport_width = tabs_width if tabs_width > 0 else self.width()
+        columns = 2 if viewport_width >= 900 else 1
+        if not force and columns == self._details_columns:
+            return
+
+        while layout.count() > 0:
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                layout.removeWidget(widget)
+
+        for index, card in enumerate(self._details_cards):
+            row = index // columns
+            col = index % columns
+            layout.addWidget(card, row, col)
+
+        for col in range(columns):
+            layout.setColumnStretch(col, 1)
+        self._details_columns = columns
+
     def refresh_ui(self) -> None:
         profile_summary = build_profile_summary(self.cfg)
         profile_mode_summary = build_profile_mode_summary(self.cfg)
@@ -408,20 +517,21 @@ class MainWindow(QMainWindow):
         )
         preflight_rows = build_preflight_diagnostic_rows(self._preflight_report)
 
-        self._operation_summary_labels["profile"].setText(profile_summary)
-        self._operation_summary_labels["profile_mode"].setText(profile_mode_summary)
-        self._operation_summary_labels["session_backend"].setText(session_backend_summary)
-        self._operation_summary_labels["session_state"].setText(session_status_summary)
-        self._operation_summary_labels["session_message"].setText(session_message_summary)
-        self._operation_summary_labels["session_capabilities"].setText(
-            session_capabilities_summary
-        )
-        self._operation_summary_labels["operation"].setText(operation_summary)
-        self._operation_summary_labels["mode"].setText(mode_summary)
-        self._operation_summary_labels["general"].setText(general_summary)
-        self._operation_summary_labels["transport"].setText(transport_summary)
-        self._operation_summary_labels["midi"].setText(midi_summary)
-        self._operation_summary_labels["logging"].setText(logging_summary)
+        summary_values = {
+            "profile": profile_summary,
+            "profile_mode": profile_mode_summary,
+            "session_backend": session_backend_summary,
+            "session_state": session_status_summary,
+            "session_message": session_message_summary,
+            "session_capabilities": session_capabilities_summary,
+            "operation": operation_summary,
+            "mode": mode_summary,
+            "general": general_summary,
+            "transport": transport_summary,
+            "midi": midi_summary,
+            "logging": logging_summary,
+        }
+        self._apply_summary_values(summary_values)
         self._operation_readiness_labels["status"].setText(preflight_status)
         self._operation_readiness_labels["summary"].setText(preflight_summary)
         self._operation_readiness_labels["counts"].setText(preflight_counts)
@@ -593,6 +703,18 @@ class MainWindow(QMainWindow):
         self.operation_subtitle_label.setText(message)
         self.statusBar().showMessage(message)
         return False
+
+    def _apply_summary_values(self, values: dict[str, str]) -> None:
+        for key, text in values.items():
+            self._set_summary_label_value(key, text)
+
+    def _set_summary_label_value(self, key: str, text: str) -> None:
+        compact_label = self._operation_compact_labels.get(key)
+        if compact_label is not None:
+            compact_label.setText(text)
+        details_label = self._details_summary_labels.get(key)
+        if details_label is not None:
+            details_label.setText(text)
 
     def _on_session_state_changed(self, _state_value: str) -> None:
         self.refresh_ui()

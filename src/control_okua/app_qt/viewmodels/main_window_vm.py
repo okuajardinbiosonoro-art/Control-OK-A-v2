@@ -162,7 +162,7 @@ def build_session_backend_summary(snapshot: SessionSnapshot) -> str:
     elif snapshot.backend.value == "udp":
         backend_text = "UDP"
     elif snapshot.backend.value == "lab":
-        backend_text = "LAB (pendiente)"
+        backend_text = "LAB (sobre runtime UDP)"
     else:
         backend_text = snapshot.backend.value.upper()
 
