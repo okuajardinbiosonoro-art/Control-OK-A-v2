@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+import time
 from typing import Any
 
 from control_okua.core.preflight import PreflightReport, ReadinessLevel
@@ -299,6 +300,246 @@ def build_preflight_diagnostic_rows(report: PreflightReport | None) -> list[Pref
             )
         )
     return rows
+
+
+@dataclass(frozen=True)
+class SerialRuntimeOperationBlock:
+    status_label: str
+    summary: str
+    port: str
+    messages_processed: str
+    last_error: str
+    recent_activity: str
+
+
+@dataclass(frozen=True)
+class SerialRuntimeDiagnosticRow:
+    field: str
+    value: str
+
+
+def _is_serial_session(snapshot: SessionSnapshot) -> bool:
+    backend = snapshot.backend
+    return backend is not None and backend.value == "serial"
+
+
+def _runtime_attr(runtime_snapshot: object | None, name: str) -> Any:
+    if runtime_snapshot is None:
+        return None
+    return getattr(runtime_snapshot, name, None)
+
+
+def _transport_attr(runtime_snapshot: object | None, name: str) -> Any:
+    transport_snapshot = _runtime_attr(runtime_snapshot, "transport")
+    if transport_snapshot is None:
+        return None
+    return getattr(transport_snapshot, name, None)
+
+
+def _safe_int(value: Any, *, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _safe_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _has_recent_activity(
+    runtime_snapshot: object | None,
+    *,
+    now_monotonic: float | None,
+    recent_window_s: float,
+) -> bool:
+    if runtime_snapshot is None:
+        return False
+
+    last_activity = _safe_float(_runtime_attr(runtime_snapshot, "last_activity_ts"))
+    if last_activity is None:
+        last_activity = _safe_float(_transport_attr(runtime_snapshot, "last_activity_ts"))
+    if last_activity is None:
+        return False
+
+    now_value = now_monotonic if now_monotonic is not None else time.monotonic()
+    return max(0.0, now_value - last_activity) <= recent_window_s
+
+
+def _serial_runtime_status_text(
+    runtime_snapshot: object | None,
+    session_snapshot: SessionSnapshot,
+    *,
+    now_monotonic: float | None = None,
+    recent_window_s: float = 3.0,
+) -> str:
+    if not _is_serial_session(session_snapshot):
+        return "No disponible"
+
+    if runtime_snapshot is None:
+        return "No disponible"
+
+    last_error = str(_runtime_attr(runtime_snapshot, "last_error") or "").strip()
+    if last_error:
+        return "Con error"
+
+    is_running = bool(_runtime_attr(runtime_snapshot, "is_running"))
+    if not is_running:
+        return "No disponible"
+
+    if _has_recent_activity(
+        runtime_snapshot,
+        now_monotonic=now_monotonic,
+        recent_window_s=recent_window_s,
+    ):
+        return "Activo"
+    return "Sin actividad reciente"
+
+
+def build_operation_serial_block(
+    runtime_snapshot: object | None,
+    session_snapshot: SessionSnapshot,
+    *,
+    now_monotonic: float | None = None,
+    recent_window_s: float = 3.0,
+) -> SerialRuntimeOperationBlock:
+    status_text = _serial_runtime_status_text(
+        runtime_snapshot,
+        session_snapshot,
+        now_monotonic=now_monotonic,
+        recent_window_s=recent_window_s,
+    )
+    status_label = f"Estado serial: {status_text}"
+
+    if not _is_serial_session(session_snapshot):
+        return SerialRuntimeOperationBlock(
+            status_label=status_label,
+            summary="Actividad serial no aplica para la sesión actual.",
+            port="Puerto: -",
+            messages_processed="Mensajes procesados: -",
+            last_error="Último error: -",
+            recent_activity="Actividad reciente: -",
+        )
+
+    if runtime_snapshot is None:
+        return SerialRuntimeOperationBlock(
+            status_label=status_label,
+            summary="Runtime serial no disponible para la sesión actual.",
+            port="Puerto: -",
+            messages_processed="Mensajes procesados: -",
+            last_error="Último error: -",
+            recent_activity="Actividad reciente: -",
+        )
+
+    port_value = _runtime_attr(runtime_snapshot, "port")
+    port_text = str(port_value).strip() if isinstance(port_value, str) and port_value.strip() else "-"
+    messages_routed = _safe_int(_runtime_attr(runtime_snapshot, "messages_routed"), default=0)
+    last_error_raw = str(_runtime_attr(runtime_snapshot, "last_error") or "").strip()
+    last_error_text = last_error_raw if last_error_raw else "Sin errores"
+    recent_text = (
+        "Sí"
+        if _has_recent_activity(
+            runtime_snapshot,
+            now_monotonic=now_monotonic,
+            recent_window_s=recent_window_s,
+        )
+        else "No"
+    )
+
+    if status_text == "Activo":
+        summary = "Flujo serial activo con tráfico reciente."
+    elif status_text == "Sin actividad reciente":
+        summary = "Backend serial corriendo sin tráfico reciente."
+    elif status_text == "Con error":
+        summary = "Backend serial con error runtime; revisar detalle técnico."
+    else:
+        summary = "Runtime serial no disponible para la sesión actual."
+
+    return SerialRuntimeOperationBlock(
+        status_label=status_label,
+        summary=summary,
+        port=f"Puerto: {port_text}",
+        messages_processed=f"Mensajes procesados: {messages_routed}",
+        last_error=f"Último error: {last_error_text}",
+        recent_activity=f"Actividad reciente: {recent_text}",
+    )
+
+
+def _format_last_activity(runtime_snapshot: object | None, *, now_monotonic: float | None = None) -> str:
+    if runtime_snapshot is None:
+        return "-"
+
+    last_activity = _safe_float(_runtime_attr(runtime_snapshot, "last_activity_ts"))
+    if last_activity is None:
+        last_activity = _safe_float(_transport_attr(runtime_snapshot, "last_activity_ts"))
+    if last_activity is None:
+        return "-"
+
+    now_value = now_monotonic if now_monotonic is not None else time.monotonic()
+    delta_s = max(0.0, now_value - last_activity)
+    return f"hace {delta_s:.1f} s"
+
+
+def build_diagnostic_serial_rows(
+    runtime_snapshot: object | None,
+    session_snapshot: SessionSnapshot,
+    *,
+    now_monotonic: float | None = None,
+    recent_window_s: float = 3.0,
+) -> list[SerialRuntimeDiagnosticRow]:
+    status_text = _serial_runtime_status_text(
+        runtime_snapshot,
+        session_snapshot,
+        now_monotonic=now_monotonic,
+        recent_window_s=recent_window_s,
+    )
+
+    if not _is_serial_session(session_snapshot):
+        return [
+            SerialRuntimeDiagnosticRow("Estado serial", status_text),
+            SerialRuntimeDiagnosticRow("Runtime", "No aplica para la sesión actual."),
+        ]
+
+    if runtime_snapshot is None:
+        return [
+            SerialRuntimeDiagnosticRow("Estado serial", status_text),
+            SerialRuntimeDiagnosticRow("Runtime", "No disponible."),
+        ]
+
+    bytes_received = _safe_int(_transport_attr(runtime_snapshot, "bytes_received"), default=0)
+    messages_parsed = _safe_int(_transport_attr(runtime_snapshot, "messages_parsed"), default=0)
+    parse_errors = _safe_int(_transport_attr(runtime_snapshot, "parse_errors"), default=0)
+    read_errors = _safe_int(_transport_attr(runtime_snapshot, "read_errors"), default=0)
+    messages_routed = _safe_int(_runtime_attr(runtime_snapshot, "messages_routed"), default=0)
+
+    port_value = _runtime_attr(runtime_snapshot, "port")
+    port_text = str(port_value).strip() if isinstance(port_value, str) and port_value.strip() else "-"
+    is_running = "Sí" if bool(_runtime_attr(runtime_snapshot, "is_running")) else "No"
+    default_bus = _runtime_attr(runtime_snapshot, "default_bus")
+    bus_text = "-" if default_bus is None else str(default_bus)
+    last_error = str(_runtime_attr(runtime_snapshot, "last_error") or "").strip() or "Sin errores"
+    last_event = str(_runtime_attr(runtime_snapshot, "last_event") or "").strip() or "-"
+
+    return [
+        SerialRuntimeDiagnosticRow("Estado serial", status_text),
+        SerialRuntimeDiagnosticRow("Puerto", port_text),
+        SerialRuntimeDiagnosticRow("Corriendo", is_running),
+        SerialRuntimeDiagnosticRow("Bus por defecto", bus_text),
+        SerialRuntimeDiagnosticRow("Bytes recibidos", str(bytes_received)),
+        SerialRuntimeDiagnosticRow("Mensajes parseados", str(messages_parsed)),
+        SerialRuntimeDiagnosticRow("Mensajes procesados", str(messages_routed)),
+        SerialRuntimeDiagnosticRow("Errores de parseo", str(parse_errors)),
+        SerialRuntimeDiagnosticRow("Errores de lectura", str(read_errors)),
+        SerialRuntimeDiagnosticRow(
+            "Última actividad",
+            _format_last_activity(runtime_snapshot, now_monotonic=now_monotonic),
+        ),
+        SerialRuntimeDiagnosticRow("Último evento", last_event),
+        SerialRuntimeDiagnosticRow("Último error", last_error),
+    ]
 
 
 @dataclass(frozen=True)

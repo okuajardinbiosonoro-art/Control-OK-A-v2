@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Iterable
 
 
@@ -11,9 +12,11 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from control_okua.app_qt.viewmodels.main_window_vm import (  # noqa: E402
+    build_diagnostic_serial_rows,
     build_general_status_summary,
     build_logging_summary,
     build_mode_summary,
+    build_operation_serial_block,
     build_operation_summary,
     build_preflight_counts,
     build_preflight_diagnostic_rows,
@@ -147,6 +150,52 @@ def _build_snapshot(state: SessionState, message: str) -> SessionSnapshot:
     )
 
 
+def _build_udp_snapshot(state: SessionState, message: str) -> SessionSnapshot:
+    return SessionSnapshot(
+        state=state,
+        active_profile="udp_jardin",
+        mode="udp",
+        backend=BackendKind.UDP,
+        message=message,
+        error=None,
+        can_start=state is SessionState.IDLE,
+        can_stop=state is SessionState.RUNNING,
+    )
+
+
+def _runtime_snapshot(
+    *,
+    is_running: bool = True,
+    port: str | None = "COM5",
+    messages_routed: int = 128,
+    last_activity_ts: float | None = 100.0,
+    last_error: str | None = None,
+    last_event: str | None = "info: Serial iniciado",
+    bytes_received: int = 2048,
+    messages_parsed: int = 140,
+    parse_errors: int = 0,
+    read_errors: int = 0,
+):
+    transport = SimpleNamespace(
+        port=port,
+        bytes_received=bytes_received,
+        messages_parsed=messages_parsed,
+        parse_errors=parse_errors,
+        read_errors=read_errors,
+        last_activity_ts=last_activity_ts,
+    )
+    return SimpleNamespace(
+        is_running=is_running,
+        port=port,
+        messages_routed=messages_routed,
+        last_activity_ts=last_activity_ts,
+        last_error=last_error,
+        last_event=last_event,
+        default_bus=0,
+        transport=transport,
+    )
+
+
 def test_preflight_helpers_render_when_report_is_missing() -> None:
     status = build_preflight_status_label(None)
     summary = build_preflight_summary_text(None)
@@ -243,3 +292,94 @@ def test_preflight_runtime_note_separates_readiness_ok_from_backend_error() -> N
     assert "readiness ok" in backend_note.lower()
     assert "backend" in backend_note.lower()
     assert "inicio bloqueado" in blocked_note.lower()
+
+
+def test_operation_serial_block_for_runtime_not_available() -> None:
+    block = build_operation_serial_block(None, _build_snapshot(SessionState.IDLE, "ok"))
+    assert "No disponible" in block.status_label
+    assert "no disponible" in block.summary.lower()
+
+
+def test_operation_serial_block_for_active_runtime() -> None:
+    runtime = _runtime_snapshot(last_activity_ts=100.0)
+    block = build_operation_serial_block(
+        runtime,
+        _build_snapshot(SessionState.RUNNING, "Sesion iniciada"),
+        now_monotonic=101.0,
+    )
+
+    assert "Activo" in block.status_label
+    assert "Puerto: COM5" == block.port
+    assert "Mensajes procesados: 128" == block.messages_processed
+    assert "Actividad reciente: Sí" == block.recent_activity
+
+
+def test_operation_serial_block_for_runtime_error() -> None:
+    runtime = _runtime_snapshot(last_error="Error de lectura serial: timeout")
+    block = build_operation_serial_block(
+        runtime,
+        _build_snapshot(SessionState.RUNNING, "Sesion iniciada"),
+        now_monotonic=120.0,
+    )
+    assert "Con error" in block.status_label
+    assert "timeout" in block.last_error.lower()
+
+
+def test_operation_serial_block_for_running_without_recent_activity() -> None:
+    runtime = _runtime_snapshot(last_activity_ts=100.0, last_error=None)
+    block = build_operation_serial_block(
+        runtime,
+        _build_snapshot(SessionState.RUNNING, "Sesion iniciada"),
+        now_monotonic=110.0,
+    )
+    assert "Sin actividad reciente" in block.status_label
+    assert block.recent_activity == "Actividad reciente: No"
+
+
+def test_operation_serial_block_for_non_serial_session() -> None:
+    runtime = _runtime_snapshot()
+    block = build_operation_serial_block(
+        runtime,
+        _build_udp_snapshot(SessionState.RUNNING, "Sesion UDP"),
+    )
+    assert "No disponible" in block.status_label
+    assert "no aplica" in block.summary.lower()
+
+
+def test_diagnostic_serial_rows_include_technical_fields() -> None:
+    runtime = _runtime_snapshot(
+        messages_routed=55,
+        bytes_received=4096,
+        messages_parsed=70,
+        parse_errors=2,
+        read_errors=1,
+        last_activity_ts=100.0,
+        last_event="warning: Parseo MIDI serial",
+    )
+    rows = build_diagnostic_serial_rows(
+        runtime,
+        _build_snapshot(SessionState.RUNNING, "Sesion iniciada"),
+        now_monotonic=102.0,
+    )
+    pairs = {row.field: row.value for row in rows}
+
+    assert pairs["Estado serial"] in {"Activo", "Sin actividad reciente", "Con error"}
+    assert pairs["Puerto"] == "COM5"
+    assert pairs["Corriendo"] == "Sí"
+    assert pairs["Bytes recibidos"] == "4096"
+    assert pairs["Mensajes parseados"] == "70"
+    assert pairs["Mensajes procesados"] == "55"
+    assert pairs["Errores de parseo"] == "2"
+    assert pairs["Errores de lectura"] == "1"
+    assert "hace" in pairs["Última actividad"]
+    assert "warning" in pairs["Último evento"].lower()
+
+
+def test_diagnostic_serial_rows_distinguish_non_serial_session() -> None:
+    rows = build_diagnostic_serial_rows(
+        None,
+        _build_udp_snapshot(SessionState.IDLE, "Sesion inactiva"),
+    )
+    pairs = {row.field: row.value for row in rows}
+    assert pairs["Estado serial"] == "No disponible"
+    assert "no aplica" in pairs["Runtime"].lower()

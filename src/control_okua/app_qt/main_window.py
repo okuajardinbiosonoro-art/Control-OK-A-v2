@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QTimer, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -28,10 +28,13 @@ from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
 from control_okua.app_qt.widgets import ConfigViewDialog
 from control_okua.app_qt.viewmodels import (
     PreflightDiagnosticRow,
+    SerialRuntimeDiagnosticRow,
     build_general_status_summary,
+    build_diagnostic_serial_rows,
     build_logging_summary,
     build_midi_summary,
     build_mode_summary,
+    build_operation_serial_block,
     build_operation_summary,
     build_preflight_counts,
     build_preflight_diagnostic_rows,
@@ -77,6 +80,7 @@ class MainWindow(QMainWindow):
 
         self._operation_summary_labels: dict[str, QLabel] = {}
         self._operation_readiness_labels: dict[str, QLabel] = {}
+        self._operation_serial_labels: dict[str, QLabel] = {}
         self._diagnostic_summary_labels: dict[str, QLabel] = {}
         self._advanced_dialog: AdvancedToolsDialog | None = None
         self.session_controller = session_controller or SessionController(
@@ -86,6 +90,12 @@ class MainWindow(QMainWindow):
         self._session_snapshot: SessionSnapshot = self.session_controller.get_snapshot()
         self._preflight_report: PreflightReport | None = self.session_controller.get_last_preflight_report()
         self._connect_session_signals()
+        self._serial_runtime_refresh_timer = QTimer(self)
+        self._serial_runtime_refresh_timer.setInterval(1000)
+        self._serial_runtime_refresh_timer.timeout.connect(
+            self._on_serial_runtime_refresh_tick
+        )
+        self._serial_runtime_refresh_timer.start()
 
         self._build_ui()
         self.refresh_ui()
@@ -177,6 +187,23 @@ class MainWindow(QMainWindow):
             readiness_layout.addRow(field_name, label)
             self._operation_readiness_labels[key] = label
         layout.addWidget(readiness_group)
+
+        serial_group = QGroupBox("Actividad serial")
+        serial_layout = QFormLayout(serial_group)
+        serial_fields = [
+            ("status", "Estado"),
+            ("summary", "Resumen"),
+            ("port", "Puerto"),
+            ("messages", "Mensajes"),
+            ("error", "Último error"),
+            ("recent", "Actividad reciente"),
+        ]
+        for key, field_name in serial_fields:
+            label = QLabel("-")
+            label.setWordWrap(True)
+            serial_layout.addRow(field_name, label)
+            self._operation_serial_labels[key] = label
+        layout.addWidget(serial_group)
 
         cards_group = QGroupBox("Estado actual")
         cards_layout = QGridLayout(cards_group)
@@ -303,6 +330,17 @@ class MainWindow(QMainWindow):
         preflight_layout.addWidget(self.preflight_findings_table)
         layout.addWidget(preflight_group)
 
+        serial_runtime_group = QGroupBox("Runtime serial")
+        serial_runtime_layout = QVBoxLayout(serial_runtime_group)
+        self.serial_runtime_table = QTableWidget(0, 2, self)
+        self.serial_runtime_table.setHorizontalHeaderLabels(["Campo", "Valor"])
+        self.serial_runtime_table.horizontalHeader().setStretchLastSection(True)
+        self.serial_runtime_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.serial_runtime_table.setSelectionMode(QAbstractItemView.NoSelection)
+        self.serial_runtime_table.verticalHeader().setVisible(False)
+        serial_runtime_layout.addWidget(self.serial_runtime_table)
+        layout.addWidget(serial_runtime_group)
+
         warnings_group = QGroupBox("Advertencias de configuración")
         warnings_layout = QVBoxLayout(warnings_group)
         self.warnings_view = QTextEdit(self)
@@ -417,6 +455,7 @@ class MainWindow(QMainWindow):
         self.preflight_diag_summary_label.setText(preflight_summary)
         self.preflight_diag_counts_label.setText(preflight_counts)
         self._refresh_preflight_findings_table(preflight_rows)
+        self._refresh_serial_runtime_views()
 
         self.statusBar().showMessage(
             f"{preflight_status} | {session_status_summary} | {self._session_snapshot.message}"
@@ -543,6 +582,15 @@ class MainWindow(QMainWindow):
             self._preflight_report = report
         self.refresh_ui()
 
+    def _on_serial_runtime_refresh_tick(self) -> None:
+        backend = self._session_snapshot.backend
+        is_serial_backend = backend is not None and backend.value == "serial"
+        if not is_serial_backend:
+            return
+        if self._session_snapshot.state is not SessionState.RUNNING:
+            return
+        self._refresh_serial_runtime_views()
+
     def _refresh_preflight_findings_table(self, rows: list[PreflightDiagnosticRow]) -> None:
         self.preflight_findings_table.setRowCount(len(rows))
         for row_index, row in enumerate(rows):
@@ -557,4 +605,42 @@ class MainWindow(QMainWindow):
             )
             self.preflight_findings_table.setItem(
                 row_index, 3, QTableWidgetItem(str(row.details))
+            )
+
+    def _refresh_serial_runtime_views(self) -> None:
+        runtime_snapshot = self.session_controller.get_backend_runtime_snapshot()
+        operation_serial = build_operation_serial_block(
+            runtime_snapshot,
+            self._session_snapshot,
+        )
+        diagnostic_serial_rows = build_diagnostic_serial_rows(
+            runtime_snapshot,
+            self._session_snapshot,
+        )
+
+        self._operation_serial_labels["status"].setText(operation_serial.status_label)
+        self._operation_serial_labels["summary"].setText(operation_serial.summary)
+        self._operation_serial_labels["port"].setText(operation_serial.port)
+        self._operation_serial_labels["messages"].setText(
+            operation_serial.messages_processed
+        )
+        self._operation_serial_labels["error"].setText(operation_serial.last_error)
+        self._operation_serial_labels["recent"].setText(operation_serial.recent_activity)
+        self._refresh_serial_runtime_table(diagnostic_serial_rows)
+
+    def _refresh_serial_runtime_table(
+        self,
+        rows: list[SerialRuntimeDiagnosticRow],
+    ) -> None:
+        self.serial_runtime_table.setRowCount(len(rows))
+        for row_index, row in enumerate(rows):
+            self.serial_runtime_table.setItem(
+                row_index,
+                0,
+                QTableWidgetItem(str(row.field)),
+            )
+            self.serial_runtime_table.setItem(
+                row_index,
+                1,
+                QTableWidgetItem(str(row.value)),
             )
