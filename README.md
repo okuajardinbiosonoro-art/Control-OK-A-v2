@@ -42,7 +42,7 @@ La ventana principal usa flujo operator-first:
 
 - Pestaña inicial `Operacion` con resumen operativo compacto, acciones rapidas y bloques de actividad runtime (serial/UDP).
 - Pestaña `Estado actual` con el detalle largo de sesion en tarjetas tecnicas, scroll interno y layout responsive (2 columnas en ancho amplio, 1 columna en ancho estrecho).
-- Pestaña `Nodos` con estructura preparada (tabla vacia y estado sin datos en vivo).
+- Pestaña `Nodos` con tabla real por nodo (estado, ultimo visto, pps, perdida, RSSI y ultimo note/vel) alimentada desde snapshots del `SessionController`.
 - Pestaña `Diagnostico` con resumen tecnico, advertencias de configuracion, detalle del ultimo preflight y runtime serial/UDP.
 
 En `Operacion` tambien aparece el bloque `Preparacion de sesion`, que resume:
@@ -103,16 +103,21 @@ Acciones operativas visibles:
 - `SessionController` solo deja la sesion en `running` si el backend serial arranca realmente.
 - `Operacion` muestra actividad serial resumida y `Diagnostico` muestra detalle tecnico de runtime serial.
 
-## Flujo UDP LAB real (Tickets 6.1 a 6.3)
+## Flujo UDP runtime y NodeRegistry (Tickets 6.x + 7.x)
 
 - Existe parser binario UDP OKUA (`OKUA_HDR + EVT + STAT`) con validaciones y descarte controlado.
 - Existe `UdpTransportAdapter` real con bind, recepcion en background y metricas runtime.
 - Existe `UdpSessionBackend` real integrado al lifecycle de sesion via `SessionBackendFactory` + `SessionController`.
 - El flujo en arquitectura es: `UDP -> parser OKUA -> backend UDP -> MidiRouter (EVT)` y `STAT -> runtime interno`.
 - `SessionController` solo deja la sesion en `running` si el backend UDP arranca realmente (sin `running` falso).
+- El backend UDP alimenta `NodeRegistry` por paquete parseado (`EVT -> observe_evt`, `STAT -> observe_stat`) sin duplicar parser ni dominio.
+- `SessionController` expone `get_node_snapshots()` y `get_node_registry_summary()` para consumo UI.
+- La pestaña `Nodos` usa esos snapshots como fuente de verdad (sin recalcular estado/pps/perdida en UI).
+- La UI distingue estado de runtime UDP (Operacion/Diagnostico) vs estado por nodo (pestaña Nodos).
+- La pestaña `Nodos` no inventa datos en no-UDP: muestra mensaje de no aplicacion. En UDP corriendo sin trafico, muestra estado vacio coherente.
 - `Operacion` muestra actividad UDP resumida y `Diagnostico` muestra detalle tecnico de runtime UDP.
 - `Estado actual` concentra el detalle largo de sesion de forma responsive para evitar saturar `Operacion`.
-- `NodeRegistry` y estado por nodo siguen pendientes por diseno en esta etapa.
+- `NodeRegistry` se reinicia por sesion UDP, evitando nodos fantasmas entre stop/restart.
 
 ## Perfil como fuente de verdad (coherencia operacional)
 
@@ -151,7 +156,7 @@ El sistema soporta una capa de perfiles operativos para trabajar sin pensar prim
 
 - `serial_local`: uso con Maestro conectado por USB/Serial.
 - `udp_jardin`: uso en instalacion OKUA por red UDP.
-- `lab_sim`: uso de laboratorio/simulacion sobre runtime UDP real (sin NodeRegistry en esta etapa).
+- `lab_sim`: uso de laboratorio/simulacion sobre runtime UDP real.
 
 Cada perfil define:
 
@@ -243,11 +248,15 @@ Remove-Item Env:CKV2_AUTOCLOSE_MS
    - backend UDP en `running` si bind correcto
    - actividad/contadores en bloques UDP cuando hay trafico
    - error runtime legible y sin `running` falso cuando hay fallo de bind/config
-8. Caso config invalida para readiness: validar estado `No lista` y findings bloqueantes en `Diagnostico`.
-9. Pulsar `Reiniciar error` y confirmar retorno a estado inactivo con refresco visual coherente.
-10. Validar bloqueo de `Cambiar perfil`/`Recargar configuracion` cuando la sesion no esta en estado seguro (`starting`, `running`, `stopping`).
-11. Abrir `Herramientas avanzadas` y validar `Ver config`, `Abrir carpeta`, `Recargar config` y `Salidas MIDI`.
-12. Cerrar y reabrir la app sin errores.
+8. Pestaña `Nodos` en sesion no-UDP: validar mensaje de no aplicacion (sin nodos inventados).
+9. Pestaña `Nodos` en UDP corriendo sin trafico: validar estado vacio coherente.
+10. Pestaña `Nodos` en UDP con trafico: validar tabla visible con filas reales y columnas coherentes.
+11. Stop/restart de sesion UDP: validar limpieza visual y ausencia de nodos fantasmas.
+12. Caso config invalida para readiness: validar estado `No lista` y findings bloqueantes en `Diagnostico`.
+13. Pulsar `Reiniciar error` y confirmar retorno a estado inactivo con refresco visual coherente.
+14. Validar bloqueo de `Cambiar perfil`/`Recargar configuracion` cuando la sesion no esta en estado seguro (`starting`, `running`, `stopping`).
+15. Abrir `Herramientas avanzadas` y validar `Ver config`, `Abrir carpeta`, `Recargar config` y `Salidas MIDI`.
+16. Cerrar y reabrir la app sin errores.
 
 ## Prueba MIDI (LoopMIDI / Ableton)
 
