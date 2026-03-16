@@ -19,6 +19,7 @@ from control_okua.core.udp.packet_models import (
 _HEADER_STRUCT = struct.Struct("<HBBHH")
 _EVT_PAYLOAD_STRUCT = struct.Struct("<BBBBIbB2s")
 _STAT_PAYLOAD_STRUCT = struct.Struct("<IbBHHIBBB3s")
+_BENCH_V0_PACKET_SIZE = 32
 
 
 class OkuaPacketParseError(ValueError):
@@ -46,9 +47,10 @@ def parse_okua_header(raw_packet: bytes | bytearray | memoryview) -> OkuaHeader:
         )
 
     if version != OKUA_VERSION:
+        extra_hint = _build_version_mismatch_hint(version=version, payload_len=len(payload))
         raise OkuaPacketParseError(
             "unsupported_version",
-            f"Version no soportada: {version} (esperada {OKUA_VERSION}).",
+            f"Version no soportada: {version} (esperada {OKUA_VERSION}).{extra_hint}",
         )
 
     try:
@@ -66,6 +68,15 @@ def parse_okua_header(raw_packet: bytes | bytearray | memoryview) -> OkuaHeader:
         node_id=node_id,
         seq=seq,
     )
+
+
+def _build_version_mismatch_hint(*, version: int, payload_len: int) -> str:
+    if version == 0 and payload_len == _BENCH_V0_PACKET_SIZE:
+        return (
+            " Se detecto un patron similar a BenchPktV0 (ver=0 / len=32). "
+            "CKv2 espera OKUA v1: EVT=20 bytes por 5005 y STAT=28 bytes por 5006."
+        )
+    return ""
 
 
 def parse_okua_packet(

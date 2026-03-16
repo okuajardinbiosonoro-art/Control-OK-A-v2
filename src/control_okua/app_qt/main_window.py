@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -32,6 +33,7 @@ from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
 from control_okua.app_qt.widgets import ConfigViewDialog
 from control_okua.app_qt.viewmodels import (
     build_nodes_tab_view_state,
+    NodesTabViewState,
     PreflightDiagnosticRow,
     SerialRuntimeDiagnosticRow,
     UdpRuntimeDiagnosticRow,
@@ -348,6 +350,8 @@ class MainWindow(QMainWindow):
     def _build_nodes_tab(self) -> QWidget:
         tab = QWidget(self)
         layout = QVBoxLayout(tab)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
 
         title_label = QLabel("Monitoreo de nodos")
         title_font = title_label.font()
@@ -356,17 +360,27 @@ class MainWindow(QMainWindow):
         title_label.setFont(title_font)
         layout.addWidget(title_label)
 
+        self.nodes_empty_state_group = QGroupBox("Estado de nodos")
+        self.nodes_empty_state_group.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Maximum,
+        )
+        empty_layout = QVBoxLayout(self.nodes_empty_state_group)
+        empty_layout.setContentsMargins(10, 8, 10, 8)
+        empty_layout.setSpacing(6)
+
         self.nodes_state_label = QLabel("La tabla de nodos está disponible para sesiones UDP.")
-        self.nodes_state_label.setWordWrap(True)
-        layout.addWidget(self.nodes_state_label)
+        self._set_compact_wordwrap_label(self.nodes_state_label)
+        empty_layout.addWidget(self.nodes_state_label)
 
         self.nodes_hint_label = QLabel("Inicia una sesión UDP para ver nodos en vivo.")
-        self.nodes_hint_label.setWordWrap(True)
-        layout.addWidget(self.nodes_hint_label)
+        self._set_compact_wordwrap_label(self.nodes_hint_label)
+        empty_layout.addWidget(self.nodes_hint_label)
 
         self.nodes_summary_label = QLabel("Resumen de nodos: no disponible.")
-        self.nodes_summary_label.setWordWrap(True)
-        layout.addWidget(self.nodes_summary_label)
+        self._set_compact_wordwrap_label(self.nodes_summary_label)
+        empty_layout.addWidget(self.nodes_summary_label)
+        layout.addWidget(self.nodes_empty_state_group, 0)
 
         self.nodes_table = QTableView(self)
         self._node_table_model = NodeTableModel(self.nodes_table)
@@ -866,7 +880,20 @@ class MainWindow(QMainWindow):
                 now_monotonic=now_monotonic,
             )
 
+        self._apply_nodes_view_state(view_state)
+
+    @staticmethod
+    def _set_compact_wordwrap_label(label: QLabel) -> None:
+        label.setWordWrap(True)
+        label.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+
+    def _apply_nodes_view_state(self, view_state: NodesTabViewState) -> None:
         self.nodes_state_label.setText(view_state.title)
         self.nodes_hint_label.setText(view_state.hint)
         self.nodes_summary_label.setText(view_state.summary)
-        self.nodes_table.setVisible(view_state.show_table)
+        show_table = bool(view_state.show_table)
+        self.nodes_table.setVisible(show_table)
+        self.nodes_empty_state_group.setVisible(not show_table)

@@ -219,6 +219,20 @@ Compatibilidad:
 python -m compileall src main.py tools
 ```
 
+### Emisor de prueba UDP OKUA v1 (recomendado)
+
+```powershell
+# Vectores de referencia (sin enviar trafico)
+python tools/udp_okua_v1_sender.py --dry-run
+
+# Trafico OKUA v1 para CKv2 local
+python tools/udp_okua_v1_sender.py --host 127.0.0.1 --evt-port 5005 --stat-port 5006 --count 50 --interval-ms 20
+```
+
+Referencia tecnica de compatibilidad:
+
+- `docs/protocol/udp_bench_vs_okua_v1.md`
+
 ### Test puro del view-model (sin UI)
 
 Con `pytest` instalado:
