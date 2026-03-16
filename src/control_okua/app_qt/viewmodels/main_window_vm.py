@@ -778,6 +778,15 @@ def build_diagnostic_udp_rows(
         default=_safe_int(_transport_attr(runtime_snapshot, "socket_errors"), default=0),
     )
     messages_routed = _safe_int(_runtime_attr(runtime_snapshot, "messages_routed"), default=0)
+    raw_total_ping = _runtime_attr(runtime_snapshot, "total_ping_packets")
+    if raw_total_ping is None:
+        raw_total_ping = _transport_attr(runtime_snapshot, "total_ping_packets")
+    raw_total_pong = _runtime_attr(runtime_snapshot, "total_pong_packets")
+    if raw_total_pong is None:
+        raw_total_pong = _transport_attr(runtime_snapshot, "total_pong_packets")
+    raw_total_pong_sent = _runtime_attr(runtime_snapshot, "total_pong_sent")
+    if raw_total_pong_sent is None:
+        raw_total_pong_sent = _transport_attr(runtime_snapshot, "total_pong_sent")
     last_packet_summary = str(_runtime_attr(runtime_snapshot, "last_packet_summary") or "").strip()
     if not last_packet_summary:
         last_packet_summary = str(_transport_attr(runtime_snapshot, "last_packet_summary") or "").strip()
@@ -789,7 +798,7 @@ def build_diagnostic_udp_rows(
     if not last_error:
         last_error = "Sin errores"
 
-    return [
+    rows = [
         UdpRuntimeDiagnosticRow("Estado UDP", status_text),
         UdpRuntimeDiagnosticRow("Bind IP", bind_ip),
         UdpRuntimeDiagnosticRow("Puerto EVT", evt_port),
@@ -810,6 +819,24 @@ def build_diagnostic_udp_rows(
         UdpRuntimeDiagnosticRow("Último STAT", _format_udp_stat_summary(runtime_snapshot)),
         UdpRuntimeDiagnosticRow("Último error", last_error),
     ]
+    if raw_total_ping is not None:
+        rows.insert(8, UdpRuntimeDiagnosticRow("PING totales", str(_safe_int(raw_total_ping, default=0))))
+    if raw_total_pong is not None:
+        insert_at = 9 if raw_total_ping is not None else 8
+        rows.insert(
+            insert_at,
+            UdpRuntimeDiagnosticRow("PONG totales", str(_safe_int(raw_total_pong, default=0))),
+        )
+    if raw_total_pong_sent is not None:
+        insert_at = 10 if raw_total_ping is not None and raw_total_pong is not None else 9
+        rows.insert(
+            insert_at,
+            UdpRuntimeDiagnosticRow(
+                "PONG enviados",
+                str(_safe_int(raw_total_pong_sent, default=0)),
+            ),
+        )
+    return rows
 
 
 @dataclass(frozen=True)

@@ -41,6 +41,13 @@ Conclusión: BenchPktV0 no es compatible como wire format final para CKv2.
 - El emisor de pruebas se alinea al wire format real (OKUA v1).
 - Si se requiere compatibilidad bench, debe ser explicita y separada en tooling de laboratorio, nunca mezclada de forma opaca en el camino productivo.
 
+## Modo de compatibilidad bench en CKv2
+
+- Perfil explicito: `udp_bench_lab`.
+- Backend dedicado: compatibilidad BenchPktV0 sobre UDP de laboratorio.
+- Alcance: aceptar `ver=0/len=32` en el perfil bench y mantener `udp_jardin` estricto con OKUA v1.
+- Secuencias: para evitar perdida falsa, la compatibilidad bench usa secuencia virtual por tipo (EVT/STAT) al alimentar NodeRegistry.
+
 ## Artefacto de prueba incluido
 
 Se agrega `tools/udp_okua_v1_sender.py`:

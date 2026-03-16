@@ -57,6 +57,7 @@ _PROFILE_BACKEND_MAP: dict[str, BackendKind] = {
     "serial_local": BackendKind.SERIAL,
     "udp_jardin": BackendKind.UDP,
     "lab_sim": BackendKind.LAB,
+    "udp_bench_lab": BackendKind.LAB,
 }
 
 
@@ -121,6 +122,10 @@ def build_session_request_from_profile(cfg: dict[str, Any]) -> SessionSpec:
 
     if profile_id == "lab_sim":
         reason = "Perfil lab_sim resuelto con backend 'lab' previsto (implementacion pendiente)."
+    elif profile_id == "udp_bench_lab":
+        reason = (
+            "Perfil udp_bench_lab resuelto con backend LAB de compatibilidad BenchPktV0."
+        )
     elif profile_source == "inferred":
         reason = "Perfil inferido desde config.mode."
     else:

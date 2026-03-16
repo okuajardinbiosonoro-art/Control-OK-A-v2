@@ -155,7 +155,7 @@ Acciones operativas visibles:
 Campos principales:
 
 - `mode`: `"serial"` o `"udp"` (puede iniciar como `null` antes de seleccionar).
-- `profile.active`: perfil operativo activo (`serial_local`, `udp_jardin`, `lab_sim`) o `null`.
+- `profile.active`: perfil operativo activo (`serial_local`, `udp_jardin`, `lab_sim`, `udp_bench_lab`) o `null`.
 - `serial`: baudrate, running_status, flush_ms, max_silence_s, auto_reconnect, port.
 - `udp`: bind_ip, evt_port (5005), stat_port (5006), cmd_port (5007), rcvbuf_bytes.
 - `midi.outputs`: mapping explicito de buses (`"0"`..`"255"`) a nombre de puerto.
@@ -175,6 +175,7 @@ El sistema soporta una capa de perfiles operativos para trabajar sin pensar prim
 - `serial_local`: uso con Maestro conectado por USB/Serial.
 - `udp_jardin`: uso en instalacion OKUA por red UDP.
 - `lab_sim`: uso de laboratorio/simulacion sobre runtime UDP real.
+- `udp_bench_lab`: compatibilidad explicita de laboratorio para BenchPktV0 (ver=0/len=32).
 
 Cada perfil define:
 
@@ -183,6 +184,11 @@ Cada perfil define:
 - modo esperado (`serial` o `udp`)
 - nivel de uso
 - resumen operativo para UI
+
+Regla practica entre perfiles UDP:
+
+- `udp_jardin`: flujo productivo final; acepta solo protocolo OKUA v1.
+- `udp_bench_lab`: compatibilidad de laboratorio para nodos BenchPktV0 actuales.
 
 Compatibilidad:
 
@@ -196,6 +202,7 @@ Compatibilidad:
    - `Serial local`
    - `UDP Jardin`
    - `LAB / simulacion`
+   - `UDP Bench LAB`
 3. Al confirmar, guarda `profile.active` y ajusta `mode` asociado.
 4. Si el perfil ya estaba persistido, no vuelve a preguntar automaticamente.
 
@@ -284,6 +291,8 @@ Remove-Item Env:CKV2_AUTOCLOSE_MS
 9. Pestaña `Nodos` en UDP corriendo sin trafico: validar estado vacio coherente.
 10. Pestaña `Nodos` en UDP con trafico: validar tabla visible con filas reales y columnas coherentes.
 11. Stop/restart de sesion UDP: validar limpieza visual y ausencia de nodos fantasmas.
+12. Perfil `udp_bench_lab`: validar compatibilidad bench (EVT/STAT/PING/PONG) sin error de version.
+13. Perfil `udp_jardin`: validar que BenchPktV0 siga rechazado con diagnostico de incompatibilidad.
 12. Caso config invalida para readiness: validar estado `No lista` y findings bloqueantes en `Diagnostico`.
 13. Pulsar `Reiniciar error` y confirmar retorno a estado inactivo con refresco visual coherente.
 14. Validar bloqueo de `Cambiar perfil`/`Recargar configuracion` cuando la sesion no esta en estado seguro (`starting`, `running`, `stopping`).

@@ -43,6 +43,16 @@ def test_lab_sim_profile_resolves_to_lab_backend() -> None:
     assert "pendiente" in spec.reason.lower()
 
 
+def test_udp_bench_lab_profile_resolves_to_lab_backend() -> None:
+    cfg = {"profile": {"active": "udp_bench_lab"}, "mode": "udp"}
+    spec = build_session_request_from_profile(cfg)
+    assert spec.is_valid is True
+    assert spec.profile_id == "udp_bench_lab"
+    assert spec.mode == "udp"
+    assert spec.backend is BackendKind.LAB
+    assert "benchpktv0" in spec.reason.lower()
+
+
 def test_invalid_or_missing_profile_returns_clear_reason() -> None:
     spec = build_session_request_from_profile({"mode": "invalid_mode"})
     assert spec.is_valid is False

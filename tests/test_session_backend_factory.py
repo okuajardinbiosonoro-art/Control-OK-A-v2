@@ -11,6 +11,7 @@ if str(SRC_DIR) not in sys.path:
 
 from control_okua.core.session import BackendKind, SessionSpec  # noqa: E402
 from control_okua.services.backends import (  # noqa: E402
+    UdpBenchCompatSessionBackend,
     SerialSessionBackend,
     UdpSessionBackend,
 )
@@ -74,6 +75,17 @@ def test_factory_routes_lab_udp_spec_to_udp_backend() -> None:
     }
     backend = SessionBackendFactory(cfg_provider=lambda: cfg).build_backend_for_spec(spec)
     assert isinstance(backend, UdpSessionBackend)
+
+
+def test_factory_routes_udp_bench_lab_profile_to_bench_backend() -> None:
+    spec = _build_valid_spec(BackendKind.LAB, profile_id="udp_bench_lab", mode="udp")
+    cfg = {
+        "profile": {"active": "udp_bench_lab"},
+        "udp": {"bind_ip": "127.0.0.1", "evt_port": 5005, "stat_port": 5006, "rcvbuf_bytes": 262144},
+        "midi": {"outputs": {"0": "loopMIDI Port 1"}, "backend": "rtmidi"},
+    }
+    backend = SessionBackendFactory(cfg_provider=lambda: cfg).build_backend_for_spec(spec)
+    assert isinstance(backend, UdpBenchCompatSessionBackend)
 
 
 def test_unavailable_backend_start_raises_clear_error_for_non_udp_lab() -> None:

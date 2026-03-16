@@ -607,6 +607,27 @@ def test_diagnostic_udp_rows_include_technical_fields() -> None:
     assert "vbat=3700" in pairs["Último STAT"]
 
 
+def test_diagnostic_udp_rows_include_bench_ping_pong_when_available() -> None:
+    runtime = _udp_runtime_snapshot()
+    runtime.total_ping_packets = 15
+    runtime.total_pong_packets = 14
+    runtime.total_pong_sent = 15
+    runtime.transport.total_ping_packets = 15
+    runtime.transport.total_pong_packets = 14
+    runtime.transport.total_pong_sent = 15
+
+    rows = build_diagnostic_udp_rows(
+        runtime,
+        _build_udp_snapshot(SessionState.RUNNING, "Sesion UDP bench"),
+        now_monotonic=105.0,
+    )
+    pairs = {row.field: row.value for row in rows}
+
+    assert pairs["PING totales"] == "15"
+    assert pairs["PONG totales"] == "14"
+    assert pairs["PONG enviados"] == "15"
+
+
 def test_diagnostic_udp_rows_distinguish_non_udp_session() -> None:
     rows = build_diagnostic_udp_rows(
         None,

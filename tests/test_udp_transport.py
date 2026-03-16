@@ -12,7 +12,12 @@ SRC_DIR = ROOT_DIR / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from control_okua.core.udp import OKUA_MAGIC, OKUA_VERSION, OkuaPacketType  # noqa: E402
+from control_okua.core.udp import (  # noqa: E402
+    OKUA_MAGIC,
+    OKUA_VERSION,
+    OkuaPacketType,
+    build_bench_v0_evt_packet,
+)
 from control_okua.transports.udp import (  # noqa: E402
     UdpTransportAdapter,
     UdpTransportConfig,
@@ -162,6 +167,34 @@ def test_invalid_packet_increments_parse_error_without_crashing() -> None:
 
     assert observed is True
     assert still_running is True
+
+
+def test_udp_jardin_path_keeps_rejecting_bench_v0_packets() -> None:
+    cfg = _build_udp_config()
+    adapter = UdpTransportAdapter(config=cfg)
+    adapter.start()
+
+    bench_payload = build_bench_v0_evt_packet(
+        node_id=99,
+        seq=100,
+        midi_bus=0,
+        midi_ch=0,
+        note=60,
+        vel=100,
+        ts_ms=1234,
+    )
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sender:
+        sender.sendto(bench_payload, (cfg.bind_ip, cfg.evt_port))
+
+    observed = _wait_until(lambda: adapter.snapshot().parse_errors >= 1)
+    snapshot = adapter.snapshot()
+    adapter.stop()
+
+    assert observed is True
+    assert snapshot.total_evt_packets == 0
+    assert snapshot.last_error is not None
+    assert "unsupported_version" in snapshot.last_error.lower()
+    assert "benchpktv0" in snapshot.last_error.lower()
 
 
 def test_bind_error_raises_controlled_exception() -> None:

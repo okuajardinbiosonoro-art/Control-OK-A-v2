@@ -6,6 +6,19 @@ from control_okua.transports.udp.udp_models import (
     UdpTransportMetrics,
     UdpTransportSnapshot,
 )
+from control_okua.transports.udp.bench_v0_transport import (
+    BenchV0ReceivedEvtPacket,
+    BenchV0ReceivedPingPacket,
+    BenchV0ReceivedPongPacket,
+    BenchV0ReceivedStatPacket,
+    BenchV0RuntimeEvent,
+    BenchV0TransportAdapter,
+    BenchV0TransportConfig,
+    BenchV0TransportConfigError,
+    BenchV0TransportError,
+    BenchV0TransportOpenError,
+    BenchV0TransportSnapshot,
+)
 from control_okua.transports.udp.udp_transport import (
     UdpTransportAdapter,
     UdpTransportConfigError,
@@ -24,4 +37,15 @@ __all__ = [
     "UdpTransportError",
     "UdpTransportConfigError",
     "UdpTransportOpenError",
+    "BenchV0TransportConfig",
+    "BenchV0TransportSnapshot",
+    "BenchV0RuntimeEvent",
+    "BenchV0ReceivedEvtPacket",
+    "BenchV0ReceivedStatPacket",
+    "BenchV0ReceivedPingPacket",
+    "BenchV0ReceivedPongPacket",
+    "BenchV0TransportAdapter",
+    "BenchV0TransportError",
+    "BenchV0TransportConfigError",
+    "BenchV0TransportOpenError",
 ]

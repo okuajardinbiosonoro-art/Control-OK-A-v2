@@ -39,6 +39,17 @@ PROFILE_DEFINITIONS: Final[tuple[ProfileDefinition, ...]] = (
         usage_level="Laboratorio",
         operation_summary="Perfil de laboratorio; sesión/simulador aún pendientes.",
     ),
+    ProfileDefinition(
+        profile_id="udp_bench_lab",
+        short_name="UDP Bench LAB",
+        description="Compatibilidad explícita con nodos BenchPktV0 (ver=0, len=32)",
+        mode="udp",
+        usage_level="Laboratorio",
+        operation_summary=(
+            "Perfil de compatibilidad BenchPktV0 para pruebas de laboratorio; "
+            "no corresponde al flujo final de campo udp_jardin."
+        ),
+    ),
 )
 
 PROFILE_IDS: Final[set[str]] = {definition.profile_id for definition in PROFILE_DEFINITIONS}

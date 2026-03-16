@@ -22,7 +22,7 @@ from control_okua.core.config.config_schema import validate_and_fix  # noqa: E40
 
 def test_list_available_profiles_contains_required_ids() -> None:
     profile_ids = {profile.profile_id for profile in list_available_profiles()}
-    assert {"serial_local", "udp_jardin", "lab_sim"}.issubset(profile_ids)
+    assert {"serial_local", "udp_jardin", "lab_sim", "udp_bench_lab"}.issubset(profile_ids)
 
 
 def test_resolve_serial_local_profile_mode() -> None:
@@ -31,6 +31,10 @@ def test_resolve_serial_local_profile_mode() -> None:
 
 def test_resolve_udp_jardin_profile_mode() -> None:
     assert resolve_profile_to_mode("udp_jardin") == "udp"
+
+
+def test_resolve_udp_bench_lab_profile_mode() -> None:
+    assert resolve_profile_to_mode("udp_bench_lab") == "udp"
 
 
 def test_set_active_profile_persists_profile_id() -> None:
@@ -64,6 +68,14 @@ def test_build_profile_ui_summary_for_lab_sim() -> None:
     assert summary["short_name"] == "LAB / simulación"
     assert summary["mode"] == "udp"
     assert "laboratorio" in summary["operation_summary"].lower()
+
+
+def test_build_profile_ui_summary_for_udp_bench_lab() -> None:
+    summary = build_profile_ui_summary("udp_bench_lab", {"mode": "udp"})
+
+    assert summary["short_name"] == "UDP Bench LAB"
+    assert summary["mode"] == "udp"
+    assert "benchpktv0" in summary["operation_summary"].lower()
 
 
 def test_build_profile_ui_summary_for_unknown_profile() -> None:
