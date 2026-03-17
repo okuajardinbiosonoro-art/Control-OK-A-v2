@@ -305,6 +305,9 @@ uint32_t g_evtCountSinceLastStat = 0;
 uint32_t g_lastEvtCounterResetMs = 0;
 
 uint8_t g_lastStateFlags = 0;
+static const uint32_t CONTROL_REBOOT_DELAY_MS = 150UL;
+bool g_rebootPending = false;
+uint32_t g_rebootAtMs = 0;
 
 enum CmdParseResult : uint8_t {
   CMD_PARSE_NONE = 0,
@@ -1038,6 +1041,19 @@ bool sendOkuaAckTo(const IPAddress& dst_ip, const OkuaAckPacket& ack) {
 
 bool sendOkuaStat(uint8_t state_flags);
 
+void scheduleSoftReboot() {
+  if (g_rebootPending) return;
+  g_rebootPending = true;
+  g_rebootAtMs = millis() + CONTROL_REBOOT_DELAY_MS;
+}
+
+void servicePendingControlActions() {
+  if (!g_rebootPending) return;
+  if (!millisReached(millis(), g_rebootAtMs)) return;
+  g_rebootPending = false;
+  ESP.restart();
+}
+
 static inline bool shouldDispatchAcceptedCommand(
     const ParsedCmdFrame& frame,
     const OkuaAckPacket& ack) {
@@ -1048,6 +1064,7 @@ static inline bool shouldDispatchAcceptedCommand(
   switch (frame.packet.cmd_id) {
     case OKUA_CMD_PING:
     case OKUA_CMD_REQUEST_STAT_NOW:
+    case OKUA_CMD_REBOOT_SOFT:
       return true;
     default:
       return false;
@@ -1065,13 +1082,18 @@ void dispatchAcceptedCommandMinimal(const ParsedCmdFrame& frame) {
       sendOkuaStat(g_lastStateFlags);
       return;
 
+    case OKUA_CMD_REBOOT_SOFT:
+      // ACK is emitted before dispatch, reboot is deferred in loop.
+      scheduleSoftReboot();
+      return;
+
     default:
       return;
   }
 }
 
-// Control-plane ingress for Ticket 13.5:
-// parse + security + ACK + minimal command dispatch (PING/REQUEST_STAT_NOW).
+// Control-plane ingress for Ticket 13.6:
+// parse + security + ACK + minimal command dispatch (PING/REQUEST_STAT_NOW/REBOOT_SOFT).
 void serviceControlPlaneIngress() {
   ParsedCmdFrame frame;
   CmdParseResult result = parseIncomingCmdFrame(&frame);
@@ -1645,8 +1667,9 @@ void setup() {
 void loop() {
   ensureLink();
 
-  // Parser CMD + ACK + seguridad minima (Ticket 13.4, sin handlers).
+  // Parser CMD + ACK + seguridad minima + dispatch minimo (Ticket 13.6).
   serviceControlPlaneIngress();
+  servicePendingControlActions();
 
   // Limpiar flags transitorios de reconnect una vez enlazado
   if (WiFi.status() == WL_CONNECTED) {

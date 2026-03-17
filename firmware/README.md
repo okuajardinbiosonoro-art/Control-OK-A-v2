@@ -22,6 +22,12 @@ Ticket 13.5 adds minimal safe command execution for:
 - `REQUEST_STAT_NOW` (forces immediate `OKUA_STAT` on accepted fresh commands only;
   exact duplicate retries do not re-trigger side effects)
 
+Ticket 13.6 adds `REBOOT_SOFT` as accepted command with deferred reboot:
+
+- ACK is emitted first by control-plane pipeline
+- reboot is scheduled with a short delay and executed in `loop()`
+- exact duplicate retries do not re-schedule reboot side effects
+
 Local Wi-Fi secrets override:
 
 - defaults in repo: `WIFI_SSID="OKUA_CORE"` and `WIFI_PASS="CHANGE_ME"`
