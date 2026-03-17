@@ -11,7 +11,18 @@ Ticket 13.1 scope in this folder:
 - packed `OKUA_CMD` and `OKUA_ACK` models (28 bytes each)
 - baseline enums/constants for later command handling
 
-No command execution handlers are active yet.
+Current minimal functional commands in firmware:
+
+- `PING`
+- `REQUEST_STAT_NOW`
+- `REBOOT_SOFT`
+
+Known but still not implemented (`UNSUPPORTED_CMD`):
+
+- `SET_PROFILE`
+- `SET_THROTTLE`
+- `SET_STAT_RATE`
+- `SET_DEBUG`
 
 Ticket 13.2 adds UDP CMD receive parsing + structural validation/classification
 without ACK emission and without command execution.
@@ -28,6 +39,10 @@ Ticket 13.6 adds `REBOOT_SOFT` as accepted command with deferred reboot:
 - reboot is scheduled with a short delay and executed in `loop()`
 - exact duplicate retries do not re-schedule reboot side effects
 - known but not yet implemented `SET_*` commands are rejected as `UNSUPPORTED_CMD`
+
+Final closure summary for Ticket 13:
+
+- `docs/firmware/firmware_cmd_ack_minimal.md`
 
 Local Wi-Fi secrets override:
 
