@@ -224,3 +224,9 @@ logs/
 # Firmware local secrets (do not commit real Wi-Fi credentials)
 firmware/okua_node_udp_v1/okua_node_secrets.h
 
+# PlatformIO build artifacts
+.pio/
+.pioenvs/
+.piolibdeps/
+.pio-home/
+

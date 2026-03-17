@@ -209,6 +209,14 @@ static const uint8_t FRUIT_ROUTE_COUNT = sizeof(FRUIT_ROUTES) / sizeof(FRUIT_ROU
 // En este ticket se implementa parser RX + ACK + seguridad minima operativa.
 // Aun NO se implementan handlers ni ejecucion real de comandos.
 
+// Forward declarations to keep Arduino auto-prototypes compatible with
+// user-defined types declared later in this sketch.
+enum CmdParseResult : uint8_t;
+enum ReplayDecision : uint8_t;
+struct ParsedCmdFrame;
+struct ControlSourceState;
+struct CachedCmdAck;
+
 
 /*============================================================================================
   ZONA 8 — HELPERS GENERALES

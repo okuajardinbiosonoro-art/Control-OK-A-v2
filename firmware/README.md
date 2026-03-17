@@ -43,6 +43,13 @@ Ticket 13.6 adds `REBOOT_SOFT` as accepted command with deferred reboot:
 Final closure summary for Ticket 13:
 
 - `docs/firmware/firmware_cmd_ack_minimal.md`
+- `docs/firmware/ticket13_validation_runbook.md`
+
+Build and validation entrypoints:
+
+- PlatformIO build config: `platformio.ini` (env: `okua_node_esp32dev`)
+- CI workflow: `.github/workflows/firmware-build.yml`
+- Host-side F3 validator: `tools/firmware_f3_validator.py`
 
 Local Wi-Fi secrets override:
 
