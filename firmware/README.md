@@ -16,6 +16,12 @@ No command execution handlers are active yet.
 Ticket 13.2 adds UDP CMD receive parsing + structural validation/classification
 without ACK emission and without command execution.
 
+Ticket 13.5 adds minimal safe command execution for:
+
+- `PING` (control-plane roundtrip, no extra side effects)
+- `REQUEST_STAT_NOW` (forces immediate `OKUA_STAT` on accepted fresh commands only;
+  exact duplicate retries do not re-trigger side effects)
+
 Local Wi-Fi secrets override:
 
 - defaults in repo: `WIFI_SSID="OKUA_CORE"` and `WIFI_PASS="CHANGE_ME"`

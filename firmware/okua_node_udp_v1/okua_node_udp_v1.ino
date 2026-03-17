@@ -1036,9 +1036,42 @@ bool sendOkuaAckTo(const IPAddress& dst_ip, const OkuaAckPacket& ack) {
   return sendUdpRawTo(dst_ip, (const uint8_t*)&ack, sizeof(ack), OKUA_ACK_PORT);
 }
 
-// Control-plane ingress for Ticket 13.4:
-// parse + security checks + ACK policy/correlation.
-// No command execution yet.
+bool sendOkuaStat(uint8_t state_flags);
+
+static inline bool shouldDispatchAcceptedCommand(
+    const ParsedCmdFrame& frame,
+    const OkuaAckPacket& ack) {
+  if (ack.ack_stage != OKUA_ACK_STAGE_ACCEPTED) return false;
+  if (ack.status_code != OKUA_STATUS_OK) return false;
+  if ((ack.ack_flags & ACK_FLAG_DUPLICATE) != 0) return false;
+
+  switch (frame.packet.cmd_id) {
+    case OKUA_CMD_PING:
+    case OKUA_CMD_REQUEST_STAT_NOW:
+      return true;
+    default:
+      return false;
+  }
+}
+
+void dispatchAcceptedCommandMinimal(const ParsedCmdFrame& frame) {
+  switch (frame.packet.cmd_id) {
+    case OKUA_CMD_PING:
+      // PING is a control-plane roundtrip only; ACK already confirms health.
+      return;
+
+    case OKUA_CMD_REQUEST_STAT_NOW:
+      // Force immediate STAT outside normal cadence for accepted fresh commands.
+      sendOkuaStat(g_lastStateFlags);
+      return;
+
+    default:
+      return;
+  }
+}
+
+// Control-plane ingress for Ticket 13.5:
+// parse + security + ACK + minimal command dispatch (PING/REQUEST_STAT_NOW).
 void serviceControlPlaneIngress() {
   ParsedCmdFrame frame;
   CmdParseResult result = parseIncomingCmdFrame(&frame);
@@ -1054,6 +1087,10 @@ void serviceControlPlaneIngress() {
 
   // ACK destination for F3 is source_ip + fixed ACK port (not source port).
   sendOkuaAckTo(frame.src_ip, ack);
+
+  if (shouldDispatchAcceptedCommand(frame, ack)) {
+    dispatchAcceptedCommandMinimal(frame);
+  }
 }
 
 
