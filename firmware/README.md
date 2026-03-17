@@ -27,6 +27,7 @@ Ticket 13.6 adds `REBOOT_SOFT` as accepted command with deferred reboot:
 - ACK is emitted first by control-plane pipeline
 - reboot is scheduled with a short delay and executed in `loop()`
 - exact duplicate retries do not re-schedule reboot side effects
+- known but not yet implemented `SET_*` commands are rejected as `UNSUPPORTED_CMD`
 
 Local Wi-Fi secrets override:
 

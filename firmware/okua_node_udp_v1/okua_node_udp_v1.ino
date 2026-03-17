@@ -686,6 +686,19 @@ static inline bool okuaIsKnownCmdId(uint8_t cmd_id) {
   }
 }
 
+// Distinct from protocol-known IDs:
+// only these commands are functionally implemented in current firmware.
+static inline bool okuaIsImplementedCmdId(uint8_t cmd_id) {
+  switch (cmd_id) {
+    case OKUA_CMD_PING:
+    case OKUA_CMD_REQUEST_STAT_NOW:
+    case OKUA_CMD_REBOOT_SOFT:
+      return true;
+    default:
+      return false;
+  }
+}
+
 static inline bool okuaIsBroadcastAllowedCmdId(uint8_t cmd_id) {
   return (cmd_id == OKUA_CMD_PING) || (cmd_id == OKUA_CMD_REQUEST_STAT_NOW);
 }
@@ -813,15 +826,16 @@ void fillAckForParseResult(const ParsedCmdFrame& frame, OkuaAckPacket* ack) {
 
   switch (frame.result) {
     case CMD_PARSE_OK_UNICAST:
-      ack->ack_stage = OKUA_ACK_STAGE_ACCEPTED;
-      ack->status_code = OKUA_STATUS_OK;
-      ack->err_detail = OKUA_ERR_NONE;
-      break;
-
     case CMD_PARSE_OK_BROADCAST:
-      ack->ack_stage = OKUA_ACK_STAGE_ACCEPTED;
-      ack->status_code = OKUA_STATUS_OK;
-      ack->err_detail = OKUA_ERR_NONE;
+      if (okuaIsImplementedCmdId(frame.packet.cmd_id)) {
+        ack->ack_stage = OKUA_ACK_STAGE_ACCEPTED;
+        ack->status_code = OKUA_STATUS_OK;
+        ack->err_detail = OKUA_ERR_NONE;
+      } else {
+        ack->ack_stage = OKUA_ACK_STAGE_REJECTED;
+        ack->status_code = OKUA_STATUS_UNSUPPORTED_CMD;
+        ack->err_detail = OKUA_ERR_NONE;
+      }
       break;
 
     case CMD_PARSE_UNSUPPORTED_CMD:
@@ -1060,15 +1074,7 @@ static inline bool shouldDispatchAcceptedCommand(
   if (ack.ack_stage != OKUA_ACK_STAGE_ACCEPTED) return false;
   if (ack.status_code != OKUA_STATUS_OK) return false;
   if ((ack.ack_flags & ACK_FLAG_DUPLICATE) != 0) return false;
-
-  switch (frame.packet.cmd_id) {
-    case OKUA_CMD_PING:
-    case OKUA_CMD_REQUEST_STAT_NOW:
-    case OKUA_CMD_REBOOT_SOFT:
-      return true;
-    default:
-      return false;
-  }
+  return okuaIsImplementedCmdId(frame.packet.cmd_id);
 }
 
 void dispatchAcceptedCommandMinimal(const ParsedCmdFrame& frame) {
