@@ -136,7 +136,7 @@ def test_unsupported_version_raises_controlled_error() -> None:
         assert exc.code == "unsupported_version"
 
 
-def test_bench_v0_like_packet_surfaces_actionable_hint() -> None:
+def test_version_mismatch_reports_unsupported_version_without_bench_hint() -> None:
     raw = bytearray(_build_evt_packet())
     raw[2] = 0x00
     raw.extend(b"\x00" * 12)
@@ -146,11 +146,7 @@ def test_bench_v0_like_packet_surfaces_actionable_hint() -> None:
     except OkuaPacketParseError as exc:
         message = str(exc).lower()
         assert exc.code == "unsupported_version"
-        assert "benchpktv0" in message
-        assert "evt=20" in message
-        assert "stat=28" in message
-        assert "5005" in message
-        assert "5006" in message
+        assert "benchpktv0" not in message
 
 
 def test_truncated_packet_raises_controlled_error() -> None:

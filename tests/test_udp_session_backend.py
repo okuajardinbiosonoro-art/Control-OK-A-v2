@@ -377,6 +377,30 @@ def test_route_helper_keeps_note_on_vel_zero_semantics() -> None:
     assert router.sent == [("note_off", 1, 2, 64, 0)]
 
 
+def test_route_helper_prioritizes_bus_policy_from_node_id() -> None:
+    router = _FakeMidiRouter()
+    route_udp_evt_to_midi_router(router, _evt_packet(node_id=1, bus=1, vel=100))
+    assert router.sent == [("note_on", 0, 2, 64, 100)]
+
+
+def test_udp_backend_runtime_uses_bus_policy_over_packet_bus() -> None:
+    holder: dict[str, _FakeUdpTransport] = {}
+    router = _FakeMidiRouter()
+    backend = UdpSessionBackend(
+        _cfg(),
+        router_builder=lambda _cfg_value: router,
+        transport_builder=lambda **kwargs: holder.setdefault("transport", _FakeUdpTransport(**kwargs)),
+    )
+    backend.start(_udp_spec())
+    holder["transport"].emit_evt(_evt_packet(node_id=1, bus=1, vel=100))
+    snapshot = backend.runtime_snapshot()
+    backend.stop()
+
+    assert ("note_on", 0, 2, 64, 100) in router.sent
+    assert snapshot.last_evt is not None
+    assert snapshot.last_evt.midi_bus == 0
+
+
 def test_udp_backend_runtime_tracks_transport_errors() -> None:
     holder: dict[str, _FakeUdpTransport] = {}
     backend = UdpSessionBackend(

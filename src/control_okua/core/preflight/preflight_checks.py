@@ -296,7 +296,7 @@ def collect_logging_checks(raw_cfg: dict[str, Any], effective_cfg: dict[str, Any
         findings.append(
             _finding(
                 PreflightCheckCode.LOGGING_DISABLED,
-                PreflightSeverity.WARNING,
+                PreflightSeverity.INFO,
                 "Logging deshabilitado por configuracion.",
             )
         )

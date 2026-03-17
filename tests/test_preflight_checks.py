@@ -62,17 +62,6 @@ def test_lab_sim_valid_config_is_not_blocked() -> None:
     assert report.blocking_count == 0
     assert report.can_start is True
 
-
-def test_udp_bench_lab_valid_config_is_not_blocked() -> None:
-    report = run_preflight_checks(_base_cfg("udp_bench_lab", "udp"))
-
-    assert report.readiness in {ReadinessLevel.READY, ReadinessLevel.READY_WITH_WARNINGS}
-    assert report.profile_id == "udp_bench_lab"
-    assert report.backend_kind == "lab"
-    assert report.blocking_count == 0
-    assert report.can_start is True
-
-
 def test_missing_active_profile_blocks_readiness() -> None:
     cfg = _base_cfg("serial_local", "serial")
     cfg["profile"]["active"] = None
@@ -115,10 +104,10 @@ def test_logging_disabled_is_warning_and_does_not_block() -> None:
     report = run_preflight_checks(cfg)
 
     finding = _get_finding(report, PreflightCheckCode.LOGGING_DISABLED)
-    assert report.readiness is ReadinessLevel.READY_WITH_WARNINGS
+    assert report.readiness is ReadinessLevel.READY
     assert report.can_start is True
     assert finding is not None
-    assert finding.severity is PreflightSeverity.WARNING
+    assert finding.severity is PreflightSeverity.INFO
     assert finding.is_blocking is False
 
 
@@ -155,5 +144,5 @@ def test_stable_codes_and_severities_for_primary_findings() -> None:
     assert profile_finding.is_blocking is True
 
     assert logging_finding is not None
-    assert logging_finding.severity is PreflightSeverity.WARNING
+    assert logging_finding.severity is PreflightSeverity.INFO
     assert logging_finding.is_blocking is False

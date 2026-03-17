@@ -8,11 +8,6 @@ from control_okua.services.backends.udp_session_backend import (
     UdpSessionBackend,
     route_udp_evt_to_midi_router,
 )
-from control_okua.services.backends.udp_bench_compat_session_backend import (
-    UdpBenchCompatRuntimeSnapshot,
-    UdpBenchCompatSessionBackend,
-    route_bench_evt_to_midi_router,
-)
 
 __all__ = [
     "SerialBackendRuntimeSnapshot",
@@ -21,7 +16,4 @@ __all__ = [
     "UdpBackendRuntimeSnapshot",
     "UdpSessionBackend",
     "route_udp_evt_to_midi_router",
-    "UdpBenchCompatRuntimeSnapshot",
-    "UdpBenchCompatSessionBackend",
-    "route_bench_evt_to_midi_router",
 ]

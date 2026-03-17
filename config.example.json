@@ -29,7 +29,7 @@
     }
   },
   "logging": {
-    "enabled": true,
+    "enabled": false,
     "folder": "logs",
     "format": "jsonl",
     "level": "INFO"

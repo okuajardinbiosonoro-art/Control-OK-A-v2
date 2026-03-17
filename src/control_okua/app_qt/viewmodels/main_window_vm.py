@@ -10,6 +10,10 @@ from control_okua.core.profiles.profile_service import (
     build_profile_ui_summary,
     infer_profile_from_config,
 )
+from control_okua.core.node_identity_policy import (
+    resolve_node_identity,
+    resolve_node_label,
+)
 from control_okua.core.registry import NodeStatus
 from control_okua.core.session import SessionSnapshot, SessionState
 
@@ -695,6 +699,7 @@ def _format_udp_evt_summary(runtime_snapshot: object | None) -> str:
         return "-"
 
     node_id = _runtime_attr(summary, "node_id")
+    identity = resolve_node_identity(node_id)
     seq = _runtime_attr(summary, "seq")
     midi_bus = _runtime_attr(summary, "midi_bus")
     midi_ch = _runtime_attr(summary, "midi_ch")
@@ -703,7 +708,8 @@ def _format_udp_evt_summary(runtime_snapshot: object | None) -> str:
     source_ip = _runtime_attr(summary, "source_ip")
     source_port = _runtime_attr(summary, "source_port")
     return (
-        f"node={node_id} seq={seq} bus={midi_bus} ch={midi_ch} "
+        f"node={identity.node_label} (id={node_id}, caja={identity.box_label}) "
+        f"seq={seq} bus={midi_bus} ch={midi_ch} "
         f"note={note} vel={vel} src={source_ip}:{source_port}"
     )
 
@@ -778,15 +784,6 @@ def build_diagnostic_udp_rows(
         default=_safe_int(_transport_attr(runtime_snapshot, "socket_errors"), default=0),
     )
     messages_routed = _safe_int(_runtime_attr(runtime_snapshot, "messages_routed"), default=0)
-    raw_total_ping = _runtime_attr(runtime_snapshot, "total_ping_packets")
-    if raw_total_ping is None:
-        raw_total_ping = _transport_attr(runtime_snapshot, "total_ping_packets")
-    raw_total_pong = _runtime_attr(runtime_snapshot, "total_pong_packets")
-    if raw_total_pong is None:
-        raw_total_pong = _transport_attr(runtime_snapshot, "total_pong_packets")
-    raw_total_pong_sent = _runtime_attr(runtime_snapshot, "total_pong_sent")
-    if raw_total_pong_sent is None:
-        raw_total_pong_sent = _transport_attr(runtime_snapshot, "total_pong_sent")
     last_packet_summary = str(_runtime_attr(runtime_snapshot, "last_packet_summary") or "").strip()
     if not last_packet_summary:
         last_packet_summary = str(_transport_attr(runtime_snapshot, "last_packet_summary") or "").strip()
@@ -819,23 +816,6 @@ def build_diagnostic_udp_rows(
         UdpRuntimeDiagnosticRow("Último STAT", _format_udp_stat_summary(runtime_snapshot)),
         UdpRuntimeDiagnosticRow("Último error", last_error),
     ]
-    if raw_total_ping is not None:
-        rows.insert(8, UdpRuntimeDiagnosticRow("PING totales", str(_safe_int(raw_total_ping, default=0))))
-    if raw_total_pong is not None:
-        insert_at = 9 if raw_total_ping is not None else 8
-        rows.insert(
-            insert_at,
-            UdpRuntimeDiagnosticRow("PONG totales", str(_safe_int(raw_total_pong, default=0))),
-        )
-    if raw_total_pong_sent is not None:
-        insert_at = 10 if raw_total_ping is not None and raw_total_pong is not None else 9
-        rows.insert(
-            insert_at,
-            UdpRuntimeDiagnosticRow(
-                "PONG enviados",
-                str(_safe_int(raw_total_pong_sent, default=0)),
-            ),
-        )
     return rows
 
 
@@ -869,12 +849,19 @@ def format_node_status(snapshot: object) -> str:
     return "Fuera de línea"
 
 
-def format_node_last_seen(snapshot: object, now_monotonic: float | None = None) -> str:
+def format_node_last_seen(
+    snapshot: object,
+    now_monotonic: float | None = None,
+    *,
+    freeze_after_s: float = 600.0,
+) -> str:
     last_seen = _safe_float(_node_attr(snapshot, "last_seen_pc_ts"))
     if last_seen is None:
         return "—"
     now_value = now_monotonic if now_monotonic is not None else time.monotonic()
     delta_s = max(0.0, now_value - last_seen)
+    if delta_s >= freeze_after_s:
+        return "hace más de 10 min"
     return f"hace {delta_s:.1f} s"
 
 
@@ -914,6 +901,10 @@ def format_node_last_note_velocity(snapshot: object) -> str:
 
 
 def format_node_label(snapshot: object) -> str:
+    node_id = _safe_int(_node_attr(snapshot, "node_id"), default=-1)
+    if node_id > 0:
+        return resolve_node_label(node_id)
+
     label = _node_attr(snapshot, "label")
     if not isinstance(label, str):
         return "—"
@@ -965,7 +956,7 @@ def build_nodes_tab_view_state(
 ) -> NodesTabViewState:
     if not _is_udp_session(session_snapshot) or session_snapshot.state is not SessionState.RUNNING:
         return NodesTabViewState(
-            title="La tabla de nodos está disponible para sesiones UDP.",
+            title="La vista de nodos está disponible para sesiones UDP.",
             hint="Inicia una sesión UDP para ver nodos en vivo.",
             summary="Resumen de nodos: no disponible.",
             show_table=False,
@@ -982,7 +973,7 @@ def build_nodes_tab_view_state(
 
     return NodesTabViewState(
         title="Nodos en vivo detectados.",
-        hint="Actualización automática cada ~1 s mientras la sesión UDP esté corriendo.",
+        hint="Actualización automática periódica mientras la sesión UDP esté corriendo.",
         summary=build_nodes_summary_text(summary),
         show_table=True,
     )

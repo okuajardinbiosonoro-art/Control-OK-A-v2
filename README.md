@@ -38,12 +38,12 @@ El ejecutable queda en `dist/Control Okua.exe`.
 
 ## Estado actual de la app (UX)
 
-La ventana principal usa flujo operator-first:
+La ventana principal usa flujo operator-first y separa operación rápida de acciones técnicas:
 
-- Pestaña inicial `Operacion` con resumen operativo compacto, acciones rapidas y bloques de actividad runtime (serial/UDP).
-- Pestaña `Estado actual` con el detalle largo de sesion en tarjetas tecnicas, scroll interno y layout responsive (2 columnas en ancho amplio, 1 columna en ancho estrecho).
-- Pestaña `Nodos` con tabla real por nodo (estado, ultimo visto, pps, perdida, RSSI y ultimo note/vel) alimentada desde snapshots del `SessionController`.
-- Pestaña `Diagnostico` con resumen tecnico, advertencias de configuracion, detalle del ultimo preflight y runtime serial/UDP.
+- Pestañas principales: `Operación`, `Nodos`, `Diagnóstico`.
+- Vista `Estado actual` disponible bajo demanda desde `Ver > Estado actual` (ya no es pestaña fija).
+- Vista `Nodos` agrupada por cajas desplegables (`Caja 1` a `Caja 5`) con nombres lógicos (`EB1`, `EC1`, `...`).
+- Vista `Diagnóstico` con resumen técnico, advertencias y panel de preflight desplegable.
 
 En `Operacion` tambien aparece el bloque `Preparacion de sesion`, que resume:
 
@@ -66,22 +66,13 @@ En `Operacion` tambien aparece el bloque `Actividad UDP`, con resumen compacto d
 - contadores basicos EVT/STAT
 - ultimo error y actividad reciente
 
-Las acciones tecnicas se movieron a `Herramientas avanzadas`:
+Acciones y menú principal:
 
-- ruta de `config.json`
-- abrir carpeta de config
-- ver config JSON
-- recargar config
-- widget de salidas MIDI
-
-Acciones operativas visibles:
-
-- `Cambiar perfil`: abre selector guiado de perfil operativo.
-- `Recargar configuracion`.
-- `Iniciar sesion`.
-- `Detener sesion`.
-- `Reiniciar error`.
-- `Herramientas avanzadas`.
+- `Operación` mantiene solo acciones rápidas: `Cambiar perfil`, `Iniciar sesión`, `Detener sesión`, `Reiniciar error`.
+- `Archivo`: `Recargar configuración`, `Salir`.
+- `Ver`: `Estado actual`, `Diagnóstico`, `Errores / preflight`.
+- `Herramientas`: `Herramientas avanzadas`.
+- `Ayuda`: `Acerca de`.
 
 ## Flujo de sesion y readiness (Tickets 3.3 + 4.x)
 
@@ -119,6 +110,22 @@ Acciones operativas visibles:
 - `Estado actual` concentra el detalle largo de sesion de forma responsive para evitar saturar `Operacion`.
 - `NodeRegistry` se reinicia por sesion UDP, evitando nodos fantasmas entre stop/restart.
 
+## Identidad de nodos y ruteo MIDI
+
+La política es explícita y determinista, y no depende de IP/router:
+
+- Identidad de nodo: `node_id`.
+- Nombre lógico: función pura de `node_id` (patrón `EB/EC/ED/EE/EF` por caja).
+- Caja: función pura de `node_id` (`1..5 -> Caja 1`, `6..10 -> Caja 2`, etc.).
+- Bus MIDI: función pura de caja:
+  - `Caja 1` a `Caja 3` -> `midi_bus=0` (LoopMIDI 1)
+  - `Caja 4` a `Caja 5` -> `midi_bus=1` (LoopMIDI 2)
+
+Precedencia en runtime UDP:
+
+- CKv2 deriva el bus efectivo desde `node_id -> caja -> midi_bus`.
+- Si el paquete trae otro `midi_bus`, prevalece la política por caja.
+
 ## Recording por sesion y replay basico (Tickets 8.x)
 
 - El recording por sesion ya esta integrado al lifecycle real via `SessionController` cuando `logging.enabled=true`.
@@ -155,7 +162,7 @@ Acciones operativas visibles:
 Campos principales:
 
 - `mode`: `"serial"` o `"udp"` (puede iniciar como `null` antes de seleccionar).
-- `profile.active`: perfil operativo activo (`serial_local`, `udp_jardin`, `lab_sim`, `udp_bench_lab`) o `null`.
+- `profile.active`: perfil operativo activo (`serial_local`, `udp_jardin`, `lab_sim`) o `null`.
 - `serial`: baudrate, running_status, flush_ms, max_silence_s, auto_reconnect, port.
 - `udp`: bind_ip, evt_port (5005), stat_port (5006), cmd_port (5007), rcvbuf_bytes.
 - `midi.outputs`: mapping explicito de buses (`"0"`..`"255"`) a nombre de puerto.
@@ -175,7 +182,6 @@ El sistema soporta una capa de perfiles operativos para trabajar sin pensar prim
 - `serial_local`: uso con Maestro conectado por USB/Serial.
 - `udp_jardin`: uso en instalacion OKUA por red UDP.
 - `lab_sim`: uso de laboratorio/simulacion sobre runtime UDP real.
-- `udp_bench_lab`: compatibilidad explicita de laboratorio para BenchPktV0 (ver=0/len=32).
 
 Cada perfil define:
 
@@ -187,8 +193,8 @@ Cada perfil define:
 
 Regla practica entre perfiles UDP:
 
-- `udp_jardin`: flujo productivo final; acepta solo protocolo OKUA v1.
-- `udp_bench_lab`: compatibilidad de laboratorio para nodos BenchPktV0 actuales.
+- `udp_jardin`: flujo productivo final sobre protocolo OKUA.
+- `lab_sim`: ruta de pruebas/simulación sobre backend UDP.
 
 Compatibilidad:
 
@@ -202,7 +208,6 @@ Compatibilidad:
    - `Serial local`
    - `UDP Jardin`
    - `LAB / simulacion`
-   - `UDP Bench LAB`
 3. Al confirmar, guarda `profile.active` y ajusta `mode` asociado.
 4. Si el perfil ya estaba persistido, no vuelve a preguntar automaticamente.
 
@@ -236,9 +241,9 @@ python tools/udp_okua_v1_sender.py --dry-run
 python tools/udp_okua_v1_sender.py --host 127.0.0.1 --evt-port 5005 --stat-port 5006 --count 50 --interval-ms 20
 ```
 
-Referencia tecnica de compatibilidad:
+Referencia técnica de protocolo:
 
-- `docs/protocol/udp_bench_vs_okua_v1.md`
+- `docs/protocol/udp_bench_vs_okua_v1.md` (documento histórico comparativo)
 
 ### Test puro del view-model (sin UI)
 
@@ -276,7 +281,7 @@ Remove-Item Env:CKV2_AUTOCLOSE_MS
 2. Confirmar estado inicial de sesion en `inactiva`.
 3. Verificar en `Operacion` los bloques `Preparacion de sesion`, `Actividad serial` y `Actividad UDP`.
 4. Verificar en `Diagnostico` el bloque de preflight y los bloques de runtime serial/UDP.
-5. Verificar la pestaña `Estado actual`:
+5. Abrir `Ver > Estado actual` y validar:
    - detalle navegable con scroll interno
    - 2 columnas en ancho amplio
    - 1 columna en ancho estrecho
@@ -289,15 +294,15 @@ Remove-Item Env:CKV2_AUTOCLOSE_MS
    - error runtime legible y sin `running` falso cuando hay fallo de bind/config
 8. Pestaña `Nodos` en sesion no-UDP: validar mensaje de no aplicacion (sin nodos inventados).
 9. Pestaña `Nodos` en UDP corriendo sin trafico: validar estado vacio coherente.
-10. Pestaña `Nodos` en UDP con trafico: validar tabla visible con filas reales y columnas coherentes.
-11. Stop/restart de sesion UDP: validar limpieza visual y ausencia de nodos fantasmas.
-12. Perfil `udp_bench_lab`: validar compatibilidad bench (EVT/STAT/PING/PONG) sin error de version.
-13. Perfil `udp_jardin`: validar que BenchPktV0 siga rechazado con diagnostico de incompatibilidad.
-12. Caso config invalida para readiness: validar estado `No lista` y findings bloqueantes en `Diagnostico`.
-13. Pulsar `Reiniciar error` y confirmar retorno a estado inactivo con refresco visual coherente.
-14. Validar bloqueo de `Cambiar perfil`/`Recargar configuracion` cuando la sesion no esta en estado seguro (`starting`, `running`, `stopping`).
-15. Abrir `Herramientas avanzadas` y validar `Ver config`, `Abrir carpeta`, `Recargar config` y `Salidas MIDI`.
-16. Cerrar y reabrir la app sin errores.
+10. Pestaña `Nodos` en UDP con trafico: validar agrupación por cajas (`Caja 1..5`), nombres lógicos (`EB1`, `EC1`, ...) y expandir/colapsar.
+11. En nodos de `Caja 1..3` validar ruteo a LoopMIDI 1 (`bus=0`); en `Caja 4..5` validar LoopMIDI 2 (`bus=1`).
+12. Stop/restart de sesion UDP: validar limpieza visual y ausencia de nodos fantasmas.
+13. Caso config invalida para readiness: validar estado `No lista` y findings bloqueantes en `Diagnostico`.
+14. Pulsar `Reiniciar error` y confirmar retorno a estado inactivo con refresco visual coherente.
+15. Validar bloqueo de `Cambiar perfil`/`Recargar configuracion` cuando la sesion no esta en estado seguro (`starting`, `running`, `stopping`).
+16. Abrir `Ayuda > Acerca de` y confirmar información básica.
+17. Abrir `Herramientas avanzadas` y validar `Ver config`, `Abrir carpeta`, `Recargar config` y `Salidas MIDI`.
+18. Cerrar y reabrir la app sin errores.
 
 ## Prueba MIDI (LoopMIDI / Ableton)
 

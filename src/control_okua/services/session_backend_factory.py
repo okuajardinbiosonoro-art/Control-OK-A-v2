@@ -12,7 +12,6 @@ from control_okua.core.session import (
 )
 from control_okua.services.backends import (
     SerialSessionBackend,
-    UdpBenchCompatSessionBackend,
     UdpSessionBackend,
 )
 
@@ -101,8 +100,6 @@ class SessionBackendFactory:
             return UdpSessionBackend(cfg)
         if spec.backend is BackendKind.LAB and spec.mode == "udp":
             cfg = self._get_effective_cfg()
-            if spec.profile_id == "udp_bench_lab":
-                return UdpBenchCompatSessionBackend(cfg)
             return UdpSessionBackend(cfg)
 
         reason = self._DEFAULT_UNAVAILABLE_REASONS.get(

@@ -133,16 +133,16 @@ class _FakeUdpTransport:
             last_error=self._last_error,
         )
 
-    def emit_evt(self, *, vel: int = 100) -> None:
+    def emit_evt(self, *, vel: int = 100, node_id: int = 70, midi_bus: int = 1) -> None:
         packet = OkuaEvtPacket(
             header=OkuaHeader(
                 magic=OKUA_MAGIC,
                 version=OKUA_VERSION,
                 packet_type=OkuaPacketType.EVT,
-                node_id=70,
+                node_id=node_id,
                 seq=80,
             ),
-            midi_bus=1,
+            midi_bus=midi_bus,
             midi_ch=0,
             note=65,
             vel=vel,
@@ -308,4 +308,33 @@ def test_controller_udp_restart_has_no_ghost_nodes() -> None:
     assert restarted_summary is not None
     assert restarted_summary.total_nodes == 0
     assert controller.get_node_snapshot(70, now=101.0) is None
+    assert controller.stop_session() is True
+
+
+def test_controller_udp_bus_policy_uses_node_id_not_packet_bus() -> None:
+    holder: dict[str, _FakeUdpTransport] = {}
+    router = _FakeMidiRouter()
+
+    def _transport_builder(**kwargs):
+        transport = _FakeUdpTransport(**kwargs)
+        holder["transport"] = transport
+        return transport
+
+    backend = UdpSessionBackend(
+        _build_udp_cfg(),
+        router_builder=lambda _cfg: router,
+        transport_builder=_transport_builder,
+    )
+    controller = SessionController(
+        _build_udp_cfg(),
+        backend_factory=_RecordingBackendFactory(backend=backend),
+    )
+
+    assert controller.start_session() is True
+    holder["transport"].emit_evt(vel=100, node_id=1, midi_bus=1)
+    runtime_snapshot = controller.get_backend_runtime_snapshot()
+    assert runtime_snapshot is not None
+    assert runtime_snapshot.last_evt is not None
+    assert runtime_snapshot.last_evt.midi_bus == 0
+    assert ("note_on", 0, 0, 65, 100) in router.sent
     assert controller.stop_session() is True

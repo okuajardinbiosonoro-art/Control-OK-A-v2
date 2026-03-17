@@ -603,29 +603,9 @@ def test_diagnostic_udp_rows_include_technical_fields() -> None:
     assert pairs["Errores de parseo"] == "3"
     assert pairs["Errores de socket"] == "2"
     assert "hace" in pairs["Última actividad"]
-    assert "node=10" in pairs["Último EVT"]
+    assert "id=10" in pairs["Último EVT"]
+    assert "caja=Caja 2" in pairs["Último EVT"]
     assert "vbat=3700" in pairs["Último STAT"]
-
-
-def test_diagnostic_udp_rows_include_bench_ping_pong_when_available() -> None:
-    runtime = _udp_runtime_snapshot()
-    runtime.total_ping_packets = 15
-    runtime.total_pong_packets = 14
-    runtime.total_pong_sent = 15
-    runtime.transport.total_ping_packets = 15
-    runtime.transport.total_pong_packets = 14
-    runtime.transport.total_pong_sent = 15
-
-    rows = build_diagnostic_udp_rows(
-        runtime,
-        _build_udp_snapshot(SessionState.RUNNING, "Sesion UDP bench"),
-        now_monotonic=105.0,
-    )
-    pairs = {row.field: row.value for row in rows}
-
-    assert pairs["PING totales"] == "15"
-    assert pairs["PONG totales"] == "14"
-    assert pairs["PONG enviados"] == "15"
 
 
 def test_diagnostic_udp_rows_distinguish_non_udp_session() -> None:
@@ -671,6 +651,14 @@ def test_node_last_seen_format_is_coherent() -> None:
     assert missing == "—"
 
 
+def test_node_last_seen_freezes_after_ten_minutes() -> None:
+    frozen = format_node_last_seen(
+        _node_snapshot(node_id=10, status=NodeStatus.OFFLINE, last_seen_pc_ts=100.0),
+        now_monotonic=760.1,
+    )
+    assert frozen == "hace más de 10 min"
+
+
 def test_node_pps_loss_and_rssi_format_is_coherent() -> None:
     snapshot = _node_snapshot(
         node_id=20,
@@ -705,9 +693,9 @@ def test_node_note_velocity_and_optional_metadata_format_are_coherent() -> None:
     )
     assert format_node_last_note_velocity(with_values) == "64 / 100"
     assert format_node_last_note_velocity(without_values) == "—"
-    assert format_node_label(with_values) == "Nodo A"
+    assert format_node_label(with_values) == "EF6"
     assert format_node_type(with_values) == "Fruta"
-    assert format_node_label(without_values) == "—"
+    assert format_node_label(without_values) == "EB7"
     assert format_node_type(without_values) == "—"
 
 

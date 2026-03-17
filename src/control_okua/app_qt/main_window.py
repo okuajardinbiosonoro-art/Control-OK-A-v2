@@ -5,30 +5,33 @@ import time
 from pathlib import Path
 from typing import Any
 
-from PySide6.QtCore import QTimer, QUrl
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtGui import QAction, QBrush, QColor, QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QDialog,
     QFormLayout,
     QGridLayout,
     QGroupBox,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QScrollArea,
     QTabWidget,
-    QTableView,
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
+    QTreeWidget,
+    QTreeWidgetItem,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
 from control_okua.app_qt.advanced_tools_dialog import AdvancedToolsDialog
-from control_okua.app_qt.models import NodeTableModel
 from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
 from control_okua.app_qt.widgets import ConfigViewDialog
 from control_okua.app_qt.viewmodels import (
@@ -46,6 +49,13 @@ from control_okua.app_qt.viewmodels import (
     build_operation_serial_block,
     build_operation_udp_block,
     build_operation_summary,
+    format_node_last_note_velocity,
+    format_node_last_seen,
+    format_node_loss,
+    format_node_pps,
+    format_node_rssi,
+    format_node_status,
+    resolve_node_identity,
     sort_node_snapshots_by_id,
     build_preflight_counts,
     build_preflight_diagnostic_rows,
@@ -74,6 +84,9 @@ from control_okua.services.session_controller import SessionController
 
 
 class MainWindow(QMainWindow):
+    _NODES_COLUMN_MIN_WIDTHS: tuple[int, ...] = (130, 120, 170, 125, 135, 95, 170)
+    _NODES_COLUMN_WEIGHTS: tuple[int, ...] = (0, 0, 3, 2, 2, 1, 3)
+
     def __init__(
         self,
         cfg: dict[str, Any],
@@ -100,7 +113,9 @@ class MainWindow(QMainWindow):
         self._details_scroll_area: QScrollArea | None = None
         self._details_columns = 0
         self._advanced_dialog: AdvancedToolsDialog | None = None
-        self._node_table_model: NodeTableModel | None = None
+        self._details_dialog: QDialog | None = None
+        self._node_box_expanded: dict[int, bool] = {}
+        self._preflight_panel_visible = False
         self.session_controller = session_controller or SessionController(
             self._session_cfg_provider,
             parent=self,
@@ -109,7 +124,7 @@ class MainWindow(QMainWindow):
         self._preflight_report: PreflightReport | None = self.session_controller.get_last_preflight_report()
         self._connect_session_signals()
         self._serial_runtime_refresh_timer = QTimer(self)
-        self._serial_runtime_refresh_timer.setInterval(1000)
+        self._serial_runtime_refresh_timer.setInterval(1500)
         self._serial_runtime_refresh_timer.timeout.connect(
             self._on_runtime_refresh_tick
         )
@@ -129,14 +144,63 @@ class MainWindow(QMainWindow):
         central = QWidget(self)
         root_layout = QVBoxLayout(central)
         self.setCentralWidget(central)
+        self._build_menu_bar()
 
         self.tabs = QTabWidget(self)
-        self.tabs.addTab(self._build_operation_tab(), "Operación")
-        self.tabs.addTab(self._build_session_details_tab(), "Estado actual")
-        self.tabs.addTab(self._build_nodes_tab(), "Nodos")
-        self.tabs.addTab(self._build_diagnostics_tab(), "Diagnóstico")
+        self.operation_tab = self._build_operation_tab()
+        self.nodes_tab = self._build_nodes_tab()
+        self.diagnostics_tab = self._build_diagnostics_tab()
+        self.tabs.addTab(self.operation_tab, "Operación")
+        self.tabs.addTab(self.nodes_tab, "Nodos")
+        self.tabs.addTab(self.diagnostics_tab, "Diagnóstico")
+        self.tabs.currentChanged.connect(self._on_tab_changed)
         self.tabs.setCurrentIndex(0)
         root_layout.addWidget(self.tabs)
+        self._create_session_details_dialog()
+
+    def _build_menu_bar(self) -> None:
+        menu_bar = self.menuBar()
+
+        file_menu = menu_bar.addMenu("Archivo")
+        self.reload_action = QAction("Recargar configuración", self)
+        self.reload_action.triggered.connect(self.reload_config)
+        file_menu.addAction(self.reload_action)
+        file_menu.addSeparator()
+        self.exit_action = QAction("Salir", self)
+        self.exit_action.triggered.connect(self.close)
+        file_menu.addAction(self.exit_action)
+
+        view_menu = menu_bar.addMenu("Ver")
+        self.view_state_action = QAction("Estado actual", self)
+        self.view_state_action.triggered.connect(self.show_session_details_dialog)
+        view_menu.addAction(self.view_state_action)
+
+        self.view_diagnostics_action = QAction("Diagnóstico", self)
+        self.view_diagnostics_action.triggered.connect(self.show_diagnostics_tab)
+        view_menu.addAction(self.view_diagnostics_action)
+
+        self.toggle_preflight_action = QAction("Errores / preflight", self)
+        self.toggle_preflight_action.setCheckable(True)
+        self.toggle_preflight_action.toggled.connect(self._on_preflight_toggle_action)
+        view_menu.addAction(self.toggle_preflight_action)
+
+        tools_menu = menu_bar.addMenu("Herramientas")
+        self.advanced_tools_action = QAction("Herramientas avanzadas", self)
+        self.advanced_tools_action.triggered.connect(self.open_advanced_tools)
+        tools_menu.addAction(self.advanced_tools_action)
+
+        help_menu = menu_bar.addMenu("Ayuda")
+        self.about_action = QAction("Acerca de", self)
+        self.about_action.triggered.connect(self.show_about_dialog)
+        help_menu.addAction(self.about_action)
+
+    def _create_session_details_dialog(self) -> None:
+        self._details_dialog = QDialog(self)
+        self._details_dialog.setWindowTitle("Estado actual")
+        self._details_dialog.resize(900, 640)
+        layout = QVBoxLayout(self._details_dialog)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.addWidget(self._build_session_details_tab())
 
     def _build_operation_tab(self) -> QWidget:
         tab = QWidget(self)
@@ -166,14 +230,6 @@ class MainWindow(QMainWindow):
         self.change_profile_button = QPushButton("Cambiar perfil")
         self.change_profile_button.clicked.connect(self.change_profile)
         quick_actions_layout.addWidget(self.change_profile_button)
-
-        self.reload_button = QPushButton("Recargar configuración")
-        self.reload_button.clicked.connect(self.reload_config)
-        quick_actions_layout.addWidget(self.reload_button)
-
-        self.advanced_tools_button = QPushButton("Herramientas avanzadas")
-        self.advanced_tools_button.clicked.connect(self.open_advanced_tools)
-        quick_actions_layout.addWidget(self.advanced_tools_button)
         quick_actions_layout.addStretch(1)
         layout.addWidget(quick_actions_group)
 
@@ -351,7 +407,7 @@ class MainWindow(QMainWindow):
         tab = QWidget(self)
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
+        layout.setSpacing(10)
 
         title_label = QLabel("Monitoreo de nodos")
         title_font = title_label.font()
@@ -369,27 +425,43 @@ class MainWindow(QMainWindow):
         empty_layout.setContentsMargins(10, 8, 10, 8)
         empty_layout.setSpacing(6)
 
-        self.nodes_state_label = QLabel("La tabla de nodos está disponible para sesiones UDP.")
+        self.nodes_state_label = QLabel("La vista de nodos está disponible para sesiones UDP.")
         self._set_compact_wordwrap_label(self.nodes_state_label)
+        self.nodes_state_label.setAlignment(Qt.AlignCenter)
         empty_layout.addWidget(self.nodes_state_label)
 
         self.nodes_hint_label = QLabel("Inicia una sesión UDP para ver nodos en vivo.")
         self._set_compact_wordwrap_label(self.nodes_hint_label)
+        self.nodes_hint_label.setAlignment(Qt.AlignCenter)
         empty_layout.addWidget(self.nodes_hint_label)
 
         self.nodes_summary_label = QLabel("Resumen de nodos: no disponible.")
         self._set_compact_wordwrap_label(self.nodes_summary_label)
+        self.nodes_summary_label.setAlignment(Qt.AlignCenter)
         empty_layout.addWidget(self.nodes_summary_label)
         layout.addWidget(self.nodes_empty_state_group, 0)
 
-        self.nodes_table = QTableView(self)
-        self._node_table_model = NodeTableModel(self.nodes_table)
-        self.nodes_table.setModel(self._node_table_model)
-        self.nodes_table.horizontalHeader().setStretchLastSection(True)
-        self.nodes_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.nodes_table.setSelectionMode(QAbstractItemView.NoSelection)
-        self.nodes_table.verticalHeader().setVisible(False)
-        layout.addWidget(self.nodes_table, 1)
+        self.nodes_tree = QTreeWidget(self)
+        self.nodes_tree.setColumnCount(7)
+        self.nodes_tree.setHeaderLabels(
+            [
+                "Nodo",
+                "Estado",
+                "Último visto",
+                "PPS",
+                "Pérdida",
+                "RSSI",
+                "Último note/vel",
+            ]
+        )
+        self.nodes_tree.setAlternatingRowColors(True)
+        self.nodes_tree.setRootIsDecorated(True)
+        self.nodes_tree.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.nodes_tree.setSelectionMode(QAbstractItemView.NoSelection)
+        self.nodes_tree.itemExpanded.connect(self._on_node_box_expanded)
+        self.nodes_tree.itemCollapsed.connect(self._on_node_box_collapsed)
+        self._configure_nodes_tree_columns()
+        layout.addWidget(self.nodes_tree, 1)
 
         return tab
 
@@ -416,9 +488,13 @@ class MainWindow(QMainWindow):
             self._diagnostic_summary_labels[key] = label
 
         layout.addWidget(summary_group)
+        self.preflight_toggle_button = QPushButton("Ver errores / preflight")
+        self.preflight_toggle_button.setCheckable(True)
+        self.preflight_toggle_button.toggled.connect(self._on_preflight_toggle_button)
+        layout.addWidget(self.preflight_toggle_button)
 
-        preflight_group = QGroupBox("Readiness / preflight")
-        preflight_layout = QVBoxLayout(preflight_group)
+        self.preflight_group = QGroupBox("Readiness / preflight")
+        preflight_layout = QVBoxLayout(self.preflight_group)
 
         preflight_summary_form = QFormLayout()
         self.preflight_diag_status_label = QLabel("-")
@@ -443,10 +519,11 @@ class MainWindow(QMainWindow):
         self.preflight_findings_table.setSelectionMode(QAbstractItemView.NoSelection)
         self.preflight_findings_table.verticalHeader().setVisible(False)
         preflight_layout.addWidget(self.preflight_findings_table)
-        layout.addWidget(preflight_group)
+        layout.addWidget(self.preflight_group)
+        self.preflight_group.setVisible(False)
 
-        serial_runtime_group = QGroupBox("Runtime serial")
-        serial_runtime_layout = QVBoxLayout(serial_runtime_group)
+        self.serial_runtime_group = QGroupBox("Runtime serial")
+        serial_runtime_layout = QVBoxLayout(self.serial_runtime_group)
         self.serial_runtime_table = QTableWidget(0, 2, self)
         self.serial_runtime_table.setHorizontalHeaderLabels(["Campo", "Valor"])
         self.serial_runtime_table.horizontalHeader().setStretchLastSection(True)
@@ -454,10 +531,10 @@ class MainWindow(QMainWindow):
         self.serial_runtime_table.setSelectionMode(QAbstractItemView.NoSelection)
         self.serial_runtime_table.verticalHeader().setVisible(False)
         serial_runtime_layout.addWidget(self.serial_runtime_table)
-        layout.addWidget(serial_runtime_group)
+        layout.addWidget(self.serial_runtime_group)
 
-        udp_runtime_group = QGroupBox("Runtime UDP")
-        udp_runtime_layout = QVBoxLayout(udp_runtime_group)
+        self.udp_runtime_group = QGroupBox("Runtime UDP")
+        udp_runtime_layout = QVBoxLayout(self.udp_runtime_group)
         self.udp_runtime_table = QTableWidget(0, 2, self)
         self.udp_runtime_table.setHorizontalHeaderLabels(["Campo", "Valor"])
         self.udp_runtime_table.horizontalHeader().setStretchLastSection(True)
@@ -465,7 +542,7 @@ class MainWindow(QMainWindow):
         self.udp_runtime_table.setSelectionMode(QAbstractItemView.NoSelection)
         self.udp_runtime_table.verticalHeader().setVisible(False)
         udp_runtime_layout.addWidget(self.udp_runtime_table)
-        layout.addWidget(udp_runtime_group)
+        layout.addWidget(self.udp_runtime_group)
 
         warnings_group = QGroupBox("Advertencias de configuración")
         warnings_layout = QVBoxLayout(warnings_group)
@@ -479,14 +556,20 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event) -> None:  # type: ignore[override]
         super().resizeEvent(event)
         self._reflow_details_cards()
+        self._adjust_nodes_tree_columns()
 
     def _reflow_details_cards(self, *, force: bool = False) -> None:
         layout = self._details_cards_layout
         if layout is None:
             return
 
-        tabs_width = self.tabs.width() if hasattr(self, "tabs") else self.width()
-        viewport_width = tabs_width if tabs_width > 0 else self.width()
+        viewport_width = 0
+        if self._details_scroll_area is not None:
+            viewport_width = self._details_scroll_area.viewport().width()
+        if viewport_width <= 0 and hasattr(self, "tabs"):
+            viewport_width = self.tabs.width()
+        if viewport_width <= 0:
+            viewport_width = self.width()
         columns = 2 if viewport_width >= 900 else 1
         if not force and columns == self._details_columns:
             return
@@ -591,7 +674,8 @@ class MainWindow(QMainWindow):
         self.reset_session_error_button.setEnabled(session_action_state.can_reset_error)
 
         self.change_profile_button.setEnabled(session_action_state.can_edit_configuration)
-        self.reload_button.setEnabled(session_action_state.can_edit_configuration)
+        self.reload_action.setEnabled(session_action_state.can_edit_configuration)
+        self.advanced_tools_action.setEnabled(True)
 
         if self.warnings:
             self.warnings_view.setPlainText("\n".join(self.warnings))
@@ -612,10 +696,11 @@ class MainWindow(QMainWindow):
         self.preflight_diag_summary_label.setText(preflight_summary)
         self.preflight_diag_counts_label.setText(preflight_counts)
         self._refresh_preflight_findings_table(preflight_rows)
+        self._update_preflight_toggle_caption(len(preflight_rows))
         runtime_snapshot = self.session_controller.get_backend_runtime_snapshot()
-        self._refresh_serial_runtime_views(runtime_snapshot)
-        self._refresh_udp_runtime_views(runtime_snapshot)
-        self._refresh_nodes_views()
+        self._refresh_runtime_views(runtime_snapshot, force=True)
+        if self._is_nodes_view_visible() or self._session_snapshot.state is not SessionState.RUNNING:
+            self._refresh_nodes_views()
 
         self.statusBar().showMessage(
             f"{preflight_status} | {session_status_summary} | {self._session_snapshot.message}"
@@ -759,15 +844,96 @@ class MainWindow(QMainWindow):
             return
 
         runtime_snapshot = self.session_controller.get_backend_runtime_snapshot()
+        self._refresh_runtime_views(runtime_snapshot)
+        if self._is_nodes_view_visible():
+            self._refresh_nodes_views()
+
+    def _on_tab_changed(self, _index: int) -> None:
+        if self._is_nodes_view_visible():
+            self._refresh_nodes_views()
+            return
+        if self._is_runtime_view_visible():
+            runtime_snapshot = self.session_controller.get_backend_runtime_snapshot()
+            self._refresh_runtime_views(runtime_snapshot, force=True)
+
+    def show_session_details_dialog(self) -> None:
+        if self._details_dialog is None:
+            self._create_session_details_dialog()
+        if self._details_dialog is None:
+            return
+        self._details_dialog.show()
+        self._details_dialog.raise_()
+        self._details_dialog.activateWindow()
+        self._reflow_details_cards(force=True)
+
+    def show_diagnostics_tab(self) -> None:
+        self.tabs.setCurrentWidget(self.diagnostics_tab)
+
+    def show_about_dialog(self) -> None:
+        version = self.cfg.get("version")
+        version_text = str(version) if version is not None else "No disponible"
+        QMessageBox.about(
+            self,
+            "Acerca de",
+            (
+                "Control OKÚA v2\n"
+                f"Versión de configuración: {version_text}\n\n"
+                "Aplicación de operación para monitoreo de nodos OKÚA,\n"
+                "control de sesión serial/UDP y ruteo MIDI por caja."
+            ),
+        )
+
+    def _on_preflight_toggle_button(self, checked: bool) -> None:
+        self._set_preflight_panel_visible(checked)
+
+    def _on_preflight_toggle_action(self, checked: bool) -> None:
+        if checked:
+            self.show_diagnostics_tab()
+        self._set_preflight_panel_visible(checked)
+
+    def _set_preflight_panel_visible(self, visible: bool) -> None:
+        self._preflight_panel_visible = bool(visible)
+        self.preflight_group.setVisible(self._preflight_panel_visible)
+        if self.preflight_toggle_button.isChecked() != self._preflight_panel_visible:
+            self.preflight_toggle_button.setChecked(self._preflight_panel_visible)
+        if self.toggle_preflight_action.isChecked() != self._preflight_panel_visible:
+            self.toggle_preflight_action.setChecked(self._preflight_panel_visible)
+
+    def _update_preflight_toggle_caption(self, findings_count: int) -> None:
+        if findings_count > 0:
+            base = f"Errores / preflight ({findings_count})"
+        else:
+            base = "Errores / preflight"
+        if self._preflight_panel_visible:
+            button_text = f"Ocultar {base.lower()}"
+        else:
+            button_text = f"Ver {base.lower()}"
+        self.preflight_toggle_button.setText(button_text)
+        self.toggle_preflight_action.setText(base)
+
+    def _is_runtime_view_visible(self) -> bool:
+        current_widget = self.tabs.currentWidget()
+        return current_widget in {self.operation_tab, self.diagnostics_tab}
+
+    def _is_nodes_view_visible(self) -> bool:
+        return self.tabs.currentWidget() is self.nodes_tab
+
+    def _refresh_runtime_views(self, runtime_snapshot: object | None, *, force: bool = False) -> None:
+        if not force and not self._is_runtime_view_visible():
+            return
+
+        mode = self._session_snapshot.mode
         backend = self._session_snapshot.backend
         is_serial_backend = backend is not None and backend.value == "serial"
-        is_udp_mode = self._session_snapshot.mode == "udp"
+        is_udp_runtime = mode == "udp" or (backend is not None and backend.value in {"udp", "lab"})
+
+        self.serial_runtime_group.setVisible(is_serial_backend)
+        self.udp_runtime_group.setVisible(is_udp_runtime)
 
         if is_serial_backend:
             self._refresh_serial_runtime_views(runtime_snapshot)
-        if is_udp_mode:
+        if is_udp_runtime:
             self._refresh_udp_runtime_views(runtime_snapshot)
-            self._refresh_nodes_views()
 
     def _refresh_preflight_findings_table(self, rows: list[PreflightDiagnosticRow]) -> None:
         self.preflight_findings_table.setRowCount(len(rows))
@@ -874,13 +1040,90 @@ class MainWindow(QMainWindow):
             shown_nodes=len(snapshots),
         )
 
-        if self._node_table_model is not None:
-            self._node_table_model.set_snapshots(
-                snapshots,
-                now_monotonic=now_monotonic,
-            )
-
+        self._refresh_nodes_tree(snapshots, now_monotonic=now_monotonic)
         self._apply_nodes_view_state(view_state)
+
+    def _refresh_nodes_tree(self, snapshots: list[object], *, now_monotonic: float) -> None:
+        box_expanded_state = self._capture_node_box_expanded_state()
+        self.nodes_tree.clear()
+
+        grouped: dict[int, list[object]] = {}
+        max_box = 0
+        for snapshot in snapshots:
+            identity = resolve_node_identity(getattr(snapshot, "node_id", None))
+            box_index = identity.box_index
+            if box_index is None:
+                continue
+            grouped.setdefault(box_index, []).append(snapshot)
+            max_box = max(max_box, box_index)
+
+        total_boxes = max(5, max_box)
+        for box_index in range(1, total_boxes + 1):
+            children = grouped.get(box_index, [])
+            parent_text = f"Caja {box_index} ({len(children)})"
+            parent_item = QTreeWidgetItem([parent_text])
+            parent_item.setData(0, Qt.UserRole, box_index)
+            parent_item.setFirstColumnSpanned(True)
+            self.nodes_tree.addTopLevelItem(parent_item)
+
+            for snapshot in children:
+                identity = resolve_node_identity(getattr(snapshot, "node_id", None))
+                child_item = QTreeWidgetItem(
+                    [
+                        identity.node_label,
+                        format_node_status(snapshot),
+                        format_node_last_seen(snapshot, now_monotonic=now_monotonic),
+                        format_node_pps(snapshot),
+                        format_node_loss(snapshot),
+                        format_node_rssi(snapshot),
+                        format_node_last_note_velocity(snapshot),
+                    ]
+                )
+                node_id = getattr(snapshot, "node_id", None)
+                if node_id is not None:
+                    child_item.setToolTip(
+                        0,
+                        (
+                            f"node_id={node_id} | {identity.box_label} | "
+                            f"bus MIDI={identity.midi_bus}"
+                        ),
+                    )
+                status_key = str(getattr(getattr(snapshot, "status", None), "value", "")).lower()
+                if status_key == "online":
+                    child_item.setForeground(1, QBrush(QColor("#2F9E44")))
+                elif status_key == "degraded":
+                    child_item.setForeground(1, QBrush(QColor("#E67700")))
+                else:
+                    child_item.setForeground(1, QBrush(QColor("#C92A2A")))
+                parent_item.addChild(child_item)
+
+            previous_expanded = box_expanded_state.get(box_index)
+            if previous_expanded is None:
+                parent_item.setExpanded(len(children) > 0)
+            else:
+                parent_item.setExpanded(previous_expanded)
+
+        self._adjust_nodes_tree_columns()
+
+    def _capture_node_box_expanded_state(self) -> dict[int, bool]:
+        state: dict[int, bool] = self._node_box_expanded.copy()
+        for index in range(self.nodes_tree.topLevelItemCount()):
+            item = self.nodes_tree.topLevelItem(index)
+            raw_box_index = item.data(0, Qt.UserRole)
+            if isinstance(raw_box_index, int):
+                state[raw_box_index] = item.isExpanded()
+        self._node_box_expanded = state.copy()
+        return state
+
+    def _on_node_box_expanded(self, item: QTreeWidgetItem) -> None:
+        raw_box_index = item.data(0, Qt.UserRole)
+        if isinstance(raw_box_index, int):
+            self._node_box_expanded[raw_box_index] = True
+
+    def _on_node_box_collapsed(self, item: QTreeWidgetItem) -> None:
+        raw_box_index = item.data(0, Qt.UserRole)
+        if isinstance(raw_box_index, int):
+            self._node_box_expanded[raw_box_index] = False
 
     @staticmethod
     def _set_compact_wordwrap_label(label: QLabel) -> None:
@@ -895,5 +1138,51 @@ class MainWindow(QMainWindow):
         self.nodes_hint_label.setText(view_state.hint)
         self.nodes_summary_label.setText(view_state.summary)
         show_table = bool(view_state.show_table)
-        self.nodes_table.setVisible(show_table)
+        self.nodes_tree.setVisible(show_table)
         self.nodes_empty_state_group.setVisible(not show_table)
+        if show_table:
+            self._adjust_nodes_tree_columns()
+
+    def _configure_nodes_tree_columns(self) -> None:
+        header = self.nodes_tree.header()
+        header.setStretchLastSection(False)
+        header.setMinimumSectionSize(72)
+        for col in range(self.nodes_tree.columnCount()):
+            header.setSectionResizeMode(col, QHeaderView.Interactive)
+            min_width = self._NODES_COLUMN_MIN_WIDTHS[col]
+            self.nodes_tree.setColumnWidth(col, min_width)
+
+    def _adjust_nodes_tree_columns(self) -> None:
+        if not hasattr(self, "nodes_tree"):
+            return
+        if self.nodes_tree.columnCount() <= 0:
+            return
+        available_width = self.nodes_tree.viewport().width()
+        if available_width <= 0:
+            return
+
+        column_count = self.nodes_tree.columnCount()
+        min_widths = list(self._NODES_COLUMN_MIN_WIDTHS[:column_count])
+        weights = list(self._NODES_COLUMN_WEIGHTS[:column_count])
+
+        # Respect content width for key identity/status columns before distributing.
+        self.nodes_tree.resizeColumnToContents(0)
+        self.nodes_tree.resizeColumnToContents(1)
+        min_widths[0] = max(min_widths[0], self.nodes_tree.columnWidth(0))
+        min_widths[1] = max(min_widths[1], self.nodes_tree.columnWidth(1))
+
+        target_widths = list(min_widths)
+        min_total = sum(min_widths)
+        if available_width > min_total:
+            extra = available_width - min_total
+            weighted_columns = [idx for idx, weight in enumerate(weights) if weight > 0]
+            total_weight = sum(weights[idx] for idx in weighted_columns)
+            if total_weight > 0:
+                for idx in weighted_columns:
+                    target_widths[idx] += (extra * weights[idx]) // total_weight
+            remainder = max(0, available_width - sum(target_widths))
+            if remainder > 0:
+                target_widths[-1] += remainder
+
+        for col, width in enumerate(target_widths):
+            self.nodes_tree.setColumnWidth(col, int(width))

@@ -42,6 +42,13 @@ from control_okua.app_qt.viewmodels.main_window_vm import (
     build_transport_summary,
     SessionActionState,
 )
+from control_okua.app_qt.viewmodels.node_presentation import (
+    NodePresentationIdentity,
+    resolve_node_box_label,
+    resolve_node_identity,
+    resolve_node_label,
+    resolve_node_sort_key,
+)
 
 __all__ = [
     "build_profile_summary",
@@ -86,4 +93,9 @@ __all__ = [
     "UdpRuntimeDiagnosticRow",
     "SessionActionState",
     "NodesTabViewState",
+    "NodePresentationIdentity",
+    "resolve_node_identity",
+    "resolve_node_label",
+    "resolve_node_box_label",
+    "resolve_node_sort_key",
 ]

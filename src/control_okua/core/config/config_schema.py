@@ -58,7 +58,7 @@ def default_config() -> dict[str, Any]:
             "outputs": DEFAULT_OUTPUTS.copy(),
         },
         "logging": {
-            "enabled": True,
+            "enabled": False,
             "folder": "logs",
             "format": "jsonl",
             "level": "INFO",

@@ -6,6 +6,7 @@ import time
 from typing import Any, Callable, Protocol
 
 from control_okua.core.midi import MidiRouter
+from control_okua.core.node_identity_policy import resolve_node_midi_bus
 from control_okua.core.registry import (
     NodeRegistry,
     NodeRegistrySummary,
@@ -116,9 +117,15 @@ class UdpBackendRuntimeSnapshot:
     transport: UdpTransportSnapshot | None
 
 
-def route_udp_evt_to_midi_router(router: MidiRouterLike, packet: OkuaEvtPacket) -> None:
+def route_udp_evt_to_midi_router(
+    router: MidiRouterLike,
+    packet: OkuaEvtPacket,
+    *,
+    bus: int | None = None,
+) -> None:
+    effective_bus = int(bus) if bus is not None else resolve_node_midi_bus(packet.header.node_id)
     router.send_note_on(
-        bus=packet.midi_bus,
+        bus=effective_bus,
         ch=packet.midi_ch,
         note=packet.note,
         vel=packet.vel,
@@ -342,11 +349,14 @@ class UdpSessionBackend:
         router = self._router
         if router is None:
             return
+        effective_bus = resolve_node_midi_bus(event.packet.header.node_id)
 
         evt_payload = {
             "node_id": int(event.packet.header.node_id),
             "seq": int(event.packet.header.seq),
-            "midi_bus": int(event.packet.midi_bus),
+            # Precedence is explicit: bus derives from node_id -> caja -> midi_bus.
+            "midi_bus": int(effective_bus),
+            "packet_midi_bus": int(event.packet.midi_bus),
             "midi_ch": int(event.packet.midi_ch),
             "note": int(event.packet.note),
             "vel": int(event.packet.vel),
@@ -365,7 +375,7 @@ class UdpSessionBackend:
             {
                 "source": "udp_evt",
                 "event_kind": midi_event_kind,
-                "bus": int(event.packet.midi_bus),
+                "bus": int(effective_bus),
                 "channel": int(event.packet.midi_ch),
                 "note": int(event.packet.note),
                 "velocity": int(event.packet.vel),
@@ -379,7 +389,7 @@ class UdpSessionBackend:
                 self._node_registry.observe_evt(event.packet, received_at=event.received_ts)
 
         try:
-            route_udp_evt_to_midi_router(router, event.packet)
+            route_udp_evt_to_midi_router(router, event.packet, bus=effective_bus)
         except Exception as exc:
             with self._lock:
                 self._last_error = f"Error enrutando EVT UDP a MIDI: {exc}"
@@ -388,7 +398,7 @@ class UdpSessionBackend:
         with self._lock:
             self._messages_routed += 1
             self._last_activity_ts = self._clock()
-            self._last_evt = _build_evt_summary(event)
+            self._last_evt = _build_evt_summary(event, midi_bus=effective_bus)
             self._capture_transport_snapshot_locked()
 
     def _on_stat_packet(self, event: UdpReceivedStatPacket) -> None:
@@ -460,12 +470,17 @@ def _is_udp_compatible_spec(spec: SessionSpec) -> bool:
     return spec.backend in {BackendKind.UDP, BackendKind.LAB}
 
 
-def _build_evt_summary(event: UdpReceivedEvtPacket) -> UdpEvtRuntimeSummary:
+def _build_evt_summary(
+    event: UdpReceivedEvtPacket,
+    *,
+    midi_bus: int | None = None,
+) -> UdpEvtRuntimeSummary:
     packet: OkuaEvtPacket = event.packet
+    effective_bus = int(midi_bus) if midi_bus is not None else resolve_node_midi_bus(packet.header.node_id)
     return UdpEvtRuntimeSummary(
         node_id=packet.header.node_id,
         seq=packet.header.seq,
-        midi_bus=packet.midi_bus,
+        midi_bus=effective_bus,
         midi_ch=packet.midi_ch,
         note=packet.note,
         vel=packet.vel,
