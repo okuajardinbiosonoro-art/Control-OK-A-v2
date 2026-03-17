@@ -11,7 +11,7 @@ Ticket 13.1 scope in this folder:
 - packed `OKUA_CMD` and `OKUA_ACK` models (28 bytes each)
 - baseline enums/constants for later command handling
 
-No command execution/auth/replay/rate-limit handlers are active yet.
+No command execution handlers are active yet.
 
 Ticket 13.2 adds UDP CMD receive parsing + structural validation/classification
 without ACK emission and without command execution.
@@ -19,5 +19,6 @@ without ACK emission and without command execution.
 Local Wi-Fi secrets override:
 
 - defaults in repo: `WIFI_SSID="OKUA_CORE"` and `WIFI_PASS="CHANGE_ME"`
+- default control secret in repo: `OKUA_CONTROL_SECRET="CHANGE_ME_CONTROL_SECRET"`
 - optional local override: `firmware/okua_node_udp_v1/okua_node_secrets.h`
 - template: `firmware/okua_node_udp_v1/okua_node_secrets.example.h`

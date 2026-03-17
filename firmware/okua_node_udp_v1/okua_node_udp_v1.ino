@@ -81,6 +81,10 @@
 #define WIFI_PASS    "CHANGE_ME"
 #endif
 
+#ifndef OKUA_CONTROL_SECRET
+#define OKUA_CONTROL_SECRET "CHANGE_ME_CONTROL_SECRET"
+#endif
+
 #define WIFI_CHANNEL 13
 
 // PC destino para EVT/STAT en la LAN OKUA
@@ -190,19 +194,20 @@ static const uint8_t FRUIT_ROUTE_COUNT = sizeof(FRUIT_ROUTES) / sizeof(FRUIT_ROU
 #include <esp_wifi.h>
 #include <math.h>
 #include <string.h>
+#include <mbedtls/md.h>
 
 #include "okua_control_plane.h"
 
 
 /*============================================================================================
-  ZONA 7 — CONTROL-PLANE (TICKET 13.3)
+  ZONA 7 — CONTROL-PLANE (TICKET 13.4)
 ============================================================================================*/
 
 // Todos los modelos binarios, enums y tamanos de protocolo quedaron centralizados en:
 //   - okua_control_plane.h
 //
-// En este ticket se implementa parser RX + emision inicial de ACK.
-// Aun NO se implementan auth, nonce validation, anti-replay/rate-limit ni handlers.
+// En este ticket se implementa parser RX + ACK + seguridad minima operativa.
+// Aun NO se implementan handlers ni ejecucion real de comandos.
 
 
 /*============================================================================================
@@ -324,9 +329,344 @@ struct ParsedCmdFrame {
   bool is_for_this_node;
 };
 
-// Last parsed frame/result kept for future ACK pipeline (Ticket 13.3).
+// Last parsed frame/result kept for control-plane traceability.
 CmdParseResult g_lastCmdParseResult = CMD_PARSE_NONE;
 ParsedCmdFrame g_lastParsedCmdFrame = {};
+
+static const uint8_t CONTROL_SOURCE_STATE_CAP = 8;
+static const uint16_t CONTROL_ACK_CACHE_CAP = 128;
+static const uint32_t CONTROL_ACK_CACHE_TTL_MS = 120000UL;
+static const uint8_t CONTROL_REPLAY_WINDOW_NONCES = 128;
+static const float CONTROL_RATE_LIMIT_CAPACITY = 10.0f;
+static const float CONTROL_RATE_LIMIT_REFILL_PER_SEC = 1.0f;
+static const uint8_t ACK_FLAG_DUPLICATE = 0x01;
+static const uint8_t ACK_FLAG_BROADCAST_RESPONSE = 0x02;
+
+enum ReplayDecision : uint8_t {
+  REPLAY_ACCEPT = 0,
+  REPLAY_REUSED,
+  REPLAY_OUT_OF_WINDOW,
+};
+
+struct ControlSourceState {
+  bool used;
+  IPAddress src_ip;
+  uint32_t last_seen_ms;
+  bool replay_initialized;
+  uint64_t replay_max_nonce;
+  uint64_t replay_seen_lo;
+  uint64_t replay_seen_hi;
+  float rl_tokens;
+  uint32_t rl_last_refill_ms;
+};
+
+struct CachedCmdAck {
+  bool used;
+  IPAddress src_ip;
+  uint16_t cmd_seq;
+  uint64_t nonce;
+  uint8_t cmd_id;
+  uint16_t arg0;
+  uint16_t arg1;
+  uint32_t expires_at_ms;
+  OkuaAckPacket ack_packet;
+};
+
+ControlSourceState g_control_sources[CONTROL_SOURCE_STATE_CAP] = {};
+CachedCmdAck g_cmd_ack_cache[CONTROL_ACK_CACHE_CAP] = {};
+
+static inline bool ipAddressEquals(const IPAddress& a, const IPAddress& b) {
+  return a == b;
+}
+
+static inline bool millisReached(uint32_t now_ms, uint32_t when_ms) {
+  return (int32_t)(now_ms - when_ms) >= 0;
+}
+
+static inline uint32_t u32FromLeBytes(const uint8_t* b) {
+  return (uint32_t)b[0] |
+         ((uint32_t)b[1] << 8) |
+         ((uint32_t)b[2] << 16) |
+         ((uint32_t)b[3] << 24);
+}
+
+static inline bool constantTimeEqU32(uint32_t a, uint32_t b) {
+  uint8_t diff = 0;
+  diff |= (uint8_t)((a >> 0) & 0xFF) ^ (uint8_t)((b >> 0) & 0xFF);
+  diff |= (uint8_t)((a >> 8) & 0xFF) ^ (uint8_t)((b >> 8) & 0xFF);
+  diff |= (uint8_t)((a >> 16) & 0xFF) ^ (uint8_t)((b >> 16) & 0xFF);
+  diff |= (uint8_t)((a >> 24) & 0xFF) ^ (uint8_t)((b >> 24) & 0xFF);
+  return diff == 0;
+}
+
+bool computeHmacSha256(const uint8_t* msg, size_t msg_len, uint8_t out_digest[32]) {
+  const mbedtls_md_info_t* md_info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+  if (md_info == nullptr) return false;
+
+  const uint8_t* key = (const uint8_t*)OKUA_CONTROL_SECRET;
+  const size_t key_len = strlen(OKUA_CONTROL_SECRET);
+  int rc = mbedtls_md_hmac(md_info, key, key_len, msg, msg_len, out_digest);
+  return rc == 0;
+}
+
+bool computeCmdAuthTag32(const OkuaCmdPacket& cmd, uint32_t* out_tag32) {
+  if (out_tag32 == nullptr) return false;
+  uint8_t digest[32] = {};
+  if (!computeHmacSha256((const uint8_t*)&cmd, 24, digest)) return false;
+  *out_tag32 = u32FromLeBytes(digest);
+  return true;
+}
+
+bool computeAckAuthTag32(const OkuaAckPacket& ack, uint32_t* out_tag32) {
+  if (out_tag32 == nullptr) return false;
+  uint8_t digest[32] = {};
+  if (!computeHmacSha256((const uint8_t*)&ack, 24, digest)) return false;
+  *out_tag32 = u32FromLeBytes(digest);
+  return true;
+}
+
+bool isCmdAuthTagValid(const OkuaCmdPacket& cmd) {
+  uint32_t expected = 0;
+  if (!computeCmdAuthTag32(cmd, &expected)) return false;
+  return constantTimeEqU32(expected, cmd.auth_tag32);
+}
+
+bool setAckAuthTag32(OkuaAckPacket* ack) {
+  if (ack == nullptr) return false;
+  uint32_t tag = 0;
+  if (!computeAckAuthTag32(*ack, &tag)) return false;
+  ack->auth_tag32 = tag;
+  return true;
+}
+
+ControlSourceState* getOrCreateControlSourceState(const IPAddress& src_ip, uint32_t now_ms) {
+  ControlSourceState* free_slot = nullptr;
+  ControlSourceState* oldest_slot = nullptr;
+
+  for (uint8_t i = 0; i < CONTROL_SOURCE_STATE_CAP; ++i) {
+    ControlSourceState* s = &g_control_sources[i];
+    if (s->used) {
+      if (ipAddressEquals(s->src_ip, src_ip)) {
+        s->last_seen_ms = now_ms;
+        return s;
+      }
+      if ((oldest_slot == nullptr) || millisReached(oldest_slot->last_seen_ms, s->last_seen_ms)) {
+        oldest_slot = s;
+      }
+    } else if (free_slot == nullptr) {
+      free_slot = s;
+    }
+  }
+
+  ControlSourceState* chosen = (free_slot != nullptr) ? free_slot : oldest_slot;
+  if (chosen == nullptr) return nullptr;
+
+  *chosen = {};
+  chosen->used = true;
+  chosen->src_ip = src_ip;
+  chosen->last_seen_ms = now_ms;
+  chosen->replay_initialized = false;
+  chosen->replay_max_nonce = 0;
+  chosen->replay_seen_lo = 0;
+  chosen->replay_seen_hi = 0;
+  chosen->rl_tokens = CONTROL_RATE_LIMIT_CAPACITY;
+  chosen->rl_last_refill_ms = now_ms;
+  return chosen;
+}
+
+static inline void replayShiftWindow(ControlSourceState* state, uint64_t shift_bits) {
+  if (state == nullptr) return;
+  if (shift_bits >= CONTROL_REPLAY_WINDOW_NONCES) {
+    state->replay_seen_lo = 0;
+    state->replay_seen_hi = 0;
+    return;
+  }
+
+  if (shift_bits >= 64) {
+    const uint64_t k = shift_bits - 64;
+    state->replay_seen_hi = (k == 0) ? state->replay_seen_lo : (state->replay_seen_lo << k);
+    state->replay_seen_lo = 0;
+    return;
+  }
+
+  if (shift_bits > 0) {
+    state->replay_seen_hi = (state->replay_seen_hi << shift_bits) | (state->replay_seen_lo >> (64 - shift_bits));
+    state->replay_seen_lo <<= shift_bits;
+  }
+}
+
+static inline bool replayIsSeen(const ControlSourceState* state, uint8_t delta) {
+  if (state == nullptr) return false;
+  if (delta < 64) {
+    return ((state->replay_seen_lo >> delta) & 1ULL) != 0ULL;
+  }
+  return ((state->replay_seen_hi >> (delta - 64)) & 1ULL) != 0ULL;
+}
+
+static inline void replayMarkSeen(ControlSourceState* state, uint8_t delta) {
+  if (state == nullptr) return;
+  if (delta < 64) {
+    state->replay_seen_lo |= (1ULL << delta);
+    return;
+  }
+  state->replay_seen_hi |= (1ULL << (delta - 64));
+}
+
+ReplayDecision evaluateAndRecordNonce(ControlSourceState* state, uint64_t nonce) {
+  if (state == nullptr) return REPLAY_OUT_OF_WINDOW;
+
+  if (!state->replay_initialized) {
+    state->replay_initialized = true;
+    state->replay_max_nonce = nonce;
+    state->replay_seen_lo = 1ULL;
+    state->replay_seen_hi = 0ULL;
+    return REPLAY_ACCEPT;
+  }
+
+  if (nonce > state->replay_max_nonce) {
+    const uint64_t diff = nonce - state->replay_max_nonce;
+    replayShiftWindow(state, diff);
+    state->replay_max_nonce = nonce;
+    replayMarkSeen(state, 0);
+    return REPLAY_ACCEPT;
+  }
+
+  const uint64_t delta64 = state->replay_max_nonce - nonce;
+  if (delta64 >= CONTROL_REPLAY_WINDOW_NONCES) {
+    return REPLAY_OUT_OF_WINDOW;
+  }
+
+  const uint8_t delta = (uint8_t)delta64;
+  if (replayIsSeen(state, delta)) {
+    return REPLAY_REUSED;
+  }
+
+  replayMarkSeen(state, delta);
+  return REPLAY_ACCEPT;
+}
+
+void refillRateLimitTokens(ControlSourceState* state, uint32_t now_ms) {
+  if (state == nullptr) return;
+  const uint32_t elapsed_ms = now_ms - state->rl_last_refill_ms;
+  if (elapsed_ms == 0) return;
+
+  const float refill = ((float)elapsed_ms / 1000.0f) * CONTROL_RATE_LIMIT_REFILL_PER_SEC;
+  state->rl_tokens += refill;
+  if (state->rl_tokens > CONTROL_RATE_LIMIT_CAPACITY) {
+    state->rl_tokens = CONTROL_RATE_LIMIT_CAPACITY;
+  }
+  state->rl_last_refill_ms = now_ms;
+}
+
+bool consumeRateLimitToken(ControlSourceState* state, uint32_t now_ms, uint16_t* out_retry_after_ms) {
+  if (state == nullptr) return false;
+  if (out_retry_after_ms != nullptr) *out_retry_after_ms = 0;
+
+  refillRateLimitTokens(state, now_ms);
+
+  if (state->rl_tokens >= 1.0f) {
+    state->rl_tokens -= 1.0f;
+    return true;
+  }
+
+  const float deficit = 1.0f - state->rl_tokens;
+  uint32_t retry_after_ms = (uint32_t)ceilf((deficit / CONTROL_RATE_LIMIT_REFILL_PER_SEC) * 1000.0f);
+  if (retry_after_ms == 0) retry_after_ms = 1;
+  if (retry_after_ms > 65535UL) retry_after_ms = 65535UL;
+  if (out_retry_after_ms != nullptr) {
+    *out_retry_after_ms = (uint16_t)retry_after_ms;
+  }
+  return false;
+}
+
+void applyAckFlagsForFrame(const ParsedCmdFrame& frame, OkuaAckPacket* ack) {
+  if (ack == nullptr) return;
+  if (frame.is_broadcast) {
+    ack->ack_flags |= ACK_FLAG_BROADCAST_RESPONSE;
+  } else {
+    ack->ack_flags &= (uint8_t)~ACK_FLAG_BROADCAST_RESPONSE;
+  }
+}
+
+void cleanupExpiredAckCache(uint32_t now_ms) {
+  for (uint16_t i = 0; i < CONTROL_ACK_CACHE_CAP; ++i) {
+    CachedCmdAck* e = &g_cmd_ack_cache[i];
+    if (!e->used) continue;
+    if (millisReached(now_ms, e->expires_at_ms)) {
+      e->used = false;
+    }
+  }
+}
+
+static inline bool cacheKeyEquals(const CachedCmdAck& e, const ParsedCmdFrame& frame) {
+  return ipAddressEquals(e.src_ip, frame.src_ip) &&
+         e.cmd_seq == frame.packet.hdr.seq &&
+         e.nonce == frame.packet.nonce &&
+         e.cmd_id == frame.packet.cmd_id &&
+         e.arg0 == frame.packet.arg0 &&
+         e.arg1 == frame.packet.arg1;
+}
+
+CachedCmdAck* findExactAckCacheEntry(const ParsedCmdFrame& frame, uint32_t now_ms) {
+  cleanupExpiredAckCache(now_ms);
+  for (uint16_t i = 0; i < CONTROL_ACK_CACHE_CAP; ++i) {
+    CachedCmdAck* e = &g_cmd_ack_cache[i];
+    if (!e->used) continue;
+    if (cacheKeyEquals(*e, frame)) return e;
+  }
+  return nullptr;
+}
+
+bool hasNonceSeqConflictInCache(const ParsedCmdFrame& frame, uint32_t now_ms) {
+  cleanupExpiredAckCache(now_ms);
+  for (uint16_t i = 0; i < CONTROL_ACK_CACHE_CAP; ++i) {
+    const CachedCmdAck& e = g_cmd_ack_cache[i];
+    if (!e.used) continue;
+    if (!ipAddressEquals(e.src_ip, frame.src_ip)) continue;
+    if (e.cmd_seq != frame.packet.hdr.seq) continue;
+    if (e.nonce != frame.packet.nonce) continue;
+    if (e.cmd_id == frame.packet.cmd_id &&
+        e.arg0 == frame.packet.arg0 &&
+        e.arg1 == frame.packet.arg1) {
+      continue;
+    }
+    return true;
+  }
+  return false;
+}
+
+void storeAckCacheEntry(const ParsedCmdFrame& frame, const OkuaAckPacket& ack, uint32_t now_ms) {
+  cleanupExpiredAckCache(now_ms);
+
+  CachedCmdAck* target = findExactAckCacheEntry(frame, now_ms);
+  if (target == nullptr) {
+    for (uint16_t i = 0; i < CONTROL_ACK_CACHE_CAP; ++i) {
+      if (!g_cmd_ack_cache[i].used) {
+        target = &g_cmd_ack_cache[i];
+        break;
+      }
+    }
+  }
+
+  if (target == nullptr) {
+    target = &g_cmd_ack_cache[0];
+    for (uint16_t i = 1; i < CONTROL_ACK_CACHE_CAP; ++i) {
+      if (millisReached(target->expires_at_ms, g_cmd_ack_cache[i].expires_at_ms)) {
+        target = &g_cmd_ack_cache[i];
+      }
+    }
+  }
+
+  target->used = true;
+  target->src_ip = frame.src_ip;
+  target->cmd_seq = frame.packet.hdr.seq;
+  target->nonce = frame.packet.nonce;
+  target->cmd_id = frame.packet.cmd_id;
+  target->arg0 = frame.packet.arg0;
+  target->arg1 = frame.packet.arg1;
+  target->expires_at_ms = now_ms + CONTROL_ACK_CACHE_TTL_MS;
+  target->ack_packet = ack;
+}
 
 static inline bool okuaIsKnownCmdId(uint8_t cmd_id) {
   switch (cmd_id) {
@@ -464,9 +804,9 @@ void fillAckForParseResult(const ParsedCmdFrame& frame, OkuaAckPacket* ack) {
       frame.packet.cmd_id,   // cmd_id echo
       frame.packet.nonce);   // nonce echo
 
-  // Ticket 13.3: no security yet.
   ack->auth_tag32 = 0;
   ack->retry_after_ms = 0;
+  applyAckFlagsForFrame(frame, ack);
 
   switch (frame.result) {
     case CMD_PARSE_OK_UNICAST:
@@ -500,6 +840,118 @@ void fillAckForParseResult(const ParsedCmdFrame& frame, OkuaAckPacket* ack) {
       ack->err_detail = OKUA_ERR_MALFORMED_PACKET;
       break;
   }
+}
+
+void fillSecurityRejectionAck(
+    const ParsedCmdFrame& frame,
+    uint8_t status_code,
+    uint16_t err_detail,
+    uint16_t retry_after_ms,
+    OkuaAckPacket* ack) {
+  if (ack == nullptr) return;
+
+  okuaInitAckSkeleton(
+      ack,
+      NODE_ID,
+      frame.packet.hdr.seq,  // cmd_seq echo
+      frame.packet.cmd_id,   // cmd_id echo
+      frame.packet.nonce);   // nonce echo
+
+  ack->ack_stage = OKUA_ACK_STAGE_REJECTED;
+  ack->status_code = status_code;
+  ack->err_detail = err_detail;
+  ack->retry_after_ms = retry_after_ms;
+  ack->auth_tag32 = 0;
+  applyAckFlagsForFrame(frame, ack);
+}
+
+bool buildAckForFrameWithSecurity(const ParsedCmdFrame& frame, OkuaAckPacket* ack) {
+  if (ack == nullptr) return false;
+
+  const uint32_t now_ms = millis();
+
+  if (!isCmdAuthTagValid(frame.packet)) {
+    fillSecurityRejectionAck(
+        frame,
+        OKUA_STATUS_INVALID_AUTH,
+        OKUA_ERR_AUTH_TAG_MISMATCH,
+        0,
+        ack);
+    return setAckAuthTag32(ack);
+  }
+
+  ControlSourceState* src_state = getOrCreateControlSourceState(frame.src_ip, now_ms);
+  if (src_state == nullptr) {
+    fillSecurityRejectionAck(
+        frame,
+        OKUA_STATUS_INTERNAL_ERROR,
+        OKUA_ERR_MALFORMED_PACKET,
+        0,
+        ack);
+    return setAckAuthTag32(ack);
+  }
+
+  CachedCmdAck* exact_dup = findExactAckCacheEntry(frame, now_ms);
+  if (exact_dup != nullptr) {
+    *ack = exact_dup->ack_packet;
+    applyAckFlagsForFrame(frame, ack);
+    ack->ack_flags |= ACK_FLAG_DUPLICATE;
+    return setAckAuthTag32(ack);
+  }
+
+  if (hasNonceSeqConflictInCache(frame, now_ms)) {
+    fillSecurityRejectionAck(
+        frame,
+        OKUA_STATUS_REPLAY_REJECTED,
+        OKUA_ERR_NONCE_REUSED,
+        0,
+        ack);
+    if (!setAckAuthTag32(ack)) return false;
+    storeAckCacheEntry(frame, *ack, now_ms);
+    return true;
+  }
+
+  ReplayDecision replay = evaluateAndRecordNonce(src_state, frame.packet.nonce);
+  if (replay == REPLAY_REUSED) {
+    fillSecurityRejectionAck(
+        frame,
+        OKUA_STATUS_REPLAY_REJECTED,
+        OKUA_ERR_NONCE_REUSED,
+        0,
+        ack);
+    if (!setAckAuthTag32(ack)) return false;
+    storeAckCacheEntry(frame, *ack, now_ms);
+    return true;
+  }
+  if (replay == REPLAY_OUT_OF_WINDOW) {
+    fillSecurityRejectionAck(
+        frame,
+        OKUA_STATUS_REPLAY_REJECTED,
+        OKUA_ERR_NONCE_OUT_OF_WINDOW,
+        0,
+        ack);
+    if (!setAckAuthTag32(ack)) return false;
+    storeAckCacheEntry(frame, *ack, now_ms);
+    return true;
+  }
+
+  uint16_t retry_after_ms = 0;
+  if (!consumeRateLimitToken(src_state, now_ms, &retry_after_ms)) {
+    fillSecurityRejectionAck(
+        frame,
+        OKUA_STATUS_RATE_LIMITED,
+        OKUA_ERR_RATE_LIMIT_EXCEEDED,
+        retry_after_ms,
+        ack);
+    if (!setAckAuthTag32(ack)) return false;
+    storeAckCacheEntry(frame, *ack, now_ms);
+    return true;
+  }
+
+  fillAckForParseResult(frame, ack);
+  if (!setAckAuthTag32(ack)) return false;
+  storeAckCacheEntry(frame, *ack, now_ms);
+  return true;
 }
 
 bool openUdpSocket() {
@@ -584,8 +1036,8 @@ bool sendOkuaAckTo(const IPAddress& dst_ip, const OkuaAckPacket& ack) {
   return sendUdpRawTo(dst_ip, (const uint8_t*)&ack, sizeof(ack), OKUA_ACK_PORT);
 }
 
-// Control-plane ingress for Ticket 13.3:
-// parse + structural validation + ACK policy/correlation only.
+// Control-plane ingress for Ticket 13.4:
+// parse + security checks + ACK policy/correlation.
 // No command execution yet.
 void serviceControlPlaneIngress() {
   ParsedCmdFrame frame;
@@ -598,7 +1050,7 @@ void serviceControlPlaneIngress() {
   if (!shouldEmitAckForParseResult(result)) return;
 
   OkuaAckPacket ack = {};
-  fillAckForParseResult(frame, &ack);
+  if (!buildAckForFrameWithSecurity(frame, &ack)) return;
 
   // ACK destination for F3 is source_ip + fixed ACK port (not source port).
   sendOkuaAckTo(frame.src_ip, ack);
@@ -1156,7 +1608,7 @@ void setup() {
 void loop() {
   ensureLink();
 
-  // Parser CMD + ACK correlacionado basico (Ticket 13.3, sin handlers).
+  // Parser CMD + ACK + seguridad minima (Ticket 13.4, sin handlers).
   serviceControlPlaneIngress();
 
   // Limpiar flags transitorios de reconnect una vez enlazado
