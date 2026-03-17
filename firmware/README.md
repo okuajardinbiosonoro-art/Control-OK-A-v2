@@ -12,3 +12,6 @@ Ticket 13.1 scope in this folder:
 - baseline enums/constants for later command handling
 
 No command execution/auth/replay/rate-limit handlers are active yet.
+
+Ticket 13.2 adds UDP CMD receive parsing + structural validation/classification
+without ACK emission and without command execution.

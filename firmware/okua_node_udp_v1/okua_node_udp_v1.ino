@@ -175,19 +175,20 @@ static const uint8_t FRUIT_ROUTE_COUNT = sizeof(FRUIT_ROUTES) / sizeof(FRUIT_ROU
 #include <WiFiUdp.h>
 #include <esp_wifi.h>
 #include <math.h>
+#include <string.h>
 
 #include "okua_control_plane.h"
 
 
 /*============================================================================================
-  ZONA 7 — CONTROL-PLANE (TICKET 13.1)
+  ZONA 7 — CONTROL-PLANE (TICKET 13.2)
 ============================================================================================*/
 
 // Todos los modelos binarios, enums y tamanos de protocolo quedaron centralizados en:
 //   - okua_control_plane.h
 //
-// En este ticket NO se implementa parser completo, auth, nonce, anti-replay
-// ni handlers de comandos. Solo se alinea base de puertos/modelos para 13.2.
+// En este ticket se implementa parser RX y validacion estructural de CMD.
+// Aun NO se implementan ACK, auth, nonce, anti-replay ni handlers de comandos.
 
 
 /*============================================================================================
@@ -286,6 +287,137 @@ uint32_t g_lastEvtCounterResetMs = 0;
 
 uint8_t g_lastStateFlags = 0;
 
+enum CmdParseResult : uint8_t {
+  CMD_PARSE_NONE = 0,
+  CMD_PARSE_OK_UNICAST,
+  CMD_PARSE_OK_BROADCAST,
+  CMD_PARSE_DROP_NOT_FOR_ME,
+  CMD_PARSE_INVALID_SIZE,
+  CMD_PARSE_INVALID_MAGIC,
+  CMD_PARSE_INVALID_VERSION,
+  CMD_PARSE_INVALID_TYPE,
+  CMD_PARSE_UNSUPPORTED_CMD,
+};
+
+struct ParsedCmdFrame {
+  OkuaCmdPacket packet;
+  IPAddress src_ip;
+  uint16_t src_port;
+  uint16_t packet_size;
+  CmdParseResult result;
+  bool is_broadcast;
+  bool is_for_this_node;
+};
+
+// Last parsed frame/result kept for future ACK pipeline (Ticket 13.3).
+CmdParseResult g_lastCmdParseResult = CMD_PARSE_NONE;
+ParsedCmdFrame g_lastParsedCmdFrame = {};
+
+static inline bool okuaIsKnownCmdId(uint8_t cmd_id) {
+  switch (cmd_id) {
+    case OKUA_CMD_PING:
+    case OKUA_CMD_REBOOT_SOFT:
+    case OKUA_CMD_SET_PROFILE:
+    case OKUA_CMD_SET_THROTTLE:
+    case OKUA_CMD_SET_STAT_RATE:
+    case OKUA_CMD_SET_DEBUG:
+    case OKUA_CMD_REQUEST_STAT_NOW:
+      return true;
+    default:
+      return false;
+  }
+}
+
+static inline void initParsedCmdFrame(ParsedCmdFrame* frame) {
+  if (frame == nullptr) return;
+  *frame = {};
+  frame->result = CMD_PARSE_NONE;
+}
+
+// Reads exactly one UDP datagram when available and always drains any remainder.
+// Returns read bytes copied to buffer (0 when no datagram is available).
+int readIncomingCmdDatagram(
+    uint8_t* buffer,
+    size_t buffer_len,
+    IPAddress* src_ip,
+    uint16_t* src_port,
+    uint16_t* packet_size) {
+  int parsedSize = g_udp.parsePacket();
+  if (parsedSize <= 0) return 0;
+
+  if (src_ip != nullptr) *src_ip = g_udp.remoteIP();
+  if (src_port != nullptr) *src_port = g_udp.remotePort();
+  if (packet_size != nullptr) {
+    *packet_size = (parsedSize > 65535) ? 65535 : (uint16_t)parsedSize;
+  }
+
+  int toRead = parsedSize;
+  if (toRead > (int)buffer_len) toRead = (int)buffer_len;
+
+  int readBytes = g_udp.read(buffer, (size_t)toRead);
+  while (g_udp.available() > 0) {
+    g_udp.read();
+  }
+  return readBytes;
+}
+
+CmdParseResult parseIncomingCmdFrame(ParsedCmdFrame* frame) {
+  if (frame == nullptr) return CMD_PARSE_NONE;
+  initParsedCmdFrame(frame);
+  if (!g_udpBegun) return frame->result;
+
+  uint8_t rawCmd[OKUA_CMD_SIZE];
+  int readBytes = readIncomingCmdDatagram(
+      rawCmd,
+      sizeof(rawCmd),
+      &frame->src_ip,
+      &frame->src_port,
+      &frame->packet_size);
+
+  if (readBytes <= 0) {
+    return frame->result;
+  }
+
+  if (!okuaIsCmdPacketSizeValid((size_t)frame->packet_size) ||
+      readBytes != (int)OKUA_CMD_SIZE) {
+    frame->result = CMD_PARSE_INVALID_SIZE;
+    return frame->result;
+  }
+
+  memcpy(&frame->packet, rawCmd, sizeof(OkuaCmdPacket));
+
+  if (frame->packet.hdr.magic != OKUA_MAGIC) {
+    frame->result = CMD_PARSE_INVALID_MAGIC;
+    return frame->result;
+  }
+
+  if (frame->packet.hdr.ver != OKUA_PROTOCOL_VERSION) {
+    frame->result = CMD_PARSE_INVALID_VERSION;
+    return frame->result;
+  }
+
+  if (frame->packet.hdr.type != OKUA_TYPE_CMD) {
+    frame->result = CMD_PARSE_INVALID_TYPE;
+    return frame->result;
+  }
+
+  frame->is_broadcast = (frame->packet.hdr.node_id == 0);
+  frame->is_for_this_node = (frame->packet.hdr.node_id == NODE_ID);
+
+  if (!frame->is_broadcast && !frame->is_for_this_node) {
+    frame->result = CMD_PARSE_DROP_NOT_FOR_ME;
+    return frame->result;
+  }
+
+  if (!okuaIsKnownCmdId(frame->packet.cmd_id)) {
+    frame->result = CMD_PARSE_UNSUPPORTED_CMD;
+    return frame->result;
+  }
+
+  frame->result = frame->is_broadcast ? CMD_PARSE_OK_BROADCAST : CMD_PARSE_OK_UNICAST;
+  return frame->result;
+}
+
 bool openUdpSocket() {
   g_udp.stop();
   delay(10);
@@ -363,32 +495,16 @@ bool sendUdpRaw(const uint8_t* data, size_t len, uint16_t port) {
   return sendUdpRawTo(PC_IP, data, len, port);
 }
 
-// Stub de ingreso de comandos para dejar punto de integracion de Ticket 13.2.
-// No valida auth/nonce ni ejecuta handlers.
-void serviceControlPlaneIngressStub() {
-  if (!g_udpBegun) return;
+// Control-plane ingress for Ticket 13.2:
+// parse + structural validation + classification only.
+// No ACK emit and no command execution yet.
+void serviceControlPlaneIngress() {
+  ParsedCmdFrame frame;
+  CmdParseResult result = parseIncomingCmdFrame(&frame);
+  if (result == CMD_PARSE_NONE) return;
 
-  int packetSize = g_udp.parsePacket();
-  if (packetSize <= 0) return;
-
-  IPAddress srcIp = g_udp.remoteIP();
-  uint16_t srcPort = g_udp.remotePort();
-  (void)srcIp;
-  (void)srcPort;
-
-  uint8_t scratch[OKUA_CMD_SIZE];
-  int toRead = packetSize;
-  if (toRead > (int)sizeof(scratch)) toRead = (int)sizeof(scratch);
-  int readBytes = g_udp.read(scratch, (size_t)toRead);
-  (void)readBytes;
-
-  while (g_udp.available() > 0) {
-    g_udp.read();
-  }
-
-  if (okuaIsCmdPacketSizeValid((size_t)packetSize)) {
-    // Placeholder intentionally empty: parser/seguridad/handlers en Ticket 13.2.
-  }
+  g_lastParsedCmdFrame = frame;
+  g_lastCmdParseResult = result;
 }
 
 
@@ -943,8 +1059,8 @@ void setup() {
 void loop() {
   ensureLink();
 
-  // Punto de extension para control-plane (sin funcionalidad CMD en 13.1).
-  serviceControlPlaneIngressStub();
+  // Parser CMD + validacion estructural (Ticket 13.2, sin ACK/handlers).
+  serviceControlPlaneIngress();
 
   // Limpiar flags transitorios de reconnect una vez enlazado
   if (WiFi.status() == WL_CONNECTED) {
