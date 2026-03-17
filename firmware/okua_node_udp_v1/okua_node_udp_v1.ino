@@ -195,14 +195,14 @@ static const uint8_t FRUIT_ROUTE_COUNT = sizeof(FRUIT_ROUTES) / sizeof(FRUIT_ROU
 
 
 /*============================================================================================
-  ZONA 7 — CONTROL-PLANE (TICKET 13.2)
+  ZONA 7 — CONTROL-PLANE (TICKET 13.3)
 ============================================================================================*/
 
 // Todos los modelos binarios, enums y tamanos de protocolo quedaron centralizados en:
 //   - okua_control_plane.h
 //
-// En este ticket se implementa parser RX y validacion estructural de CMD.
-// Aun NO se implementan ACK, auth, nonce, anti-replay ni handlers de comandos.
+// En este ticket se implementa parser RX + emision inicial de ACK.
+// Aun NO se implementan auth, nonce validation, anti-replay/rate-limit ni handlers.
 
 
 /*============================================================================================
@@ -442,6 +442,66 @@ CmdParseResult parseIncomingCmdFrame(ParsedCmdFrame* frame) {
   return frame->result;
 }
 
+static inline bool shouldEmitAckForParseResult(CmdParseResult result) {
+  switch (result) {
+    case CMD_PARSE_OK_UNICAST:
+    case CMD_PARSE_OK_BROADCAST:
+    case CMD_PARSE_UNSUPPORTED_CMD:
+    case CMD_PARSE_BROADCAST_NOT_ALLOWED:
+      return true;
+    default:
+      return false;
+  }
+}
+
+void fillAckForParseResult(const ParsedCmdFrame& frame, OkuaAckPacket* ack) {
+  if (ack == nullptr) return;
+
+  okuaInitAckSkeleton(
+      ack,
+      NODE_ID,
+      frame.packet.hdr.seq,  // cmd_seq echo
+      frame.packet.cmd_id,   // cmd_id echo
+      frame.packet.nonce);   // nonce echo
+
+  // Ticket 13.3: no security yet.
+  ack->auth_tag32 = 0;
+  ack->retry_after_ms = 0;
+
+  switch (frame.result) {
+    case CMD_PARSE_OK_UNICAST:
+      ack->ack_stage = OKUA_ACK_STAGE_ACCEPTED;
+      ack->status_code = OKUA_STATUS_OK;
+      ack->err_detail = OKUA_ERR_NONE;
+      break;
+
+    case CMD_PARSE_OK_BROADCAST:
+      ack->ack_stage = OKUA_ACK_STAGE_ACCEPTED;
+      ack->status_code = OKUA_STATUS_OK;
+      ack->err_detail = OKUA_ERR_NONE;
+      break;
+
+    case CMD_PARSE_UNSUPPORTED_CMD:
+      ack->ack_stage = OKUA_ACK_STAGE_REJECTED;
+      ack->status_code = OKUA_STATUS_UNSUPPORTED_CMD;
+      ack->err_detail = OKUA_ERR_NONE;
+      break;
+
+    case CMD_PARSE_BROADCAST_NOT_ALLOWED:
+      ack->ack_stage = OKUA_ACK_STAGE_REJECTED;
+      ack->status_code = OKUA_STATUS_INVALID_ARG;
+      ack->err_detail = OKUA_ERR_BROADCAST_NOT_ALLOWED;
+      break;
+
+    default:
+      // Should never be emitted, but keep deterministic fallback.
+      ack->ack_stage = OKUA_ACK_STAGE_REJECTED;
+      ack->status_code = OKUA_STATUS_INTERNAL_ERROR;
+      ack->err_detail = OKUA_ERR_MALFORMED_PACKET;
+      break;
+  }
+}
+
 bool openUdpSocket() {
   g_udp.stop();
   delay(10);
@@ -519,9 +579,14 @@ bool sendUdpRaw(const uint8_t* data, size_t len, uint16_t port) {
   return sendUdpRawTo(PC_IP, data, len, port);
 }
 
-// Control-plane ingress for Ticket 13.2:
-// parse + structural validation + classification only.
-// No ACK emit and no command execution yet.
+bool sendOkuaAckTo(const IPAddress& dst_ip, const OkuaAckPacket& ack) {
+  if (!okuaIsAckPacketSizeValid(sizeof(OkuaAckPacket))) return false;
+  return sendUdpRawTo(dst_ip, (const uint8_t*)&ack, sizeof(ack), OKUA_ACK_PORT);
+}
+
+// Control-plane ingress for Ticket 13.3:
+// parse + structural validation + ACK policy/correlation only.
+// No command execution yet.
 void serviceControlPlaneIngress() {
   ParsedCmdFrame frame;
   CmdParseResult result = parseIncomingCmdFrame(&frame);
@@ -529,6 +594,14 @@ void serviceControlPlaneIngress() {
 
   g_lastParsedCmdFrame = frame;
   g_lastCmdParseResult = result;
+
+  if (!shouldEmitAckForParseResult(result)) return;
+
+  OkuaAckPacket ack = {};
+  fillAckForParseResult(frame, &ack);
+
+  // ACK destination for F3 is source_ip + fixed ACK port (not source port).
+  sendOkuaAckTo(frame.src_ip, ack);
 }
 
 
@@ -1083,7 +1156,7 @@ void setup() {
 void loop() {
   ensureLink();
 
-  // Parser CMD + validacion estructural (Ticket 13.2, sin ACK/handlers).
+  // Parser CMD + ACK correlacionado basico (Ticket 13.3, sin handlers).
   serviceControlPlaneIngress();
 
   // Limpiar flags transitorios de reconnect una vez enlazado
