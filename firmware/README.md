@@ -15,3 +15,9 @@ No command execution/auth/replay/rate-limit handlers are active yet.
 
 Ticket 13.2 adds UDP CMD receive parsing + structural validation/classification
 without ACK emission and without command execution.
+
+Local Wi-Fi secrets override:
+
+- defaults in repo: `WIFI_SSID="OKUA_CORE"` and `WIFI_PASS="CHANGE_ME"`
+- optional local override: `firmware/okua_node_udp_v1/okua_node_secrets.h`
+- template: `firmware/okua_node_udp_v1/okua_node_secrets.example.h`

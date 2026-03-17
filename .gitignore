@@ -221,3 +221,6 @@ src/control_okua/app_qt/widgets/
 # OKUA runtime outputs
 logs/
 
+# Firmware local secrets (do not commit real Wi-Fi credentials)
+firmware/okua_node_udp_v1/okua_node_secrets.h
+

@@ -64,9 +64,23 @@
 // Ejemplo EB1 = 11, EC1 = 12, EF1 = 15
 #define NODE_ID 16
 
-// WiFi
-#define WIFI_SSID    "MikroTik-E46997"
-#define WIFI_PASS    "ZXLXT4P6LE"
+// WiFi (safe defaults for versioned repository).
+// Local overrides can be provided in a non-tracked file:
+//   firmware/okua_node_udp_v1/okua_node_secrets.h
+#if defined(__has_include)
+#if __has_include("okua_node_secrets.h")
+#include "okua_node_secrets.h"
+#endif
+#endif
+
+#ifndef WIFI_SSID
+#define WIFI_SSID    "OKUA_CORE"
+#endif
+
+#ifndef WIFI_PASS
+#define WIFI_PASS    "CHANGE_ME"
+#endif
+
 #define WIFI_CHANNEL 13
 
 // PC destino para EVT/STAT en la LAN OKUA
@@ -291,6 +305,7 @@ enum CmdParseResult : uint8_t {
   CMD_PARSE_NONE = 0,
   CMD_PARSE_OK_UNICAST,
   CMD_PARSE_OK_BROADCAST,
+  CMD_PARSE_BROADCAST_NOT_ALLOWED,
   CMD_PARSE_DROP_NOT_FOR_ME,
   CMD_PARSE_INVALID_SIZE,
   CMD_PARSE_INVALID_MAGIC,
@@ -326,6 +341,10 @@ static inline bool okuaIsKnownCmdId(uint8_t cmd_id) {
     default:
       return false;
   }
+}
+
+static inline bool okuaIsBroadcastAllowedCmdId(uint8_t cmd_id) {
+  return (cmd_id == OKUA_CMD_PING) || (cmd_id == OKUA_CMD_REQUEST_STAT_NOW);
 }
 
 static inline void initParsedCmdFrame(ParsedCmdFrame* frame) {
@@ -411,6 +430,11 @@ CmdParseResult parseIncomingCmdFrame(ParsedCmdFrame* frame) {
 
   if (!okuaIsKnownCmdId(frame->packet.cmd_id)) {
     frame->result = CMD_PARSE_UNSUPPORTED_CMD;
+    return frame->result;
+  }
+
+  if (frame->is_broadcast && !okuaIsBroadcastAllowedCmdId(frame->packet.cmd_id)) {
+    frame->result = CMD_PARSE_BROADCAST_NOT_ALLOWED;
     return frame->result;
   }
 
