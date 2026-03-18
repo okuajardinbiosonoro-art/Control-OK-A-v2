@@ -168,6 +168,15 @@ Campos principales:
 - `midi.outputs`: mapping explicito de buses (`"0"`..`"255"`) a nombre de puerto.
 - `thresholds`: `online_ms < degraded_ms < offline_ms`.
 
+## Control Plane F3 (Ticket 14.1)
+
+- El emisor app-side de `OKUA_CMD` usa secreto compartido via entorno:
+  - `CKV2_CONTROL_SECRET` (preferido)
+  - `CKV2_CONTROL_SECRET_FILE` (ruta opcional a archivo local no trackeado)
+- Si no hay secreto configurado, el servicio de comandos falla de forma explicita y no envia paquetes.
+- El estado local de nonce (`last_control_epoch_s`) se persiste en `control_plane_state.json` para mantener monotonia entre reinicios.
+- En este ticket, el servicio es estrictamente send-only al `CMD_PORT=5007` y no abre listener de `ACK_PORT=5008`.
+
 Notas de consistencia runtime:
 
 - Si `profile.active` es `null` o invalido, la app pide seleccionar perfil al iniciar.

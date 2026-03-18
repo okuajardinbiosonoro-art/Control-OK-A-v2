@@ -1,3 +1,10 @@
+from control_okua.services.cmd_service import (
+    CmdService,
+    CmdServiceConfigError,
+    CmdServiceError,
+    CmdServiceSendError,
+    SentOkuaCommand,
+)
 from control_okua.services.session_backend_factory import (
     BackendUnavailableError,
     SessionBackendError,
@@ -9,6 +16,11 @@ from control_okua.services.session_backend_factory import (
 from control_okua.services.session_controller import SessionController
 
 __all__ = [
+    "CmdService",
+    "CmdServiceError",
+    "CmdServiceConfigError",
+    "CmdServiceSendError",
+    "SentOkuaCommand",
     "BackendUnavailableError",
     "SessionBackendError",
     "SessionBackendFactory",

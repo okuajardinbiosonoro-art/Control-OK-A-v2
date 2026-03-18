@@ -211,6 +211,7 @@ __marimo__/
 config.json
 config.*.*.json
 !config.example.json
+control_plane_state.json
 
 # OKUA dev artifacts (screenshots, evidence)
 artifacts/
