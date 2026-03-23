@@ -27,6 +27,10 @@ from control_okua.app_qt.viewmodels.control_plane_vm import (
     format_control_transaction_result,
     resolve_control_command_policy,
 )
+from control_okua.app_qt.viewmodels.control_plane_snapshot_view import (
+    ControlPlaneSnapshotView,
+    build_control_plane_snapshot_view,
+)
 from control_okua.services.control_transaction_service import ControlTransactionResult
 
 
@@ -105,6 +109,11 @@ class ControlPlanePanel(QWidget):
         self._active_policy_text = ""
         self._last_waiting_hint_run = 0
         self._section_warning_shown = False
+        self._identity_labels: dict[str, QLabel] = {}
+        self._transaction_labels: dict[str, QLabel] = {}
+        self._ack_labels: dict[str, QLabel] = {}
+        self._reboot_labels: dict[str, QLabel] = {}
+        self._runtime_labels: dict[str, QLabel] = {}
 
         root = QVBoxLayout(self)
 
@@ -136,6 +145,7 @@ class ControlPlanePanel(QWidget):
         )
         self.target_help_label.setWordWrap(True)
         group_layout.addWidget(self.target_help_label)
+        self._build_snapshot_groups(group_layout)
 
         policy_layout = QFormLayout()
         self.policy_title_label = QLabel("Política automática por comando.", self)
@@ -242,6 +252,178 @@ class ControlPlanePanel(QWidget):
             ),
             QMessageBox.StandardButton.Ok,
         )
+
+    def _build_snapshot_groups(self, group_layout: QVBoxLayout) -> None:
+        self.snapshot_identity_group = QGroupBox("Identidad y resolución", self)
+        identity_form = QFormLayout(self.snapshot_identity_group)
+        self._identity_labels = self._create_form_labels(
+            identity_form,
+            (
+                ("node_id", "Node ID"),
+                ("label", "Label"),
+                ("resolved_ip", "IP resuelta"),
+                ("resolution_status", "Estado de resolución"),
+                ("resolution_age", "Antigüedad"),
+                ("resolution_message", "Mensaje"),
+                ("backend_message", "Mensaje backend"),
+            ),
+        )
+        group_layout.addWidget(self.snapshot_identity_group)
+
+        self.snapshot_transaction_group = QGroupBox("Transacción actual / última", self)
+        tx_form = QFormLayout(self.snapshot_transaction_group)
+        self._transaction_labels = self._create_form_labels(
+            tx_form,
+            (
+                ("transaction_active", "Transacción activa"),
+                ("last_command", "Último comando"),
+                ("last_cmd_seq", "Último cmd_seq"),
+                ("last_nonce", "Último nonce"),
+                ("last_final_status", "Último resultado final"),
+                ("last_error", "Último error"),
+                ("last_tx_started", "Inicio última transacción"),
+                ("last_tx_finished", "Fin última transacción"),
+            ),
+        )
+        group_layout.addWidget(self.snapshot_transaction_group)
+
+        self.snapshot_ack_group = QGroupBox("ACK", self)
+        ack_form = QFormLayout(self.snapshot_ack_group)
+        self._ack_labels = self._create_form_labels(
+            ack_form,
+            (
+                ("ack_stage", "ACK stage"),
+                ("status_code", "status_code"),
+                ("err_detail", "err_detail"),
+                ("ack_message", "Resumen"),
+            ),
+        )
+        group_layout.addWidget(self.snapshot_ack_group)
+
+        self.snapshot_reboot_group = QGroupBox("Reboot verification", self)
+        reboot_form = QFormLayout(self.snapshot_reboot_group)
+        self._reboot_labels = self._create_form_labels(
+            reboot_form,
+            (
+                ("reboot_status", "Estado"),
+                ("reboot_summary", "Resumen"),
+            ),
+        )
+        group_layout.addWidget(self.snapshot_reboot_group)
+
+        self.snapshot_runtime_group = QGroupBox("Métricas runtime", self)
+        runtime_form = QFormLayout(self.snapshot_runtime_group)
+        self._runtime_labels = self._create_form_labels(
+            runtime_form,
+            (
+                ("uptime", "uptime"),
+                ("reset_reason", "reset_reason"),
+                ("boot_marker", "boot_marker"),
+            ),
+        )
+        group_layout.addWidget(self.snapshot_runtime_group)
+
+    @staticmethod
+    def _create_form_labels(
+        layout: QFormLayout,
+        fields: tuple[tuple[str, str], ...],
+    ) -> dict[str, QLabel]:
+        labels: dict[str, QLabel] = {}
+        for key, title in fields:
+            value = QLabel("-")
+            value.setWordWrap(True)
+            layout.addRow(title, value)
+            labels[key] = value
+        return labels
+
+    def _refresh_selected_snapshot_view(self) -> None:
+        node_id = self._selected_node_id()
+        selected = self._selected_node_option()
+        snapshot = self._get_node_snapshot(node_id)
+        view = build_control_plane_snapshot_view(
+            node_id=node_id,
+            snapshot=snapshot,
+            fallback_label=None if selected is None else selected.node_label,
+        )
+        self._apply_snapshot_view(view)
+
+    def _apply_snapshot_view(self, view: ControlPlaneSnapshotView) -> None:
+        self._set_label_value(self._identity_labels, "node_id", view.node_id_text)
+        self._set_label_value(self._identity_labels, "label", view.label_text)
+        self._set_label_value(self._identity_labels, "resolved_ip", view.resolved_ip_text)
+        self._set_label_value(
+            self._identity_labels,
+            "resolution_status",
+            view.resolution_status_text,
+        )
+        self._set_label_value(self._identity_labels, "resolution_age", view.resolution_age_text)
+        self._set_label_value(
+            self._identity_labels,
+            "resolution_message",
+            view.resolution_message_text,
+        )
+        self._set_label_value(
+            self._identity_labels,
+            "backend_message",
+            view.backend_message_text,
+        )
+
+        self._set_label_value(
+            self._transaction_labels,
+            "transaction_active",
+            view.transaction_active_text,
+        )
+        self._set_label_value(self._transaction_labels, "last_command", view.last_command_text)
+        self._set_label_value(self._transaction_labels, "last_cmd_seq", view.last_cmd_seq_text)
+        self._set_label_value(self._transaction_labels, "last_nonce", view.last_nonce_text)
+        self._set_label_value(
+            self._transaction_labels,
+            "last_final_status",
+            view.last_final_status_text,
+        )
+        self._set_label_value(self._transaction_labels, "last_error", view.last_error_text)
+        self._set_label_value(
+            self._transaction_labels,
+            "last_tx_started",
+            view.last_tx_started_text,
+        )
+        self._set_label_value(
+            self._transaction_labels,
+            "last_tx_finished",
+            view.last_tx_finished_text,
+        )
+
+        self._set_label_value(self._ack_labels, "ack_stage", view.ack_stage_text)
+        self._set_label_value(self._ack_labels, "status_code", view.ack_status_code_text)
+        self._set_label_value(self._ack_labels, "err_detail", view.ack_err_detail_text)
+        self._set_label_value(self._ack_labels, "ack_message", view.ack_message_text)
+
+        self._set_label_value(self._reboot_labels, "reboot_status", view.reboot_status_text)
+        self._set_label_value(self._reboot_labels, "reboot_summary", view.reboot_summary_text)
+
+        self._set_label_value(self._runtime_labels, "uptime", view.uptime_text)
+        self._set_label_value(self._runtime_labels, "reset_reason", view.reset_reason_text)
+        self._set_label_value(self._runtime_labels, "boot_marker", view.boot_marker_text)
+
+        self._apply_resolution_hint_visuals(view)
+
+    @staticmethod
+    def _set_label_value(labels: dict[str, QLabel], key: str, value: str) -> None:
+        label = labels.get(key)
+        if label is None:
+            return
+        label.setText(value)
+
+    def _apply_resolution_hint_visuals(self, view: ControlPlaneSnapshotView) -> None:
+        message_label = self._identity_labels.get("resolution_message")
+        if message_label is None:
+            return
+        if view.is_unresolved:
+            message_label.setStyleSheet("font-weight: 600;")
+        elif view.is_stale:
+            message_label.setStyleSheet("font-weight: 600;")
+        else:
+            message_label.setStyleSheet("")
 
     def _run_transaction(
         self,
@@ -405,6 +587,7 @@ class ControlPlanePanel(QWidget):
                     f"[{self._now_hms()}] RUN {self._active_run_index} | {reboot_feedback}"
                 )
             self.status_label.setText(f"REBOOT_SOFT: {reboot_feedback}")
+        self._refresh_selected_snapshot_view()
 
     @Slot()
     def _on_thread_finished(self) -> None:
@@ -444,6 +627,7 @@ class ControlPlanePanel(QWidget):
             self.node_selector_combo.setCurrentIndex(selected_index)
         self.node_selector_combo.blockSignals(False)
         self._update_selected_node_label()
+        self._refresh_selected_snapshot_view()
 
     def _selected_node_id(self) -> int:
         if self.node_selector_combo.count() <= 0:
@@ -473,6 +657,7 @@ class ControlPlanePanel(QWidget):
     @Slot(int)
     def _on_node_selection_changed(self, _index: int) -> None:
         self._update_selected_node_label()
+        self._refresh_selected_snapshot_view()
 
     def _append_log(self, line: str) -> None:
         current = self.result_view.toPlainText().rstrip()
@@ -775,13 +960,7 @@ class ControlPlanePanel(QWidget):
         )
 
     def _read_node_uptime_s(self, node_id: int) -> int | None:
-        provider = self._node_snapshot_provider
-        if provider is None:
-            return None
-        try:
-            snapshot = provider(int(node_id))
-        except Exception:
-            return None
+        snapshot = self._get_node_snapshot(node_id)
         if snapshot is None:
             return None
         raw = getattr(snapshot, "last_uptime_s", None)
@@ -794,13 +973,7 @@ class ControlPlanePanel(QWidget):
         return value
 
     def _read_node_reset_reason(self, node_id: int) -> int | None:
-        provider = self._node_snapshot_provider
-        if provider is None:
-            return None
-        try:
-            snapshot = provider(int(node_id))
-        except Exception:
-            return None
+        snapshot = self._get_node_snapshot(node_id)
         if snapshot is None:
             return None
         raw = getattr(snapshot, "last_reset_reason", None)
@@ -815,13 +988,7 @@ class ControlPlanePanel(QWidget):
         return value
 
     def _read_node_boot_marker(self, node_id: int) -> int | None:
-        provider = self._node_snapshot_provider
-        if provider is None:
-            return None
-        try:
-            snapshot = provider(int(node_id))
-        except Exception:
-            return None
+        snapshot = self._get_node_snapshot(node_id)
         if snapshot is None:
             return None
         direct_marker = getattr(snapshot, "last_boot_marker", None)
@@ -839,6 +1006,21 @@ class ControlPlanePanel(QWidget):
         if flags < 0 or flags > 0xFF:
             return None
         return (flags >> 4) & 0x0F
+
+    def _get_node_snapshot(self, node_id: int) -> object | None:
+        provider = self._node_snapshot_provider
+        if provider is None:
+            return None
+        try:
+            resolved_node_id = int(node_id)
+        except (TypeError, ValueError):
+            return None
+        if resolved_node_id <= 0:
+            return None
+        try:
+            return provider(resolved_node_id)
+        except Exception:
+            return None
 
     def _policy_summary_text(self) -> str:
         ping = resolve_control_command_policy("PING")
