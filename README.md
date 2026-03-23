@@ -216,6 +216,20 @@ Campos principales:
 - `REBOOT_SOFT` requiere confirmación explícita antes de enviar.
 - Durante ejecución, el panel deshabilita controles y mantiene la ventana responsive.
 
+## Control Plane F3 (Ticket 14.5)
+
+- Bloque app-side F3 mínimo consolidado para:
+  - `PING`
+  - `REQUEST_STAT_NOW`
+  - `REBOOT_SOFT`
+- Validación de cierre separada por niveles:
+  - nivel 1: local/fake (obligatorio)
+  - nivel 2: integración app-side por loopback UDP local
+  - nivel 3: nodo ESP32 real (cuando haya hardware disponible)
+- Se mantiene el alcance actual sin abrir `SET_*`.
+- Documento canónico de cierre del bloque:
+  - `docs/app/control_plane_f3_app_minimal.md`
+
 Notas de consistencia runtime:
 
 - Si `profile.active` es `null` o invalido, la app pide seleccionar perfil al iniciar.
