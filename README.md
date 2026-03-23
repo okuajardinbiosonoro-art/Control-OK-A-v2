@@ -177,6 +177,16 @@ Campos principales:
 - El estado local de nonce (`last_control_epoch_s`) se persiste en `control_plane_state.json` para mantener monotonia entre reinicios.
 - En este ticket, el servicio es estrictamente send-only al `CMD_PORT=5007` y no abre listener de `ACK_PORT=5008`.
 
+## Control Plane F3 (Ticket 14.2)
+
+- Existe `AckListenerService` aislado para `OKUA_ACK` con bind explícito en `ACK_PORT=5008`.
+- El parseo de ACK es estricto (`28 bytes`, `magic`, `version`, `type`) y clasifica datagramas inválidos.
+- Existe `PendingCommandStore` para correlación básica por `cmd_seq + cmd_id_echo + nonce_echo` con resultados:
+  - `MATCHED`
+  - `UNMATCHED_ACK`
+  - `INVALID_ACK`
+- Aún no se implementan timeout/retry ni auditoría persistente final (quedan para 14.3+).
+
 Notas de consistencia runtime:
 
 - Si `profile.active` es `null` o invalido, la app pide seleccionar perfil al iniciar.

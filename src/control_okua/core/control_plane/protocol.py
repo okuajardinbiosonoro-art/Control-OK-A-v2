@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import struct
-from enum import IntEnum
+from dataclasses import dataclass
+from enum import Enum, IntEnum
 from typing import Final
 
 from control_okua.core.control_plane.auth import compute_auth_tag32
@@ -10,14 +11,17 @@ from control_okua.core.udp.packet_models import OKUA_MAGIC, OKUA_VERSION, OkuaPa
 OKUA_CMD_PORT: Final[int] = 5007
 OKUA_ACK_PORT: Final[int] = 5008
 OKUA_CMD_PACKET_SIZE: Final[int] = 28
+OKUA_ACK_PACKET_SIZE: Final[int] = 28
 
 OKUA_TYPE_CMD: Final[int] = int(OkuaPacketType.CMD)
+OKUA_TYPE_ACK: Final[int] = int(OkuaPacketType.ACK)
 
 CMD_FLAG_ACK_REQUIRED: Final[int] = 0x01
 CMD_FLAG_IS_RETRY: Final[int] = 0x02
 CMD_FLAG_BROADCAST_INTENT: Final[int] = 0x04
 
 _CMD_STRUCT = struct.Struct("<HBBHHBBHHQ2sI")
+_ACK_STRUCT = struct.Struct("<HBBHHBBBBHHQI")
 
 
 class OkuaCmdId(IntEnum):
@@ -40,6 +44,35 @@ class CmdSequenceManager:
     @property
     def next_value(self) -> int:
         return self._next_seq
+
+
+class AckParseErrorCode(str, Enum):
+    INVALID_SIZE = "invalid_size"
+    INVALID_MAGIC = "invalid_magic"
+    INVALID_VERSION = "invalid_version"
+    INVALID_TYPE = "invalid_type"
+
+
+class AckParseError(ValueError):
+    """Strict parse error for malformed OKUA_ACK datagrams."""
+
+    def __init__(self, code: AckParseErrorCode, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+@dataclass(frozen=True)
+class ParsedOkuaAck:
+    node_id_source: int
+    cmd_seq: int
+    cmd_id_echo: int
+    nonce_echo: int
+    ack_stage: int
+    status_code: int
+    ack_flags: int
+    err_detail: int
+    retry_after_ms: int
+    auth_tag32: int
 
 
 def build_okua_cmd_bytes(
@@ -186,6 +219,65 @@ def build_cmd_flags(*, is_retry: bool, broadcast_intent: bool) -> int:
     if broadcast_intent:
         flags |= CMD_FLAG_BROADCAST_INTENT
     return flags
+
+
+def parse_okua_ack_bytes(data: bytes | bytearray | memoryview) -> ParsedOkuaAck:
+    payload = bytes(data)
+    if len(payload) != OKUA_ACK_PACKET_SIZE:
+        raise AckParseError(
+            AckParseErrorCode.INVALID_SIZE,
+            (
+                f"ACK invalido: longitud {len(payload)} bytes "
+                f"(esperado {OKUA_ACK_PACKET_SIZE})."
+            ),
+        )
+
+    (
+        magic,
+        version,
+        packet_type,
+        node_id_source,
+        cmd_seq,
+        cmd_id_echo,
+        ack_stage,
+        status_code,
+        ack_flags,
+        err_detail,
+        retry_after_ms,
+        nonce_echo,
+        auth_tag32,
+    ) = _ACK_STRUCT.unpack(payload)
+
+    if magic != OKUA_MAGIC:
+        raise AckParseError(
+            AckParseErrorCode.INVALID_MAGIC,
+            f"ACK invalido: magic 0x{magic:04X} (esperado 0x{OKUA_MAGIC:04X}).",
+        )
+
+    if version != OKUA_VERSION:
+        raise AckParseError(
+            AckParseErrorCode.INVALID_VERSION,
+            f"ACK invalido: version {version} (esperada {OKUA_VERSION}).",
+        )
+
+    if packet_type != OKUA_TYPE_ACK:
+        raise AckParseError(
+            AckParseErrorCode.INVALID_TYPE,
+            f"ACK invalido: type {packet_type} (esperado {OKUA_TYPE_ACK}).",
+        )
+
+    return ParsedOkuaAck(
+        node_id_source=node_id_source,
+        cmd_seq=cmd_seq,
+        cmd_id_echo=cmd_id_echo,
+        nonce_echo=nonce_echo,
+        ack_stage=ack_stage,
+        status_code=status_code,
+        ack_flags=ack_flags,
+        err_detail=err_detail,
+        retry_after_ms=retry_after_ms,
+        auth_tag32=auth_tag32,
+    )
 
 
 def _validate_reboot_delay_ms(delay_ms: int) -> int:
