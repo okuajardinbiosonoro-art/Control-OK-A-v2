@@ -15,10 +15,16 @@ from control_okua.core.control_plane.runtime import (  # noqa: E402
     ControlPlaneNodeStatusSnapshot,
     ControlPlaneRuntimeSnapshot,
 )
+from control_okua.core.control_plane.protocol import ParsedOkuaAck  # noqa: E402
 from control_okua.core.control_plane.runtime_snapshot import (  # noqa: E402
+    ControlPlaneResolvedIp,
     ControlPlaneNodeResolutionStatus,
 )
 from control_okua.core.registry.node_models import NodeSnapshot, NodeStatus  # noqa: E402
+from control_okua.services.control_transaction_service import (  # noqa: E402
+    ControlTransactionFinalStatus,
+    ControlTransactionResult,
+)
 from control_okua.services.session_controller import SessionController  # noqa: E402
 
 
@@ -223,3 +229,219 @@ def test_session_controller_control_plane_snapshot_api_has_no_widget_dependency(
     assert single is not None
     assert single.node_id == 1
     assert single.resolution_status is ControlPlaneNodeResolutionStatus.UNRESOLVED
+
+
+@dataclass
+class _ControlRuntimeWriteBackStub:
+    runtime_snapshot: ControlPlaneRuntimeSnapshot
+    ping_result: ControlTransactionResult
+    request_stat_result: ControlTransactionResult
+
+    def snapshot(self) -> ControlPlaneRuntimeSnapshot:
+        return self.runtime_snapshot
+
+    def active_node_ids(self) -> tuple[int, ...]:
+        return tuple()
+
+    def send_ping(
+        self,
+        *,
+        node_id: int,
+        ack_timeout_ms: int = 350,
+        max_retries: int = 1,
+        source: str = "manual_ui",
+    ) -> ControlTransactionResult:
+        _ = (node_id, ack_timeout_ms, max_retries, source)
+        return self.ping_result
+
+    def send_request_stat_now(
+        self,
+        *,
+        node_id: int,
+        ack_timeout_ms: int = 350,
+        max_retries: int = 1,
+        source: str = "manual_ui",
+    ) -> ControlTransactionResult:
+        _ = (node_id, ack_timeout_ms, max_retries, source)
+        return self.request_stat_result
+
+    def send_reboot_soft(
+        self,
+        *,
+        node_id: int,
+        delay_ms: int = 0,
+        ack_timeout_ms: int = 350,
+        max_retries: int = 1,
+        source: str = "manual_ui",
+    ) -> ControlTransactionResult:
+        _ = (node_id, delay_ms, ack_timeout_ms, max_retries, source)
+        return self.request_stat_result
+
+
+def _ack(*, node_id: int, cmd_seq: int, cmd_id: int, nonce: int) -> ParsedOkuaAck:
+    return ParsedOkuaAck(
+        node_id_source=node_id,
+        cmd_seq=cmd_seq,
+        cmd_id_echo=cmd_id,
+        nonce_echo=nonce,
+        ack_stage=1,
+        status_code=0,
+        ack_flags=0,
+        err_detail=0,
+        retry_after_ms=0,
+        auth_tag32=0x11223344,
+    )
+
+
+def _tx_result(
+    *,
+    command_name: str,
+    cmd_id: int,
+    node_ip: str,
+    node_id: int,
+    cmd_seq: int,
+    nonce: int,
+    final_status: ControlTransactionFinalStatus,
+    ack: ParsedOkuaAck | None,
+    last_error: str | None,
+) -> ControlTransactionResult:
+    return ControlTransactionResult(
+        command_name=command_name,
+        cmd_id=cmd_id,
+        node_ip=node_ip,
+        node_id=node_id,
+        cmd_seq=cmd_seq,
+        nonce=nonce,
+        attempt_count=1,
+        final_status=final_status,
+        ack=ack,
+        matched_sent_command=None,
+        elapsed_ms=30.0,
+        last_error=last_error,
+        events=tuple(),
+    )
+
+
+def test_session_controller_write_back_uses_newer_result_even_if_runtime_snapshot_is_old() -> None:
+    old_runtime = ControlPlaneRuntimeSnapshot(
+        is_available=True,
+        listener_active=True,
+        ack_port=5008,
+        pending_count=0,
+        commands_sent_total=1,
+        command_retry_total=0,
+        command_ack_total=0,
+        command_timeout_total=1,
+        invalid_ack_total=0,
+        unmatched_ack_total=0,
+        last_command=None,
+        last_result=None,
+        per_node_last_status=(
+            ControlPlaneNodeStatusSnapshot(
+                node_id=1,
+                node_ip="10.0.0.1",
+                command_name="PING",
+                cmd_seq=100,
+                nonce=0xAAAA000000000100,
+                final_status="timeout",
+                ack_stage=None,
+                status_code=None,
+                err_detail=None,
+                last_error_message="Timeout viejo.",
+                tx_started_at_utc="2026-03-23T10:00:00.000Z",
+                tx_finished_at_utc="2026-03-23T10:00:01.000Z",
+                ts_utc="2026-03-23T10:00:01.000Z",
+            ),
+        ),
+        recent_results=tuple(),
+    )
+    ack_result = _tx_result(
+        command_name="PING",
+        cmd_id=0x01,
+        node_ip="10.0.0.1",
+        node_id=1,
+        cmd_seq=101,
+        nonce=0xAAAA000000000101,
+        final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ack=_ack(node_id=1, cmd_seq=101, cmd_id=0x01, nonce=0xAAAA000000000101),
+        last_error=None,
+    )
+    timeout_other_node = _tx_result(
+        command_name="PING",
+        cmd_id=0x01,
+        node_ip="10.0.0.3",
+        node_id=3,
+        cmd_seq=50,
+        nonce=0xBBBB000000000050,
+        final_status=ControlTransactionFinalStatus.TIMEOUT,
+        ack=None,
+        last_error="Timeout nodo 3.",
+    )
+    runtime = _ControlRuntimeWriteBackStub(
+        runtime_snapshot=old_runtime,
+        ping_result=ack_result,
+        request_stat_result=timeout_other_node,
+    )
+
+    controller = SessionController(_build_cfg())
+    controller._control_plane_runtime = runtime
+    controller._ensure_control_plane_runtime = lambda: runtime  # type: ignore[method-assign]
+    controller._control_plane_node_ip_cache[1] = ControlPlaneResolvedIp(
+        node_id=1,
+        ip="10.0.0.1",
+        observed_at_monotonic=99.0,
+    )
+    controller._control_plane_node_ip_cache[3] = ControlPlaneResolvedIp(
+        node_id=3,
+        ip="10.0.0.3",
+        observed_at_monotonic=99.0,
+    )
+
+    controller.send_control_ping(node_id=1, ack_timeout_ms=120, max_retries=0)
+    controller.send_control_request_stat_now(node_id=3, ack_timeout_ms=120, max_retries=0)
+
+    one = controller.get_control_plane_node_snapshot(node_id=1, now=100.0)
+    three = controller.get_control_plane_node_snapshot(node_id=3, now=100.0)
+    assert one is not None
+    assert three is not None
+    assert one.last_cmd_seq == 101
+    assert one.last_final_status == "ack_matched"
+    assert one.last_ack_stage == 1
+    assert one.last_error_message is None
+    assert three.last_cmd_seq == 50
+    assert three.last_final_status == "timeout"
+    assert three.last_ack_stage is None
+    assert "timeout" in (three.last_error_message or "").lower()
+
+
+def test_session_controller_write_back_state_is_session_scoped_and_cleared_on_reload() -> None:
+    controller = SessionController(_build_cfg())
+    controller._control_plane_tx_cache[1] = ControlPlaneNodeStatusSnapshot(
+        node_id=1,
+        node_ip="10.0.0.1",
+        command_name="PING",
+        cmd_seq=300,
+        nonce=0xAAAA000000000300,
+        final_status="ack_matched",
+        ack_stage=1,
+        status_code=0,
+        err_detail=0,
+        last_error_message=None,
+        tx_started_at_utc="2026-03-23T13:00:00.000Z",
+        tx_finished_at_utc="2026-03-23T13:00:00.200Z",
+        ts_utc="2026-03-23T13:00:00.200Z",
+    )
+    controller._control_plane_node_ip_cache[1] = ControlPlaneResolvedIp(
+        node_id=1,
+        ip="10.0.0.1",
+        observed_at_monotonic=99.0,
+    )
+
+    updated_snapshot = controller.reload_config(_build_cfg())
+    assert updated_snapshot is not None
+    assert controller._control_plane_tx_cache == {}
+
+    node = controller.get_control_plane_node_snapshot(node_id=1, now=100.0)
+    assert node is not None
+    assert node.last_cmd_seq is None
+    assert node.last_final_status is None

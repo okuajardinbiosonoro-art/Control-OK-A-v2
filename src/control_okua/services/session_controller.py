@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 import time
@@ -9,6 +10,7 @@ from typing import Any, Callable
 from PySide6.QtCore import QObject, Signal
 
 from control_okua.core.control_plane.runtime import (
+    ControlPlaneNodeStatusSnapshot,
     ControlPlaneRuntime,
     ControlPlaneRuntimeSnapshot,
     ControlPlaneRuntimeUnavailableError,
@@ -92,6 +94,7 @@ class SessionController(QObject):
         self._control_plane_runtime: ControlPlaneRuntime | None = None
         self._control_plane_node_ip_cache: dict[int, ControlPlaneResolvedIp] = {}
         self._control_plane_reboot_verification_cache: dict[int, ControlPlaneRebootVerificationState] = {}
+        self._control_plane_tx_cache: dict[int, ControlPlaneNodeStatusSnapshot] = {}
 
         initial_cfg = self._get_cfg()
         self._last_preflight_report = self._run_preflight(initial_cfg, emit_signal=False)
@@ -194,7 +197,8 @@ class SessionController(QObject):
         self._refresh_control_plane_node_ip_cache()
 
         runtime_snapshot = self.get_control_plane_runtime_snapshot()
-        node_status_map = self._build_control_plane_runtime_status_map(runtime_snapshot)
+        self._absorb_runtime_control_plane_status(runtime_snapshot)
+        node_status_map = dict(self._control_plane_tx_cache)
         active_node_ids = self._active_control_plane_node_ids()
 
         node_snapshot_list = self.get_node_snapshots(now=resolved_now)
@@ -212,7 +216,7 @@ class SessionController(QObject):
             node_snapshots_by_id[node_id] = snapshot
 
         node_ids.update(self._control_plane_node_ip_cache.keys())
-        node_ids.update(node_status_map.keys())
+        node_ids.update(self._control_plane_tx_cache.keys())
         node_ids.update(active_node_ids)
         node_ids.update(self._control_plane_reboot_verification_cache.keys())
 
@@ -251,7 +255,7 @@ class SessionController(QObject):
         resolved_now = self._resolve_monotonic_now(now)
         self._refresh_control_plane_node_ip_cache()
         runtime_snapshot = self.get_control_plane_runtime_snapshot()
-        node_status_map = self._build_control_plane_runtime_status_map(runtime_snapshot)
+        self._absorb_runtime_control_plane_status(runtime_snapshot)
         active_node_ids = self._active_control_plane_node_ids()
         runtime_node_snapshot = self.get_node_snapshot(node_id=resolved_node_id, now=resolved_now)
 
@@ -259,7 +263,7 @@ class SessionController(QObject):
             node_id=resolved_node_id,
             now_monotonic=resolved_now,
             runtime_node_snapshot=runtime_node_snapshot,
-            runtime_control_status=node_status_map.get(resolved_node_id),
+            runtime_control_status=self._control_plane_tx_cache.get(resolved_node_id),
             active_node_ids=active_node_ids,
         )
         try:
@@ -315,12 +319,14 @@ class SessionController(QObject):
         source: str = "manual_ui",
     ) -> ControlTransactionResult:
         runtime = self._ensure_control_plane_runtime()
-        return runtime.send_ping(
+        result = runtime.send_ping(
             node_id=node_id,
             ack_timeout_ms=ack_timeout_ms,
             max_retries=max_retries,
             source=source,
         )
+        self._record_control_plane_transaction_result(result=result, runtime=runtime)
+        return result
 
     def send_control_request_stat_now(
         self,
@@ -331,12 +337,14 @@ class SessionController(QObject):
         source: str = "manual_ui",
     ) -> ControlTransactionResult:
         runtime = self._ensure_control_plane_runtime()
-        return runtime.send_request_stat_now(
+        result = runtime.send_request_stat_now(
             node_id=node_id,
             ack_timeout_ms=ack_timeout_ms,
             max_retries=max_retries,
             source=source,
         )
+        self._record_control_plane_transaction_result(result=result, runtime=runtime)
+        return result
 
     def send_control_reboot_soft(
         self,
@@ -348,13 +356,15 @@ class SessionController(QObject):
         source: str = "manual_ui",
     ) -> ControlTransactionResult:
         runtime = self._ensure_control_plane_runtime()
-        return runtime.send_reboot_soft(
+        result = runtime.send_reboot_soft(
             node_id=node_id,
             delay_ms=delay_ms,
             ack_timeout_ms=ack_timeout_ms,
             max_retries=max_retries,
             source=source,
         )
+        self._record_control_plane_transaction_result(result=result, runtime=runtime)
+        return result
 
     def start_session(self) -> bool:
         transition = self._apply_transition(
@@ -366,6 +376,7 @@ class SessionController(QObject):
         self._shutdown_control_plane_runtime()
         self._control_plane_node_ip_cache.clear()
         self._control_plane_reboot_verification_cache.clear()
+        self._control_plane_tx_cache.clear()
 
         cfg = self._get_cfg()
         attempt_spec = self._resolve_spec_from_cfg(cfg)
@@ -510,6 +521,7 @@ class SessionController(QObject):
         self._shutdown_control_plane_runtime()
         self._control_plane_node_ip_cache.clear()
         self._control_plane_reboot_verification_cache.clear()
+        self._control_plane_tx_cache.clear()
         self._current_spec = self._resolve_spec()
         self._apply_transition(
             SessionEvent.BACKEND_STOPPED,
@@ -533,6 +545,7 @@ class SessionController(QObject):
         self._shutdown_control_plane_runtime()
         self._control_plane_node_ip_cache.clear()
         self._control_plane_reboot_verification_cache.clear()
+        self._control_plane_tx_cache.clear()
         self._active_backend = None
         cfg = self._get_cfg()
         preflight_report = self._run_preflight(cfg, emit_signal=True)
@@ -557,6 +570,7 @@ class SessionController(QObject):
         self._shutdown_control_plane_runtime()
         self._control_plane_node_ip_cache.clear()
         self._control_plane_reboot_verification_cache.clear()
+        self._control_plane_tx_cache.clear()
         cfg = self._get_cfg()
         preflight_report = self._run_preflight(cfg, emit_signal=True)
         self._current_spec = self._resolve_spec_from_cfg(cfg)
@@ -882,11 +896,11 @@ class SessionController(QObject):
     def _build_control_plane_runtime_status_map(
         self,
         runtime_snapshot: ControlPlaneRuntimeSnapshot,
-    ) -> dict[int, object]:
+    ) -> dict[int, ControlPlaneNodeStatusSnapshot]:
         rows = getattr(runtime_snapshot, "per_node_last_status", tuple())
         if not isinstance(rows, tuple):
             return {}
-        mapped: dict[int, object] = {}
+        mapped: dict[int, ControlPlaneNodeStatusSnapshot] = {}
         for row in rows:
             raw_node_id = getattr(row, "node_id", None)
             try:
@@ -895,8 +909,171 @@ class SessionController(QObject):
                 continue
             if node_id < 1 or node_id > 0xFFFF:
                 continue
+            if not isinstance(row, ControlPlaneNodeStatusSnapshot):
+                continue
             mapped[node_id] = row
         return mapped
+
+    def _absorb_runtime_control_plane_status(
+        self,
+        runtime_snapshot: ControlPlaneRuntimeSnapshot,
+    ) -> None:
+        mapped = self._build_control_plane_runtime_status_map(runtime_snapshot)
+        for row in mapped.values():
+            self._upsert_control_plane_tx_status(row)
+
+    def _record_control_plane_transaction_result(
+        self,
+        *,
+        result: ControlTransactionResult,
+        runtime: ControlPlaneRuntime | None = None,
+    ) -> None:
+        node_id = self._as_int_or_none(getattr(result, "node_id", None))
+        if node_id is None or node_id < 1 or node_id > 0xFFFF:
+            return
+
+        fallback_row = self._build_control_plane_status_row_from_result(result)
+        runtime_snapshot = self._safe_control_plane_runtime_snapshot(runtime)
+        if runtime_snapshot is not None:
+            mapped = self._build_control_plane_runtime_status_map(runtime_snapshot)
+            runtime_row = mapped.get(node_id)
+            if runtime_row is not None:
+                self._upsert_control_plane_tx_status(runtime_row)
+        self._upsert_control_plane_tx_status(fallback_row)
+
+    def _safe_control_plane_runtime_snapshot(
+        self,
+        runtime: ControlPlaneRuntime | None,
+    ) -> ControlPlaneRuntimeSnapshot | None:
+        if runtime is None:
+            return None
+        reader = getattr(runtime, "snapshot", None)
+        if not callable(reader):
+            return None
+        try:
+            snapshot = reader()
+        except Exception:
+            return None
+        if not isinstance(snapshot, ControlPlaneRuntimeSnapshot):
+            return None
+        return snapshot
+
+    def _build_control_plane_status_row_from_result(
+        self,
+        result: ControlTransactionResult,
+    ) -> ControlPlaneNodeStatusSnapshot:
+        now_utc = datetime.now(timezone.utc)
+        elapsed_ms = max(0.0, float(getattr(result, "elapsed_ms", 0.0)))
+        started_utc = now_utc - timedelta(milliseconds=elapsed_ms)
+        ack = getattr(result, "ack", None)
+        return ControlPlaneNodeStatusSnapshot(
+            node_id=int(result.node_id),
+            node_ip=str(result.node_ip),
+            command_name=str(result.command_name),
+            cmd_seq=self._as_int_or_none(getattr(result, "cmd_seq", None)),
+            nonce=self._as_int_or_none(getattr(result, "nonce", None)),
+            final_status=str(getattr(result.final_status, "value", result.final_status)),
+            ack_stage=self._as_int_or_none(None if ack is None else getattr(ack, "ack_stage", None)),
+            status_code=self._as_int_or_none(None if ack is None else getattr(ack, "status_code", None)),
+            err_detail=self._as_int_or_none(None if ack is None else getattr(ack, "err_detail", None)),
+            last_error_message=self._as_text_or_none(getattr(result, "last_error", None)),
+            tx_started_at_utc=self._format_utc_iso(started_utc),
+            tx_finished_at_utc=self._format_utc_iso(now_utc),
+            ts_utc=self._format_utc_iso(now_utc),
+        )
+
+    def _upsert_control_plane_tx_status(
+        self,
+        candidate: ControlPlaneNodeStatusSnapshot,
+    ) -> None:
+        node_id = self._as_int_or_none(getattr(candidate, "node_id", None))
+        if node_id is None or node_id < 1 or node_id > 0xFFFF:
+            return
+        existing = self._control_plane_tx_cache.get(node_id)
+        if existing is None:
+            self._control_plane_tx_cache[node_id] = candidate
+            return
+        self._control_plane_tx_cache[node_id] = self._select_effective_control_plane_status(
+            existing,
+            candidate,
+        )
+
+    @classmethod
+    def _select_effective_control_plane_status(
+        cls,
+        existing: ControlPlaneNodeStatusSnapshot,
+        candidate: ControlPlaneNodeStatusSnapshot,
+    ) -> ControlPlaneNodeStatusSnapshot:
+        existing_seq = cls._as_int_or_none(existing.cmd_seq)
+        candidate_seq = cls._as_int_or_none(candidate.cmd_seq)
+        if existing_seq is not None and candidate_seq is not None:
+            if existing_seq != candidate_seq:
+                if cls._is_cmd_seq_newer(candidate_seq, existing_seq):
+                    return candidate
+                return existing
+        elif existing_seq is None and candidate_seq is not None:
+            return candidate
+        elif existing_seq is not None and candidate_seq is None:
+            return existing
+
+        existing_score = cls._control_plane_status_score(existing)
+        candidate_score = cls._control_plane_status_score(candidate)
+        if candidate_score > existing_score:
+            return candidate
+        if candidate_score < existing_score:
+            return existing
+
+        existing_finished = cls._as_text_or_none(existing.tx_finished_at_utc)
+        candidate_finished = cls._as_text_or_none(candidate.tx_finished_at_utc)
+        if existing_finished is not None and candidate_finished is not None:
+            if candidate_finished >= existing_finished:
+                return candidate
+            return existing
+        if existing_finished is None and candidate_finished is not None:
+            return candidate
+        if existing_finished is not None and candidate_finished is None:
+            return existing
+        return candidate
+
+    @classmethod
+    def _control_plane_status_score(cls, row: ControlPlaneNodeStatusSnapshot) -> int:
+        score = 0
+        if cls._as_text_or_none(row.command_name) is not None:
+            score += 2
+        if cls._as_int_or_none(row.cmd_seq) is not None:
+            score += 4
+        if cls._as_int_or_none(row.nonce) is not None:
+            score += 3
+        if cls._as_text_or_none(row.final_status) is not None:
+            score += 5
+        if cls._as_int_or_none(row.ack_stage) is not None:
+            score += 2
+        if cls._as_int_or_none(row.status_code) is not None:
+            score += 1
+        if cls._as_int_or_none(row.err_detail) is not None:
+            score += 1
+        if cls._as_text_or_none(row.last_error_message) is not None:
+            score += 1
+        if cls._as_text_or_none(row.tx_started_at_utc) is not None:
+            score += 1
+        if cls._as_text_or_none(row.tx_finished_at_utc) is not None:
+            score += 2
+        return score
+
+    @staticmethod
+    def _is_cmd_seq_newer(candidate: int, reference: int) -> bool:
+        left = int(candidate) & 0xFFFF
+        right = int(reference) & 0xFFFF
+        diff = (left - right) & 0xFFFF
+        return 0 < diff < 0x8000
+
+    @staticmethod
+    def _format_utc_iso(value: datetime) -> str:
+        return (
+            value.astimezone(timezone.utc)
+            .isoformat(timespec="milliseconds")
+            .replace("+00:00", "Z")
+        )
 
     def _active_control_plane_node_ids(self) -> set[int]:
         runtime = self._control_plane_runtime

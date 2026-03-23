@@ -186,7 +186,7 @@ class ControlPlaneRuntime:
             ack_timeout_ms=ack_timeout_ms,
             max_retries=max_retries,
         )
-        self._consume_transaction_result(result)
+        self.record_transaction_result(result)
         return result
 
     def send_request_stat_now(
@@ -205,7 +205,7 @@ class ControlPlaneRuntime:
             ack_timeout_ms=ack_timeout_ms,
             max_retries=max_retries,
         )
-        self._consume_transaction_result(result)
+        self.record_transaction_result(result)
         return result
 
     def send_reboot_soft(
@@ -226,8 +226,11 @@ class ControlPlaneRuntime:
             ack_timeout_ms=ack_timeout_ms,
             max_retries=max_retries,
         )
-        self._consume_transaction_result(result)
+        self.record_transaction_result(result)
         return result
+
+    def record_transaction_result(self, result: ControlTransactionResult) -> None:
+        self._consume_transaction_result(result)
 
     def snapshot(self) -> ControlPlaneRuntimeSnapshot:
         pending_store = self._ack_listener.pending_store
@@ -321,7 +324,7 @@ class ControlPlaneRuntime:
         self._last_command = summary
         self._last_result = summary
         self._recent_results.append(summary)
-        self._per_node_last_status[int(result.node_id)] = ControlPlaneNodeStatusSnapshot(
+        candidate = ControlPlaneNodeStatusSnapshot(
             node_id=int(result.node_id),
             node_ip=str(result.node_ip),
             command_name=result.command_name,
@@ -335,6 +338,12 @@ class ControlPlaneRuntime:
             tx_started_at_utc=tx_started_at_utc,
             tx_finished_at_utc=tx_finished_at_utc,
             ts_utc=tx_finished_at_utc,
+        )
+        node_key = int(result.node_id)
+        previous = self._per_node_last_status.get(node_key)
+        self._per_node_last_status[node_key] = _select_effective_node_status(
+            previous,
+            candidate,
         )
 
         session_id = self._session_id_provider() if self._session_id_provider is not None else None
@@ -392,3 +401,92 @@ def _utc_now() -> datetime:
 def _format_utc(value: datetime) -> str:
     dt = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def _select_effective_node_status(
+    existing: ControlPlaneNodeStatusSnapshot | None,
+    candidate: ControlPlaneNodeStatusSnapshot,
+) -> ControlPlaneNodeStatusSnapshot:
+    if existing is None:
+        return candidate
+
+    existing_seq = _safe_int_or_none(existing.cmd_seq)
+    candidate_seq = _safe_int_or_none(candidate.cmd_seq)
+    if existing_seq is not None and candidate_seq is not None:
+        if existing_seq != candidate_seq:
+            if _is_cmd_seq_newer(candidate_seq, existing_seq):
+                return candidate
+            return existing
+    elif existing_seq is None and candidate_seq is not None:
+        return candidate
+    elif existing_seq is not None and candidate_seq is None:
+        return existing
+
+    existing_score = _node_status_completeness_score(existing)
+    candidate_score = _node_status_completeness_score(candidate)
+    if candidate_score > existing_score:
+        return candidate
+    if candidate_score < existing_score:
+        return existing
+
+    existing_finished = _text_or_none(existing.tx_finished_at_utc)
+    candidate_finished = _text_or_none(candidate.tx_finished_at_utc)
+    if existing_finished is not None and candidate_finished is not None:
+        if candidate_finished >= existing_finished:
+            return candidate
+        return existing
+    if existing_finished is None and candidate_finished is not None:
+        return candidate
+    if existing_finished is not None and candidate_finished is None:
+        return existing
+    return candidate
+
+
+def _node_status_completeness_score(status: ControlPlaneNodeStatusSnapshot) -> int:
+    score = 0
+    if _text_or_none(status.command_name) is not None:
+        score += 2
+    if _safe_int_or_none(status.cmd_seq) is not None:
+        score += 4
+    if _safe_int_or_none(status.nonce) is not None:
+        score += 3
+    if _text_or_none(status.final_status) is not None:
+        score += 5
+    if _safe_int_or_none(status.ack_stage) is not None:
+        score += 2
+    if _safe_int_or_none(status.status_code) is not None:
+        score += 1
+    if _safe_int_or_none(status.err_detail) is not None:
+        score += 1
+    if _text_or_none(status.last_error_message) is not None:
+        score += 1
+    if _text_or_none(status.tx_started_at_utc) is not None:
+        score += 1
+    if _text_or_none(status.tx_finished_at_utc) is not None:
+        score += 2
+    return score
+
+
+def _safe_int_or_none(raw_value: object) -> int | None:
+    try:
+        if raw_value is None:
+            return None
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _text_or_none(raw_value: object) -> str | None:
+    if raw_value is None:
+        return None
+    text = str(raw_value).strip()
+    if not text:
+        return None
+    return text
+
+
+def _is_cmd_seq_newer(candidate: int, reference: int) -> bool:
+    left = int(candidate) & 0xFFFF
+    right = int(reference) & 0xFFFF
+    diff = (left - right) & 0xFFFF
+    return 0 < diff < 0x8000

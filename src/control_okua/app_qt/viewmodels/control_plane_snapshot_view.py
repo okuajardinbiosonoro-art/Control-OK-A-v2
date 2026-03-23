@@ -238,7 +238,7 @@ def _select_effective_transaction_state(
         return normalized_snapshot
 
     local_age = _safe_float(local_result_age_s)
-    if local_age is not None and local_age > 20.0:
+    if local_age is not None and local_age > 3.0:
         return normalized_snapshot
 
     if normalized_snapshot.final_status is None:

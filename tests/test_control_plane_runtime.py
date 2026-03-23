@@ -425,3 +425,184 @@ def test_runtime_snapshot_and_recording_sink_reflect_send_retry_ack_timeout() ->
         assert payload["plane"] == "control_f3"
         assert payload["session_id"] == "S-CTRL-1"
         assert payload["node_id"] == 7
+
+
+def test_runtime_per_node_status_keeps_newer_cmd_seq_when_older_result_arrives_later() -> None:
+    tx = _QueuedTransactionService(
+        [
+            _tx_result(
+                command_name="PING",
+                cmd_id=0x01,
+                node_ip="10.0.0.8",
+                node_id=8,
+                cmd_seq=900,
+                nonce=0xAAAABBBB00000900,
+                final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+                ack=_ack(node_id=8, cmd_seq=900, cmd_id=0x01, nonce=0xAAAABBBB00000900),
+                events=(
+                    _event(
+                        ControlAuditEventType.COMMAND_SENT,
+                        command_name="PING",
+                        cmd_id=0x01,
+                        node_ip="10.0.0.8",
+                        node_id=8,
+                        cmd_seq=900,
+                        nonce=0xAAAABBBB00000900,
+                        attempt_index=1,
+                    ),
+                    _event(
+                        ControlAuditEventType.COMMAND_ACK,
+                        command_name="PING",
+                        cmd_id=0x01,
+                        node_ip="10.0.0.8",
+                        node_id=8,
+                        cmd_seq=900,
+                        nonce=0xAAAABBBB00000900,
+                        attempt_index=1,
+                        ack_stage=1,
+                        status_code=0,
+                        err_detail=0,
+                    ),
+                ),
+            ),
+            _tx_result(
+                command_name="PING",
+                cmd_id=0x01,
+                node_ip="10.0.0.8",
+                node_id=8,
+                cmd_seq=899,
+                nonce=0xAAAABBBB00000899,
+                final_status=ControlTransactionFinalStatus.TIMEOUT,
+                last_error="Timeout antiguo.",
+                events=(
+                    _event(
+                        ControlAuditEventType.COMMAND_SENT,
+                        command_name="PING",
+                        cmd_id=0x01,
+                        node_ip="10.0.0.8",
+                        node_id=8,
+                        cmd_seq=899,
+                        nonce=0xAAAABBBB00000899,
+                        attempt_index=1,
+                    ),
+                    _event(
+                        ControlAuditEventType.COMMAND_TIMEOUT,
+                        command_name="PING",
+                        cmd_id=0x01,
+                        node_ip="10.0.0.8",
+                        node_id=8,
+                        cmd_seq=899,
+                        nonce=0xAAAABBBB00000899,
+                        attempt_index=1,
+                    ),
+                ),
+            ),
+        ]
+    )
+    runtime = ControlPlaneRuntime(
+        transaction_service=tx,
+        ack_listener=_AckListenerStub(),
+        node_ip_resolver=lambda _node_id: "10.0.0.8",
+        utc_now_provider=_fixed_utc,
+    )
+
+    runtime.send_ping(node_id=8, ack_timeout_ms=120, max_retries=0)
+    runtime.send_ping(node_id=8, ack_timeout_ms=120, max_retries=0)
+
+    row = runtime.snapshot().per_node_last_status[0]
+    assert row.node_id == 8
+    assert row.cmd_seq == 900
+    assert row.final_status == "ack_matched"
+    assert row.ack_stage == 1
+    assert row.last_error_message is None
+
+
+def test_runtime_per_node_status_prefers_more_complete_row_when_cmd_seq_matches() -> None:
+    tx = _QueuedTransactionService(
+        [
+            _tx_result(
+                command_name="REQUEST_STAT_NOW",
+                cmd_id=0x07,
+                node_ip="10.0.0.9",
+                node_id=9,
+                cmd_seq=1200,
+                nonce=0xCCCCDDDD00001200,
+                final_status=ControlTransactionFinalStatus.TIMEOUT,
+                last_error="Timeout esperando ACK.",
+                events=(
+                    _event(
+                        ControlAuditEventType.COMMAND_SENT,
+                        command_name="REQUEST_STAT_NOW",
+                        cmd_id=0x07,
+                        node_ip="10.0.0.9",
+                        node_id=9,
+                        cmd_seq=1200,
+                        nonce=0xCCCCDDDD00001200,
+                        attempt_index=1,
+                    ),
+                    _event(
+                        ControlAuditEventType.COMMAND_TIMEOUT,
+                        command_name="REQUEST_STAT_NOW",
+                        cmd_id=0x07,
+                        node_ip="10.0.0.9",
+                        node_id=9,
+                        cmd_seq=1200,
+                        nonce=0xCCCCDDDD00001200,
+                        attempt_index=1,
+                    ),
+                ),
+            ),
+            _tx_result(
+                command_name="REQUEST_STAT_NOW",
+                cmd_id=0x07,
+                node_ip="10.0.0.9",
+                node_id=9,
+                cmd_seq=1200,
+                nonce=0xCCCCDDDD00001200,
+                final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+                ack=_ack(node_id=9, cmd_seq=1200, cmd_id=0x07, nonce=0xCCCCDDDD00001200),
+                events=(
+                    _event(
+                        ControlAuditEventType.COMMAND_SENT,
+                        command_name="REQUEST_STAT_NOW",
+                        cmd_id=0x07,
+                        node_ip="10.0.0.9",
+                        node_id=9,
+                        cmd_seq=1200,
+                        nonce=0xCCCCDDDD00001200,
+                        attempt_index=1,
+                    ),
+                    _event(
+                        ControlAuditEventType.COMMAND_ACK,
+                        command_name="REQUEST_STAT_NOW",
+                        cmd_id=0x07,
+                        node_ip="10.0.0.9",
+                        node_id=9,
+                        cmd_seq=1200,
+                        nonce=0xCCCCDDDD00001200,
+                        attempt_index=1,
+                        ack_stage=1,
+                        status_code=0,
+                        err_detail=0,
+                    ),
+                ),
+            ),
+        ]
+    )
+    runtime = ControlPlaneRuntime(
+        transaction_service=tx,
+        ack_listener=_AckListenerStub(),
+        node_ip_resolver=lambda _node_id: "10.0.0.9",
+        utc_now_provider=_fixed_utc,
+    )
+
+    runtime.send_request_stat_now(node_id=9, ack_timeout_ms=120, max_retries=0)
+    runtime.send_request_stat_now(node_id=9, ack_timeout_ms=120, max_retries=0)
+
+    row = runtime.snapshot().per_node_last_status[0]
+    assert row.node_id == 9
+    assert row.cmd_seq == 1200
+    assert row.final_status == "ack_matched"
+    assert row.ack_stage == 1
+    assert row.status_code == 0
+    assert row.err_detail == 0

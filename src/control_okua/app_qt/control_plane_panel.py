@@ -1086,9 +1086,9 @@ class ControlPlanePanel(QWidget):
         ts = self._last_local_result_ts_by_node.get(resolved_node_id)
         if ts is None:
             return None, None
-        # Allow a short overlap window while runtime snapshot absorbs latest per-node status.
+        # Keep fallback only as a brief bridge while canonical backend snapshot absorbs the result.
         age_s = max(0.0, float(time.monotonic()) - float(ts))
-        if age_s > 20.0:
+        if age_s > 3.0:
             self._last_local_result_by_node.pop(resolved_node_id, None)
             self._last_local_result_ts_by_node.pop(resolved_node_id, None)
             return None, None
