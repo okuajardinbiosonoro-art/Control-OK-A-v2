@@ -386,6 +386,6 @@ def test_controller_udp_control_dispatch_fails_cleanly_when_node_ip_not_resolved
         controller.send_control_ping(node_id=70, ack_timeout_ms=120, max_retries=0)
         assert False, "Se esperaba ControlPlaneNodeResolutionError"
     except ControlPlaneNodeResolutionError as exc:
-        assert "ip resoluble" in str(exc).lower()
+        assert "resolver ip" in str(exc).lower()
     finally:
         assert controller.stop_session() is True

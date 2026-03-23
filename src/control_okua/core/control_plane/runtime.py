@@ -42,7 +42,7 @@ class AckListenerLike(Protocol):
         ...
 
 
-NodeIpResolver = Callable[[int], str]
+NodeIpResolver = Callable[[int], str | None]
 RecordingSink = Callable[[str, dict[str, object]], None]
 SessionIdProvider = Callable[[], str | None]
 UtcNowProvider = Callable[[], datetime]

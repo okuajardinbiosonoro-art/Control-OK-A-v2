@@ -9,7 +9,6 @@ from typing import Any, Callable
 from PySide6.QtCore import QObject, Signal
 
 from control_okua.core.control_plane.runtime import (
-    ControlPlaneNodeResolutionError,
     ControlPlaneRuntime,
     ControlPlaneRuntimeSnapshot,
     ControlPlaneRuntimeUnavailableError,
@@ -848,26 +847,24 @@ class SessionController(QObject):
                 observed_at_monotonic=observed_at,
             )
 
-    def _resolve_node_ip_for_control(self, node_id: int) -> str:
+    def _resolve_node_ip_for_control(self, node_id: int) -> str | None:
         try:
             resolved_node_id = int(node_id)
-        except (TypeError, ValueError) as exc:
-            raise ControlPlaneNodeResolutionError(
-                f"node_id inválido: {node_id!r}"
-            ) from exc
+        except (TypeError, ValueError):
+            return None
         if resolved_node_id < 1 or resolved_node_id > 0xFFFF:
-            raise ControlPlaneNodeResolutionError(
-                f"node_id fuera de rango unicast: {node_id}"
-            )
+            return None
 
         cached = self._control_plane_node_ip_cache.get(resolved_node_id)
-        if cached is not None and cached.ip:
-            return cached.ip
+        resolved_ip = self._extract_resolved_ip(cached)
+        if resolved_ip is not None:
+            return resolved_ip
 
         self._refresh_control_plane_node_ip_cache()
         cached = self._control_plane_node_ip_cache.get(resolved_node_id)
-        if cached is not None and cached.ip:
-            return cached.ip
+        resolved_ip = self._extract_resolved_ip(cached)
+        if resolved_ip is not None:
+            return resolved_ip
 
         # UDP runtime only exposes source IP on last EVT/STAT summaries.
         # Wait briefly for next packet so the target node can refresh cache.
@@ -875,14 +872,12 @@ class SessionController(QObject):
         while time.monotonic() < deadline:
             self._refresh_control_plane_node_ip_cache()
             cached = self._control_plane_node_ip_cache.get(resolved_node_id)
-            if cached is not None and cached.ip:
-                return cached.ip
+            resolved_ip = self._extract_resolved_ip(cached)
+            if resolved_ip is not None:
+                return resolved_ip
             time.sleep(0.05)
 
-        raise ControlPlaneNodeResolutionError(
-            "No existe IP resoluble para ese node_id en esta sesión. "
-            "Primero recibe EVT/STAT del nodo en runtime UDP."
-        )
+        return None
 
     def _build_control_plane_runtime_status_map(
         self,
@@ -1053,6 +1048,15 @@ class SessionController(QObject):
         if not text:
             return None
         return text
+
+    @staticmethod
+    def _extract_resolved_ip(entry: ControlPlaneResolvedIp | None) -> str | None:
+        if entry is None:
+            return None
+        ip = str(entry.ip).strip()
+        if not ip:
+            return None
+        return ip
 
     def _record_event(
         self,
