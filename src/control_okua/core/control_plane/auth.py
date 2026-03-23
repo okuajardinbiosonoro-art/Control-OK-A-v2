@@ -4,10 +4,16 @@ import hashlib
 import hmac
 import os
 from pathlib import Path
+import re
 from typing import Final
 
 CONTROL_SECRET_ENV: Final[str] = "CKV2_CONTROL_SECRET"
 CONTROL_SECRET_FILE_ENV: Final[str] = "CKV2_CONTROL_SECRET_FILE"
+_PLACEHOLDER_SECRETS: Final[set[str]] = {
+    "CHANGE_ME_CONTROL_SECRET",
+    "YOUR_CONTROL_PLANE_SHARED_SECRET",
+    "CHANGE_ME",
+}
 
 
 class ControlSecretError(RuntimeError):
@@ -44,21 +50,19 @@ def resolve_control_secret(
     secret_file = os.environ.get(secret_file_env, "").strip()
     if secret_file:
         file_path = Path(secret_file).expanduser()
-        try:
-            text = file_path.read_text(encoding="utf-8").strip()
-        except OSError as exc:
-            raise ControlSecretFileError(
-                f"No se pudo leer el archivo de secreto '{file_path}': {exc}"
-            ) from exc
-        if not text:
-            raise ControlSecretFileError(
-                f"El archivo de secreto '{file_path}' esta vacio."
-            )
+        text = _read_secret_from_file(file_path)
         return _normalize_secret(text)
+
+    for candidate in _iter_default_secret_candidates():
+        secret = _try_read_secret_candidate(candidate)
+        if secret is None:
+            continue
+        return _normalize_secret(secret)
 
     raise ControlSecretNotConfiguredError(
         "No hay secreto de control configurado. Define CKV2_CONTROL_SECRET "
-        "o CKV2_CONTROL_SECRET_FILE antes de enviar OKUA_CMD."
+        "o CKV2_CONTROL_SECRET_FILE; tambien puedes usar el archivo local "
+        "firmware/okua_node_udp_v1/okua_node_secrets.h."
     )
 
 
@@ -88,3 +92,60 @@ def _normalize_secret(raw_secret: str | bytes) -> bytes:
     if not secret:
         raise ControlSecretNotConfiguredError("El secreto de control esta vacio.")
     return secret
+
+
+def _read_secret_from_file(file_path: Path) -> str:
+    try:
+        text = file_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise ControlSecretFileError(
+            f"No se pudo leer el archivo de secreto '{file_path}': {exc}"
+        ) from exc
+
+    if file_path.suffix.lower() in {".h", ".hpp"}:
+        secret = _extract_secret_from_header_text(text)
+    else:
+        secret = text.strip()
+
+    if not secret:
+        raise ControlSecretFileError(
+            f"El archivo de secreto '{file_path}' esta vacio."
+        )
+    if secret in _PLACEHOLDER_SECRETS:
+        raise ControlSecretFileError(
+            f"El archivo de secreto '{file_path}' contiene un placeholder no valido."
+        )
+    return secret
+
+
+def _try_read_secret_candidate(file_path: Path) -> str | None:
+    if not file_path.exists():
+        return None
+    try:
+        return _read_secret_from_file(file_path)
+    except ControlSecretFileError:
+        return None
+
+
+def _extract_secret_from_header_text(text: str) -> str:
+    match = re.search(
+        r'#define\s+OKUA_CONTROL_SECRET\s+"([^"]+)"',
+        text,
+    )
+    if not match:
+        return ""
+    return match.group(1).strip()
+
+
+def _iter_default_secret_candidates() -> tuple[Path, ...]:
+    repo_root = _resolve_repo_root()
+    return (
+        repo_root / ".control_plane_secret",
+        repo_root / "control_plane_secret.txt",
+        repo_root / "firmware" / "okua_node_udp_v1" / "okua_node_secrets.h",
+    )
+
+
+def _resolve_repo_root() -> Path:
+    # auth.py -> control_plane -> core -> control_okua -> src -> repo_root
+    return Path(__file__).resolve().parents[4]

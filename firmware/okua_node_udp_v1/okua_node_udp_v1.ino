@@ -57,20 +57,27 @@
   ZONA 2 — IDENTIDAD DEL NODO / RED
 ============================================================================================*/
 
-// Etiqueta visible para debug
-#define NODE_LABEL "EB4"
-
-// node_id segun la regla del proyecto: caja*10 + posicion(B=1,C=2,D=3,E=4,F=5)
-// Ejemplo EB1 = 11, EC1 = 12, EF1 = 15
-#define NODE_ID 16
-
-// WiFi (safe defaults for versioned repository).
 // Local overrides can be provided in a non-tracked file:
 //   firmware/okua_node_udp_v1/okua_node_secrets.h
 #if defined(__has_include)
 #if __has_include("okua_node_secrets.h")
 #include "okua_node_secrets.h"
 #endif
+#endif
+
+// Etiqueta visible para debug
+#ifndef NODE_LABEL
+#define NODE_LABEL "EB1"
+#endif
+
+// node_id segun la regla canonica del proyecto:
+// Caja 1: EB1=1, EC1=2, ED1=3, EE1=4, EF1=5
+// Caja 2: EB2=6, EC2=7, ED2=8, EE2=9, EF2=10
+// Caja 3: EB3=11, EC3=12, ED3=13, EE3=14, EF3=15
+// Caja 4: EB4=16, EC4=17, ED4=18, EE4=19, EF4=20
+// Caja 5: EB5=21, EC5=22, ED5=23, EE5=24, EF5=25
+#ifndef NODE_ID
+#define NODE_ID 1
 #endif
 
 #ifndef WIFI_SSID
@@ -85,10 +92,28 @@
 #define OKUA_CONTROL_SECRET "CHANGE_ME_CONTROL_SECRET"
 #endif
 
+#ifndef WIFI_CHANNEL
 #define WIFI_CHANNEL 13
+#endif
+
+#ifndef PC_IP_A
+#define PC_IP_A 192
+#endif
+
+#ifndef PC_IP_B
+#define PC_IP_B 168
+#endif
+
+#ifndef PC_IP_C
+#define PC_IP_C 88
+#endif
+
+#ifndef PC_IP_D
+#define PC_IP_D 254
+#endif
 
 // PC destino para EVT/STAT en la LAN OKUA
-IPAddress PC_IP(192, 168, 88, 254);
+IPAddress PC_IP(PC_IP_A, PC_IP_B, PC_IP_C, PC_IP_D);
 
 // Firmware version
 #define FW_MAJOR 1
@@ -313,6 +338,8 @@ uint32_t g_evtCountSinceLastStat = 0;
 uint32_t g_lastEvtCounterResetMs = 0;
 
 uint8_t g_lastStateFlags = 0;
+RTC_DATA_ATTR uint32_t g_bootCounter = 0;
+uint8_t g_bootMarker4 = 0;
 static const uint32_t CONTROL_REBOOT_DELAY_MS = 150UL;
 bool g_rebootPending = false;
 uint32_t g_rebootAtMs = 0;
@@ -999,7 +1026,9 @@ void connectWiFiBlocking() {
 
   wifi_country_t co = {"CO", 1, 13, 0};
   esp_wifi_set_country(&co);
+#if (WIFI_CHANNEL >= 1) && (WIFI_CHANNEL <= 13)
   esp_wifi_set_channel(WIFI_CHANNEL, WIFI_SECOND_CHAN_NONE);
+#endif
   esp_wifi_set_ps(WIFI_PS_NONE);
 
   if (WiFi.status() == WL_CONNECTED) {
@@ -1175,7 +1204,9 @@ bool sendOkuaStat(uint8_t state_flags) {
 
   p.uptime_s       = millis() / 1000UL;
   p.rssi_dbm       = currentRssiDbm();
-  p.state_flags    = state_flags;
+  // Low nibble keeps legacy state flags; high nibble exposes a boot marker
+  // (mod-16) that changes on every reboot and helps app-side confirmation.
+  p.state_flags    = (uint8_t)((state_flags & 0x0F) | ((g_bootMarker4 & 0x0F) << 4));
   p.pps_x10        = (uint16_t)pps_x10_u32;
   p.vbat_mv        = 0;
   p.free_heap      = ESP.getFreeHeap();
@@ -1648,6 +1679,8 @@ void setup() {
   randomSeed(esp_random());
 
   g_lastEvtCounterResetMs = millis();
+  g_bootCounter += 1;
+  g_bootMarker4 = (uint8_t)(g_bootCounter & 0x0F);
   g_fruitBootMs = millis();
   g_fruitFilteredV = readVmed3();
   g_fruitPrevV = g_fruitFilteredV;
@@ -1670,7 +1703,11 @@ void setup() {
   Serial.print("UDP_BIND_PORT : "); Serial.println(OKUA_NODE_BIND_PORT);
   Serial.print("MODE          : "); Serial.println((ACTIVE_MODE == MODE_TEST) ? "TEST" : "FIELD");
   Serial.print("SENSOR        : "); Serial.println((ACTIVE_SENSOR == SENSOR_PLANT) ? "PLANT" : "FRUIT");
+  Serial.print("BOOT_MARKER4  : "); Serial.println(g_bootMarker4);
   Serial.println("==========================================");
+
+  // Emit a startup STAT so runtime can observe fresh uptime/reset metadata quickly.
+  sendOkuaStat(g_lastStateFlags);
 }
 
 

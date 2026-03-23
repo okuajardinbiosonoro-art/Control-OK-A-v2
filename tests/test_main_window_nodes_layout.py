@@ -109,7 +109,7 @@ def test_main_tabs_do_not_include_estado_actual_by_default() -> None:
     window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
     try:
         tab_titles = [window.tabs.tabText(index) for index in range(window.tabs.count())]
-        assert tab_titles == ["Operación", "Nodos", "Diagnóstico", "Plano de control"]
+        assert tab_titles == ["Sesión", "Nodos en vivo", "Estado técnico", "Control F3"]
     finally:
         window.close()
 
@@ -120,14 +120,23 @@ def test_control_plane_panel_is_separated_from_diagnostics() -> None:
     try:
         diagnostics_buttons = [btn.text() for btn in window.diagnostics_tab.findChildren(QPushButton)]
         assert "PING" not in diagnostics_buttons
-        assert "Solicitar STAT ahora" not in diagnostics_buttons
+        assert "Pedir STAT" not in diagnostics_buttons
         assert "Reinicio suave" not in diagnostics_buttons
 
         control_buttons = [btn.text() for btn in window.control_plane_tab.findChildren(QPushButton)]
         assert "PING" in control_buttons
-        assert "Solicitar STAT ahora" in control_buttons
+        assert "Pedir STAT" in control_buttons
         assert "Reinicio suave" in control_buttons
+        assert "Limpiar bitácora" in control_buttons
         assert not hasattr(window.control_plane_panel, "node_ip_edit")
+        assert window.control_plane_panel.node_selector_combo.count() >= 25
+        assert "PING:" in window.control_plane_panel.policy_values_label.text()
+        detail_tabs = [
+            window.control_plane_panel.details_tabs.tabText(i)
+            for i in range(window.control_plane_panel.details_tabs.count())
+        ]
+        assert detail_tabs == ["Resumen", "Diagnóstico", "Bitácora"]
+        assert window.control_plane_panel.result_view.minimumHeight() >= 320
     finally:
         window.close()
 

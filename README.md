@@ -244,6 +244,26 @@ Campos principales:
 - El estado canónico por nodo distingue `resolved/stale/unresolved` e incluye último resultado F3 + resumen de verificación de reboot.
 - El panel técnico `Plano de control` consume la API integrada de `SessionController` (sin instancias privadas de runtime en widgets).
 
+## Control Plane F3 (Tickets 16.1 a 16.4RRR)
+
+- Existe snapshot canónico backend-side por nodo para control-plane F3:
+  - `SessionController.get_control_plane_node_snapshots()`
+  - `SessionController.get_control_plane_node_snapshot(node_id)`
+- El snapshot por nodo incluye identidad/resolución, estado transaccional, ACK relevante, reboot verification y señales runtime (`uptime/reset_reason/boot_marker`).
+- La resolución `node_id -> ip` usa contrato tipado estable `str | None` y cache rica interna (`ControlPlaneResolvedIp`) sin exponer objetos en la API de resolución.
+- La correlación multi-nodo está aislada: ACK de un nodo no cierra transacción de otro y no contamina snapshots cruzados.
+- La vista técnica `Control F3` consume snapshot backend-side por nodo y muestra evidencia compacta por secciones (estado del nodo, última transacción, último ACK, reinicio, bitácora).
+- Se corrigió la coherencia atómica de render de última transacción/ACK:
+  - no mezcla parcial entre snapshot y fallback local;
+  - `ack_matched` no convive con timeout del mismo resultado;
+  - `timeout` mantiene ACK ausente de forma explícita.
+- Se implementó write-back canónico por nodo al cerrar transacciones (`PING`, `REQUEST_STAT_NOW`, `REBOOT_SOFT`) para evitar supervivencia de estado stale:
+  - precedencia por `cmd_seq` más nuevo;
+  - con `cmd_seq` igual, gana el paquete más completo;
+  - estado transaccional de control-plane es session-scoped y se limpia en start/stop/reset/reload.
+- El fallback local de UI quedó relegado a ventana transitoria corta y ya no es fuente principal de verdad cuando el snapshot backend-side está actualizado.
+- Alcance funcional se mantiene sin abrir comandos `SET_*`.
+
 Notas de consistencia runtime:
 
 - Si `profile.active` es `null` o invalido, la app pide seleccionar perfil al iniciar.

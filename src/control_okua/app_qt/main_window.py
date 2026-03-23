@@ -153,10 +153,10 @@ class MainWindow(QMainWindow):
         self.nodes_tab = self._build_nodes_tab()
         self.diagnostics_tab = self._build_diagnostics_tab()
         self.control_plane_tab = self._build_control_plane_tab()
-        self.tabs.addTab(self.operation_tab, "Operación")
-        self.tabs.addTab(self.nodes_tab, "Nodos")
-        self.tabs.addTab(self.diagnostics_tab, "Diagnóstico")
-        self.tabs.addTab(self.control_plane_tab, "Plano de control")
+        self.tabs.addTab(self.operation_tab, "Sesión")
+        self.tabs.addTab(self.nodes_tab, "Nodos en vivo")
+        self.tabs.addTab(self.diagnostics_tab, "Estado técnico")
+        self.tabs.addTab(self.control_plane_tab, "Control F3")
         self.tabs.currentChanged.connect(self._on_tab_changed)
         self.tabs.setCurrentIndex(0)
         root_layout.addWidget(self.tabs)
@@ -179,15 +179,15 @@ class MainWindow(QMainWindow):
         self.view_state_action.triggered.connect(self.show_session_details_dialog)
         view_menu.addAction(self.view_state_action)
 
-        self.view_diagnostics_action = QAction("Diagnóstico", self)
+        self.view_diagnostics_action = QAction("Estado técnico", self)
         self.view_diagnostics_action.triggered.connect(self.show_diagnostics_tab)
         view_menu.addAction(self.view_diagnostics_action)
 
-        self.view_control_plane_action = QAction("Plano de control", self)
+        self.view_control_plane_action = QAction("Control F3", self)
         self.view_control_plane_action.triggered.connect(self.show_control_plane_tab)
         view_menu.addAction(self.view_control_plane_action)
 
-        self.toggle_preflight_action = QAction("Errores / preflight", self)
+        self.toggle_preflight_action = QAction("Chequeos previos", self)
         self.toggle_preflight_action.setCheckable(True)
         self.toggle_preflight_action.toggled.connect(self._on_preflight_toggle_action)
         view_menu.addAction(self.toggle_preflight_action)
@@ -232,7 +232,7 @@ class MainWindow(QMainWindow):
         self.operation_subtitle_label.setWordWrap(True)
         layout.addWidget(self.operation_subtitle_label)
 
-        quick_actions_group = QGroupBox("Acciones rápidas")
+        quick_actions_group = QGroupBox("Inicio rápido")
         quick_actions_layout = QHBoxLayout(quick_actions_group)
 
         self.change_profile_button = QPushButton("Cambiar perfil")
@@ -241,7 +241,7 @@ class MainWindow(QMainWindow):
         quick_actions_layout.addStretch(1)
         layout.addWidget(quick_actions_group)
 
-        session_actions_group = QGroupBox("Control de sesión")
+        session_actions_group = QGroupBox("Sesión")
         session_actions_layout = QHBoxLayout(session_actions_group)
         self.start_session_button = QPushButton("Iniciar sesión")
         self.start_session_button.clicked.connect(self.start_session)
@@ -255,7 +255,7 @@ class MainWindow(QMainWindow):
         session_actions_layout.addStretch(1)
         layout.addWidget(session_actions_group)
 
-        compact_group = QGroupBox("Resumen operativo")
+        compact_group = QGroupBox("Estado de sesión")
         compact_layout = QFormLayout(compact_group)
         compact_fields = [
             ("profile", "Perfil activo"),
@@ -272,7 +272,7 @@ class MainWindow(QMainWindow):
             self._operation_compact_labels[key] = label
         layout.addWidget(compact_group)
 
-        readiness_group = QGroupBox("Preparación de sesión")
+        readiness_group = QGroupBox("Chequeos previos")
         readiness_layout = QFormLayout(readiness_group)
         readiness_fields = [
             ("status", "Estado"),
@@ -288,7 +288,7 @@ class MainWindow(QMainWindow):
             self._operation_readiness_labels[key] = label
         layout.addWidget(readiness_group)
 
-        serial_group = QGroupBox("Actividad serial")
+        serial_group = QGroupBox("Canal serial")
         serial_layout = QFormLayout(serial_group)
         serial_fields = [
             ("status", "Estado"),
@@ -305,7 +305,7 @@ class MainWindow(QMainWindow):
             self._operation_serial_labels[key] = label
         layout.addWidget(serial_group)
 
-        udp_group = QGroupBox("Actividad UDP")
+        udp_group = QGroupBox("Canal UDP")
         udp_layout = QFormLayout(udp_group)
         udp_fields = [
             ("status", "Estado"),
@@ -381,10 +381,10 @@ class MainWindow(QMainWindow):
                 ],
             ),
             (
-                "MIDI y Logging",
+                "MIDI y registro",
                 [
                     ("midi", "MIDI"),
-                    ("logging", "Logging"),
+                    ("logging", "Registro"),
                 ],
             ),
             (
@@ -417,14 +417,14 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
 
-        title_label = QLabel("Monitoreo de nodos")
+        title_label = QLabel("Nodos en vivo")
         title_font = title_label.font()
         title_font.setPointSize(title_font.pointSize() + 2)
         title_font.setBold(True)
         title_label.setFont(title_font)
         layout.addWidget(title_label)
 
-        self.nodes_empty_state_group = QGroupBox("Estado de nodos")
+        self.nodes_empty_state_group = QGroupBox("Estado general")
         self.nodes_empty_state_group.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Maximum,
@@ -459,7 +459,7 @@ class MainWindow(QMainWindow):
                 "PPS",
                 "Pérdida",
                 "RSSI",
-                "Último note/vel",
+                "Última nota/vel",
             ]
         )
         self.nodes_tree.setAlternatingRowColors(True)
@@ -477,16 +477,16 @@ class MainWindow(QMainWindow):
         tab = QWidget(self)
         layout = QVBoxLayout(tab)
 
-        summary_group = QGroupBox("Resumen técnico")
+        summary_group = QGroupBox("Resumen de sistema")
         summary_layout = QFormLayout(summary_group)
 
         fields = [
             ("profile", "Perfil"),
-            ("config_path", "Archivo config"),
+            ("config_path", "Archivo de config"),
             ("mode", "Modo"),
             ("transport", "Transporte"),
             ("midi", "MIDI"),
-            ("logging", "Logging"),
+            ("logging", "Registro"),
             ("general", "Estado"),
         ]
         for key, field_name in fields:
@@ -496,18 +496,18 @@ class MainWindow(QMainWindow):
             self._diagnostic_summary_labels[key] = label
 
         layout.addWidget(summary_group)
-        self.preflight_toggle_button = QPushButton("Ver errores / preflight")
+        self.preflight_toggle_button = QPushButton("Ver chequeos previos")
         self.preflight_toggle_button.setCheckable(True)
         self.preflight_toggle_button.toggled.connect(self._on_preflight_toggle_button)
         layout.addWidget(self.preflight_toggle_button)
 
-        self.preflight_group = QGroupBox("Readiness / preflight")
+        self.preflight_group = QGroupBox("Chequeos previos")
         preflight_layout = QVBoxLayout(self.preflight_group)
 
         preflight_summary_form = QFormLayout()
         self.preflight_diag_status_label = QLabel("-")
         self.preflight_diag_status_label.setWordWrap(True)
-        preflight_summary_form.addRow("Readiness", self.preflight_diag_status_label)
+        preflight_summary_form.addRow("Resultado", self.preflight_diag_status_label)
 
         self.preflight_diag_summary_label = QLabel("-")
         self.preflight_diag_summary_label.setWordWrap(True)
@@ -530,7 +530,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.preflight_group)
         self.preflight_group.setVisible(False)
 
-        self.serial_runtime_group = QGroupBox("Runtime serial")
+        self.serial_runtime_group = QGroupBox("Detalle serial")
         serial_runtime_layout = QVBoxLayout(self.serial_runtime_group)
         self.serial_runtime_table = QTableWidget(0, 2, self)
         self.serial_runtime_table.setHorizontalHeaderLabels(["Campo", "Valor"])
@@ -541,7 +541,7 @@ class MainWindow(QMainWindow):
         serial_runtime_layout.addWidget(self.serial_runtime_table)
         layout.addWidget(self.serial_runtime_group)
 
-        self.udp_runtime_group = QGroupBox("Runtime UDP")
+        self.udp_runtime_group = QGroupBox("Detalle UDP")
         udp_runtime_layout = QVBoxLayout(self.udp_runtime_group)
         self.udp_runtime_table = QTableWidget(0, 2, self)
         self.udp_runtime_table.setHorizontalHeaderLabels(["Campo", "Valor"])
@@ -552,7 +552,7 @@ class MainWindow(QMainWindow):
         udp_runtime_layout.addWidget(self.udp_runtime_table)
         layout.addWidget(self.udp_runtime_group)
 
-        warnings_group = QGroupBox("Advertencias de configuración")
+        warnings_group = QGroupBox("Alertas de configuración")
         warnings_layout = QVBoxLayout(warnings_group)
         self.warnings_view = QTextEdit(self)
         self.warnings_view.setReadOnly(True)
@@ -677,7 +677,7 @@ class MainWindow(QMainWindow):
             )
         elif self.warnings:
             self.operation_subtitle_label.setText(
-                "Aplicación cargada con advertencias. Revise Diagnóstico. "
+                "Aplicación cargada con advertencias. Revise Estado técnico. "
                 "La sesión aún no está iniciada."
             )
         elif "perfil pendiente" in general_summary or "perfil incompleto" in general_summary:
@@ -1019,9 +1019,9 @@ class MainWindow(QMainWindow):
 
     def _update_preflight_toggle_caption(self, findings_count: int) -> None:
         if findings_count > 0:
-            base = f"Errores / preflight ({findings_count})"
+            base = f"Chequeos previos ({findings_count})"
         else:
-            base = "Errores / preflight"
+            base = "Chequeos previos"
         if self._preflight_panel_visible:
             button_text = f"Ocultar {base.lower()}"
         else:

@@ -11,9 +11,13 @@ if str(SRC_DIR) not in sys.path:
 
 from control_okua.app_qt.viewmodels.control_plane_vm import (  # noqa: E402
     REBOOT_SOFT_CONFIRMATION_TITLE,
+    build_control_plane_node_options,
     build_reboot_soft_confirmation_text,
+    format_control_transaction_event_lines,
     format_control_transaction_result,
+    resolve_control_command_policy,
 )
+from control_okua.core.control_plane.audit import build_control_audit_event  # noqa: E402
 from control_okua.core.control_plane.protocol import ParsedOkuaAck  # noqa: E402
 from control_okua.services.control_transaction_service import (  # noqa: E402
     ControlTransactionFinalStatus,
@@ -122,3 +126,75 @@ def test_reboot_soft_confirmation_text_is_explicit() -> None:
     assert "10.0.0.8" in text
     assert "35" in text
     assert "perder conectividad temporalmente" in text
+
+
+def test_resolve_control_command_policy_returns_auto_values() -> None:
+    ping = resolve_control_command_policy("PING")
+    stat = resolve_control_command_policy("REQUEST_STAT_NOW")
+    reboot = resolve_control_command_policy("REBOOT_SOFT")
+    unknown = resolve_control_command_policy("X_UNKNOWN")
+
+    assert (ping.ack_timeout_ms, ping.max_retries) == (600, 2)
+    assert (stat.ack_timeout_ms, stat.max_retries) == (900, 2)
+    assert (reboot.ack_timeout_ms, reboot.max_retries) == (1200, 0)
+    assert (unknown.ack_timeout_ms, unknown.max_retries) == (600, 1)
+
+
+def test_build_control_plane_node_options_includes_mapping_and_detected_flags() -> None:
+    options = build_control_plane_node_options([1, 3, 10], max_boxes=5)
+
+    by_id = {item.node_id: item for item in options}
+    assert by_id[1].node_label == "EB1"
+    assert by_id[2].node_label == "EC1"
+    assert by_id[3].node_label == "ED1"
+    assert by_id[10].node_label == "EF2"
+    assert by_id[1].is_available is True
+    assert by_id[2].is_available is False
+    assert "detectado" in by_id[1].display_text
+    assert "no detectado" in by_id[2].display_text
+
+
+def test_format_control_transaction_event_lines_keeps_retries_visible() -> None:
+    result = ControlTransactionResult(
+        command_name="PING",
+        cmd_id=0x01,
+        node_ip="192.168.88.252",
+        node_id=1,
+        cmd_seq=100,
+        nonce=0xAABBCCDD00000001,
+        attempt_count=2,
+        final_status=ControlTransactionFinalStatus.TIMEOUT,
+        ack=None,
+        matched_sent_command=None,
+        elapsed_ms=1200.0,
+        last_error="Timeout final",
+        events=(
+            build_control_audit_event(
+                event_type="command_sent",
+                command_name="PING",
+                cmd_id=0x01,
+                node_ip="192.168.88.252",
+                node_id=1,
+                cmd_seq=100,
+                nonce=0xAABBCCDD00000001,
+                attempt_index=1,
+            ),
+            build_control_audit_event(
+                event_type="command_retry",
+                command_name="PING",
+                cmd_id=0x01,
+                node_ip="192.168.88.252",
+                node_id=1,
+                cmd_seq=100,
+                nonce=0xAABBCCDD00000001,
+                attempt_index=2,
+            ),
+        ),
+    )
+
+    lines = format_control_transaction_event_lines(result)
+    assert len(lines) == 2
+    assert "command_sent" in lines[0]
+    assert "attempt=1" in lines[0]
+    assert "command_retry" in lines[1]
+    assert "attempt=2" in lines[1]
