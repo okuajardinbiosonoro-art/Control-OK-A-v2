@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 )
 
 from control_okua.app_qt.advanced_tools_dialog import AdvancedToolsDialog
+from control_okua.app_qt.control_plane_panel import ControlPlanePanel
 from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
 from control_okua.app_qt.widgets import ConfigViewDialog
 from control_okua.app_qt.viewmodels import (
@@ -73,6 +74,7 @@ from control_okua.app_qt.viewmodels import (
     build_transport_summary,
 )
 from control_okua.core.preflight import PreflightReport
+from control_okua.core.control_plane.pending import PendingCommandStore
 from control_okua.core.config.config_schema import load_config, save_config
 from control_okua.core.profiles.profile_service import (
     infer_profile_from_config,
@@ -80,6 +82,9 @@ from control_okua.core.profiles.profile_service import (
     set_active_profile,
 )
 from control_okua.core.session import SessionSnapshot, SessionState
+from control_okua.services.ack_listener import AckListenerService
+from control_okua.services.cmd_service import CmdService
+from control_okua.services.control_transaction_service import ControlTransactionService
 from control_okua.services.session_controller import SessionController
 
 
@@ -116,6 +121,9 @@ class MainWindow(QMainWindow):
         self._details_dialog: QDialog | None = None
         self._node_box_expanded: dict[int, bool] = {}
         self._preflight_panel_visible = False
+        self._control_pending_store: PendingCommandStore | None = None
+        self._control_ack_listener: AckListenerService | None = None
+        self._control_transaction_service: ControlTransactionService | None = None
         self.session_controller = session_controller or SessionController(
             self._session_cfg_provider,
             parent=self,
@@ -544,6 +552,14 @@ class MainWindow(QMainWindow):
         udp_runtime_layout.addWidget(self.udp_runtime_table)
         layout.addWidget(self.udp_runtime_group)
 
+        self.control_plane_panel = ControlPlanePanel(
+            transaction_service_provider=self._get_or_create_control_transaction_service,
+            default_node_ip=self._resolve_control_plane_default_ip(),
+            default_node_id=1,
+            parent=self,
+        )
+        layout.addWidget(self.control_plane_panel)
+
         warnings_group = QGroupBox("Advertencias de configuración")
         warnings_layout = QVBoxLayout(warnings_group)
         self.warnings_view = QTextEdit(self)
@@ -792,6 +808,42 @@ class MainWindow(QMainWindow):
 
     def _session_cfg_provider(self) -> dict[str, Any]:
         return self.cfg
+
+    def _resolve_control_plane_default_ip(self) -> str:
+        runtime_snapshot = self.session_controller.get_backend_runtime_snapshot()
+        if runtime_snapshot is None:
+            return ""
+
+        for holder_name in ("last_evt", "last_stat"):
+            holder = getattr(runtime_snapshot, holder_name, None)
+            source_ip = getattr(holder, "source_ip", None)
+            if isinstance(source_ip, str) and source_ip.strip():
+                return source_ip.strip()
+
+        source_ip = getattr(runtime_snapshot, "source_ip", None)
+        if isinstance(source_ip, str) and source_ip.strip():
+            return source_ip.strip()
+        return ""
+
+    def _get_or_create_control_transaction_service(self) -> ControlTransactionService:
+        if self._control_transaction_service is not None:
+            return self._control_transaction_service
+
+        if self._control_pending_store is None:
+            self._control_pending_store = PendingCommandStore()
+
+        if self._control_ack_listener is None:
+            self._control_ack_listener = AckListenerService(
+                pending_store=self._control_pending_store,
+            )
+
+        cmd_service = CmdService()
+        self._control_transaction_service = ControlTransactionService(
+            cmd_service=cmd_service,
+            ack_listener=self._control_ack_listener,
+            pending_store=self._control_pending_store,
+        )
+        return self._control_transaction_service
 
     def _ensure_configuration_change_allowed(self) -> bool:
         action_state = build_session_action_state(self._session_snapshot)
@@ -1186,3 +1238,11 @@ class MainWindow(QMainWindow):
 
         for col, width in enumerate(target_widths):
             self.nodes_tree.setColumnWidth(col, int(width))
+
+    def closeEvent(self, event) -> None:  # type: ignore[override]
+        if self._control_ack_listener is not None:
+            try:
+                self._control_ack_listener.stop()
+            except Exception:
+                pass
+        super().closeEvent(event)

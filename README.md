@@ -205,6 +205,17 @@ Campos principales:
   - `command_timeout`
 - `INVALID_ACK` y `UNMATCHED_ACK` se observan durante la espera sin cerrar prematuramente la transacción.
 
+## Control Plane F3 (Ticket 14.4)
+
+- Existe un panel técnico mínimo en `Diagnóstico` para ejecutar transacciones F3 sin usar consola.
+- La UI expone solo:
+  - `PING`
+  - `REQUEST_STAT_NOW`
+  - `REBOOT_SOFT`
+- El panel consume `ControlTransactionService` y muestra resultado legible (`final_status`, `cmd_seq`, `nonce`, `attempt_count`, detalles ACK).
+- `REBOOT_SOFT` requiere confirmación explícita antes de enviar.
+- Durante ejecución, el panel deshabilita controles y mantiene la ventana responsive.
+
 Notas de consistencia runtime:
 
 - Si `profile.active` es `null` o invalido, la app pide seleccionar perfil al iniciar.
