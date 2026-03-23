@@ -39,6 +39,16 @@ from control_okua.core.control_plane.runtime import (
     ControlPlaneRuntimeUnavailableError,
     build_unavailable_control_plane_snapshot,
 )
+from control_okua.core.control_plane.runtime_snapshot import (
+    DEFAULT_CONTROL_PLANE_RESOLUTION_STALE_S,
+    ControlPlaneNodeResolutionStatus,
+    ControlPlaneNodeSnapshot,
+    ControlPlaneNodeSnapshotInput,
+    ControlPlaneRebootVerificationState,
+    ControlPlaneResolvedIp,
+    build_control_plane_node_snapshot,
+    build_control_plane_node_snapshots,
+)
 from control_okua.core.control_plane.protocol import (
     AckParseError,
     AckParseErrorCode,
@@ -94,6 +104,14 @@ __all__ = [
     "ControlPlaneNodeStatusSnapshot",
     "ControlPlaneResultSummary",
     "build_unavailable_control_plane_snapshot",
+    "DEFAULT_CONTROL_PLANE_RESOLUTION_STALE_S",
+    "ControlPlaneNodeResolutionStatus",
+    "ControlPlaneNodeSnapshot",
+    "ControlPlaneNodeSnapshotInput",
+    "ControlPlaneResolvedIp",
+    "ControlPlaneRebootVerificationState",
+    "build_control_plane_node_snapshot",
+    "build_control_plane_node_snapshots",
     "AckParseErrorCode",
     "AckParseError",
     "ParsedOkuaAck",

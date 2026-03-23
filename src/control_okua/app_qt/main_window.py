@@ -569,11 +569,13 @@ class MainWindow(QMainWindow):
             send_ping=self._send_control_ping_from_ui,
             send_request_stat_now=self._send_control_request_stat_now_from_ui,
             send_reboot_soft=self._send_control_reboot_soft_from_ui,
+            available_node_ids_provider=self._available_control_node_ids_from_runtime,
+            node_snapshot_provider=self._control_node_snapshot_from_runtime,
+            reboot_verification_reporter=self._record_control_reboot_verification_from_ui,
             default_node_id=1,
             parent=self,
         )
-        layout.addWidget(self.control_plane_panel)
-        layout.addStretch(1)
+        layout.addWidget(self.control_plane_panel, 1)
         return tab
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
@@ -855,6 +857,53 @@ class MainWindow(QMainWindow):
             source="ui_manual",
         )
 
+    def _available_control_node_ids_from_runtime(self) -> list[int]:
+        snapshots = self.session_controller.get_control_plane_node_snapshots(now=time.monotonic())
+        node_ids: list[int] = []
+        seen: set[int] = set()
+        for snapshot in snapshots:
+            raw = getattr(snapshot, "node_id", None)
+            try:
+                node_id = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if node_id <= 0:
+                continue
+            if node_id in seen:
+                continue
+            resolution_status = str(getattr(snapshot, "resolution_status", "")).lower()
+            has_runtime_presence = getattr(snapshot, "last_seen_pc_ts", None) is not None
+            if resolution_status.endswith("unresolved") and not has_runtime_presence:
+                continue
+            seen.add(node_id)
+            node_ids.append(node_id)
+        node_ids.sort()
+        return node_ids
+
+    def _control_node_snapshot_from_runtime(self, node_id: int) -> object | None:
+        try:
+            resolved_node_id = int(node_id)
+        except (TypeError, ValueError):
+            return None
+        if resolved_node_id <= 0:
+            return None
+        return self.session_controller.get_control_plane_node_snapshot(
+            node_id=resolved_node_id,
+            now=time.monotonic(),
+        )
+
+    def _record_control_reboot_verification_from_ui(
+        self,
+        node_id: int,
+        status: str,
+        summary: str,
+    ) -> None:
+        self.session_controller.record_control_plane_reboot_verification(
+            node_id=node_id,
+            status=status,
+            summary=summary,
+        )
+
     def _ensure_configuration_change_allowed(self) -> bool:
         action_state = build_session_action_state(self._session_snapshot)
         if action_state.can_edit_configuration:
@@ -911,6 +960,9 @@ class MainWindow(QMainWindow):
             self._refresh_nodes_views()
 
     def _on_tab_changed(self, _index: int) -> None:
+        if self._is_control_plane_view_visible():
+            self.control_plane_panel.on_section_activated()
+            return
         if self._is_nodes_view_visible():
             self._refresh_nodes_views()
             return
@@ -933,6 +985,7 @@ class MainWindow(QMainWindow):
 
     def show_control_plane_tab(self) -> None:
         self.tabs.setCurrentWidget(self.control_plane_tab)
+        self.control_plane_panel.on_section_activated()
 
     def show_about_dialog(self) -> None:
         version = self.cfg.get("version")
@@ -982,6 +1035,9 @@ class MainWindow(QMainWindow):
 
     def _is_nodes_view_visible(self) -> bool:
         return self.tabs.currentWidget() is self.nodes_tab
+
+    def _is_control_plane_view_visible(self) -> bool:
+        return self.tabs.currentWidget() is self.control_plane_tab
 
     def _refresh_runtime_views(self, runtime_snapshot: object | None, *, force: bool = False) -> None:
         if not force and not self._is_runtime_view_visible():

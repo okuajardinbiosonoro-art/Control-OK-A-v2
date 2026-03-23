@@ -238,6 +238,10 @@ Campos principales:
 - El despacho de comandos desde capas superiores opera por `node_id`; la resolución `node_id -> ip` usa el runtime real de sesión.
 - Los eventos de control-plane (`command_sent`, `command_retry`, `command_ack`, `command_timeout`) se escriben en el `session.jsonl` existente.
 - Se expone `ControlPlaneRuntimeSnapshot` para consumo de UI/diagnóstico con contadores, último resultado y estado por nodo.
+- Se expone snapshot canónico por nodo desde backend/session:
+  - `SessionController.get_control_plane_node_snapshots()`
+  - `SessionController.get_control_plane_node_snapshot(node_id)`
+- El estado canónico por nodo distingue `resolved/stale/unresolved` e incluye último resultado F3 + resumen de verificación de reboot.
 - El panel técnico `Plano de control` consume la API integrada de `SessionController` (sin instancias privadas de runtime en widgets).
 
 Notas de consistencia runtime:

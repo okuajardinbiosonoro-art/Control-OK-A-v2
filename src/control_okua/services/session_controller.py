@@ -15,7 +15,17 @@ from control_okua.core.control_plane.runtime import (
     ControlPlaneRuntimeUnavailableError,
     build_unavailable_control_plane_snapshot,
 )
+from control_okua.core.control_plane.runtime_snapshot import (
+    DEFAULT_CONTROL_PLANE_RESOLUTION_STALE_S,
+    ControlPlaneNodeSnapshot,
+    ControlPlaneNodeSnapshotInput,
+    ControlPlaneRebootVerificationState,
+    ControlPlaneResolvedIp,
+    build_control_plane_node_snapshot,
+    build_control_plane_node_snapshots,
+)
 from control_okua.core.control_plane.pending import PendingCommandStore
+from control_okua.core.node_identity_policy import resolve_node_identity
 from control_okua.core.preflight import (
     PreflightReport,
     ReadinessLevel,
@@ -52,6 +62,7 @@ from control_okua.services.control_transaction_service import (
 
 ConfigProvider = Callable[[], dict[str, Any]]
 RecorderBuilder = Callable[[dict[str, Any]], JsonlSessionRecorder]
+_CONTROL_PLANE_IP_STALE_AFTER_S = DEFAULT_CONTROL_PLANE_RESOLUTION_STALE_S
 
 
 class SessionController(QObject):
@@ -80,7 +91,8 @@ class SessionController(QObject):
         self._active_recording_paths: object | None = None
         self._last_recording_paths: object | None = None
         self._control_plane_runtime: ControlPlaneRuntime | None = None
-        self._control_plane_node_ip_cache: dict[int, str] = {}
+        self._control_plane_node_ip_cache: dict[int, ControlPlaneResolvedIp] = {}
+        self._control_plane_reboot_verification_cache: dict[int, ControlPlaneRebootVerificationState] = {}
 
         initial_cfg = self._get_cfg()
         self._last_preflight_report = self._run_preflight(initial_cfg, emit_signal=False)
@@ -178,6 +190,123 @@ class SessionController(QObject):
         except Exception:
             return build_unavailable_control_plane_snapshot(ack_port=5008)
 
+    def get_control_plane_node_snapshots(self, now: float | None = None) -> list[ControlPlaneNodeSnapshot]:
+        resolved_now = self._resolve_monotonic_now(now)
+        self._refresh_control_plane_node_ip_cache()
+
+        runtime_snapshot = self.get_control_plane_runtime_snapshot()
+        node_status_map = self._build_control_plane_runtime_status_map(runtime_snapshot)
+        active_node_ids = self._active_control_plane_node_ids()
+
+        node_snapshot_list = self.get_node_snapshots(now=resolved_now)
+        node_snapshots_by_id: dict[int, object] = {}
+        node_ids: set[int] = set()
+        for snapshot in node_snapshot_list:
+            raw_node_id = getattr(snapshot, "node_id", None)
+            try:
+                node_id = int(raw_node_id)
+            except (TypeError, ValueError):
+                continue
+            if node_id < 1 or node_id > 0xFFFF:
+                continue
+            node_ids.add(node_id)
+            node_snapshots_by_id[node_id] = snapshot
+
+        node_ids.update(self._control_plane_node_ip_cache.keys())
+        node_ids.update(node_status_map.keys())
+        node_ids.update(active_node_ids)
+        node_ids.update(self._control_plane_reboot_verification_cache.keys())
+
+        sources: list[ControlPlaneNodeSnapshotInput] = []
+        for node_id in sorted(node_ids):
+            sources.append(
+                self._build_control_plane_node_snapshot_input(
+                    node_id=node_id,
+                    now_monotonic=resolved_now,
+                    runtime_node_snapshot=node_snapshots_by_id.get(node_id),
+                    runtime_control_status=node_status_map.get(node_id),
+                    active_node_ids=active_node_ids,
+                )
+            )
+
+        return list(
+            build_control_plane_node_snapshots(
+                sources,
+                now_monotonic=resolved_now,
+                resolution_stale_after_s=_CONTROL_PLANE_IP_STALE_AFTER_S,
+            )
+        )
+
+    def get_control_plane_node_snapshot(
+        self,
+        node_id: int,
+        now: float | None = None,
+    ) -> ControlPlaneNodeSnapshot | None:
+        try:
+            resolved_node_id = int(node_id)
+        except (TypeError, ValueError):
+            return None
+        if resolved_node_id < 1 or resolved_node_id > 0xFFFF:
+            return None
+
+        resolved_now = self._resolve_monotonic_now(now)
+        self._refresh_control_plane_node_ip_cache()
+        runtime_snapshot = self.get_control_plane_runtime_snapshot()
+        node_status_map = self._build_control_plane_runtime_status_map(runtime_snapshot)
+        active_node_ids = self._active_control_plane_node_ids()
+        runtime_node_snapshot = self.get_node_snapshot(node_id=resolved_node_id, now=resolved_now)
+
+        source = self._build_control_plane_node_snapshot_input(
+            node_id=resolved_node_id,
+            now_monotonic=resolved_now,
+            runtime_node_snapshot=runtime_node_snapshot,
+            runtime_control_status=node_status_map.get(resolved_node_id),
+            active_node_ids=active_node_ids,
+        )
+        try:
+            return build_control_plane_node_snapshot(
+                source,
+                now_monotonic=resolved_now,
+                resolution_stale_after_s=_CONTROL_PLANE_IP_STALE_AFTER_S,
+            )
+        except Exception:
+            return None
+
+    def record_control_plane_reboot_verification(
+        self,
+        *,
+        node_id: int,
+        status: str,
+        summary: str,
+        updated_at_utc: str | None = None,
+    ) -> None:
+        try:
+            resolved_node_id = int(node_id)
+        except (TypeError, ValueError):
+            return
+        if resolved_node_id < 1 or resolved_node_id > 0xFFFF:
+            return
+        status_text = str(status).strip()
+        summary_text = str(summary).strip()
+        if not status_text and not summary_text:
+            return
+        if not status_text:
+            status_text = "unknown"
+        if not summary_text:
+            summary_text = status_text
+        updated_text = None
+        if updated_at_utc is not None:
+            cleaned = str(updated_at_utc).strip()
+            if cleaned:
+                updated_text = cleaned
+        self._control_plane_reboot_verification_cache[resolved_node_id] = (
+            ControlPlaneRebootVerificationState(
+                status=status_text,
+                summary=summary_text,
+                updated_at_utc=updated_text,
+            )
+        )
+
     def send_control_ping(
         self,
         *,
@@ -237,6 +366,7 @@ class SessionController(QObject):
             return False
         self._shutdown_control_plane_runtime()
         self._control_plane_node_ip_cache.clear()
+        self._control_plane_reboot_verification_cache.clear()
 
         cfg = self._get_cfg()
         attempt_spec = self._resolve_spec_from_cfg(cfg)
@@ -380,6 +510,7 @@ class SessionController(QObject):
         self._active_backend = None
         self._shutdown_control_plane_runtime()
         self._control_plane_node_ip_cache.clear()
+        self._control_plane_reboot_verification_cache.clear()
         self._current_spec = self._resolve_spec()
         self._apply_transition(
             SessionEvent.BACKEND_STOPPED,
@@ -402,6 +533,7 @@ class SessionController(QObject):
         )
         self._shutdown_control_plane_runtime()
         self._control_plane_node_ip_cache.clear()
+        self._control_plane_reboot_verification_cache.clear()
         self._active_backend = None
         cfg = self._get_cfg()
         preflight_report = self._run_preflight(cfg, emit_signal=True)
@@ -425,6 +557,7 @@ class SessionController(QObject):
         self._cfg_provider = self._normalize_cfg_provider(cfg_provider_or_cfg)
         self._shutdown_control_plane_runtime()
         self._control_plane_node_ip_cache.clear()
+        self._control_plane_reboot_verification_cache.clear()
         cfg = self._get_cfg()
         preflight_report = self._run_preflight(cfg, emit_signal=True)
         self._current_spec = self._resolve_spec_from_cfg(cfg)
@@ -705,7 +838,15 @@ class SessionController(QObject):
             source_ip = raw_source_ip.strip()
             if not source_ip:
                 continue
-            self._control_plane_node_ip_cache[node_id] = source_ip
+            observed_at = self._coerce_monotonic_ts(
+                getattr(holder, "received_ts", None),
+                fallback=time.monotonic(),
+            )
+            self._control_plane_node_ip_cache[node_id] = ControlPlaneResolvedIp(
+                node_id=node_id,
+                ip=source_ip,
+                observed_at_monotonic=observed_at,
+            )
 
     def _resolve_node_ip_for_control(self, node_id: int) -> str:
         try:
@@ -720,18 +861,198 @@ class SessionController(QObject):
             )
 
         cached = self._control_plane_node_ip_cache.get(resolved_node_id)
-        if cached:
-            return cached
+        if cached is not None and cached.ip:
+            return cached.ip
 
         self._refresh_control_plane_node_ip_cache()
         cached = self._control_plane_node_ip_cache.get(resolved_node_id)
-        if cached:
-            return cached
+        if cached is not None and cached.ip:
+            return cached.ip
+
+        # UDP runtime only exposes source IP on last EVT/STAT summaries.
+        # Wait briefly for next packet so the target node can refresh cache.
+        deadline = time.monotonic() + 0.9
+        while time.monotonic() < deadline:
+            self._refresh_control_plane_node_ip_cache()
+            cached = self._control_plane_node_ip_cache.get(resolved_node_id)
+            if cached is not None and cached.ip:
+                return cached.ip
+            time.sleep(0.05)
 
         raise ControlPlaneNodeResolutionError(
             "No existe IP resoluble para ese node_id en esta sesión. "
             "Primero recibe EVT/STAT del nodo en runtime UDP."
         )
+
+    def _build_control_plane_runtime_status_map(
+        self,
+        runtime_snapshot: ControlPlaneRuntimeSnapshot,
+    ) -> dict[int, object]:
+        rows = getattr(runtime_snapshot, "per_node_last_status", tuple())
+        if not isinstance(rows, tuple):
+            return {}
+        mapped: dict[int, object] = {}
+        for row in rows:
+            raw_node_id = getattr(row, "node_id", None)
+            try:
+                node_id = int(raw_node_id)
+            except (TypeError, ValueError):
+                continue
+            if node_id < 1 or node_id > 0xFFFF:
+                continue
+            mapped[node_id] = row
+        return mapped
+
+    def _active_control_plane_node_ids(self) -> set[int]:
+        runtime = self._control_plane_runtime
+        if runtime is None:
+            return set()
+        reader = getattr(runtime, "active_node_ids", None)
+        if not callable(reader):
+            return set()
+        try:
+            raw_ids = reader()
+        except Exception:
+            return set()
+        node_ids: set[int] = set()
+        for raw_node_id in raw_ids:
+            try:
+                node_id = int(raw_node_id)
+            except (TypeError, ValueError):
+                continue
+            if node_id < 1 or node_id > 0xFFFF:
+                continue
+            node_ids.add(node_id)
+        return node_ids
+
+    def _build_control_plane_node_snapshot_input(
+        self,
+        *,
+        node_id: int,
+        now_monotonic: float,
+        runtime_node_snapshot: object | None,
+        runtime_control_status: object | None,
+        active_node_ids: set[int],
+    ) -> ControlPlaneNodeSnapshotInput:
+        _ = now_monotonic
+        identity = resolve_node_identity(node_id)
+        ip_entry = self._control_plane_node_ip_cache.get(node_id)
+        reboot_state = self._control_plane_reboot_verification_cache.get(node_id)
+
+        last_state_flags = self._as_int_or_none(
+            None if runtime_node_snapshot is None else getattr(runtime_node_snapshot, "last_state_flags", None)
+        )
+        last_boot_marker = self._resolve_boot_marker(last_state_flags)
+
+        status_row = runtime_control_status
+        return ControlPlaneNodeSnapshotInput(
+            node_id=node_id,
+            label=identity.node_label,
+            resolved_ip=None if ip_entry is None else ip_entry.ip,
+            resolution_observed_at_monotonic=None
+            if ip_entry is None
+            else ip_entry.observed_at_monotonic,
+            last_seen_pc_ts=self._as_float_or_none(
+                None if runtime_node_snapshot is None else getattr(runtime_node_snapshot, "last_seen_pc_ts", None)
+            ),
+            transaction_active=node_id in active_node_ids,
+            last_command_name=self._as_text_or_none(
+                None if status_row is None else getattr(status_row, "command_name", None)
+            ),
+            last_cmd_seq=self._as_int_or_none(
+                None if status_row is None else getattr(status_row, "cmd_seq", None)
+            ),
+            last_nonce=self._as_int_or_none(
+                None if status_row is None else getattr(status_row, "nonce", None)
+            ),
+            last_final_status=self._as_text_or_none(
+                None if status_row is None else getattr(status_row, "final_status", None)
+            ),
+            last_ack_stage=self._as_int_or_none(
+                None if status_row is None else getattr(status_row, "ack_stage", None)
+            ),
+            last_status_code=self._as_int_or_none(
+                None if status_row is None else getattr(status_row, "status_code", None)
+            ),
+            last_err_detail=self._as_int_or_none(
+                None if status_row is None else getattr(status_row, "err_detail", None)
+            ),
+            last_error_message=self._as_text_or_none(
+                None if status_row is None else getattr(status_row, "last_error_message", None)
+            ),
+            last_tx_started_at=self._as_text_or_none(
+                None if status_row is None else getattr(status_row, "tx_started_at_utc", None)
+            ),
+            last_tx_finished_at=self._as_text_or_none(
+                None if status_row is None else getattr(status_row, "tx_finished_at_utc", None)
+            ),
+            last_reboot_verification_status=None if reboot_state is None else reboot_state.status,
+            last_reboot_verification_summary=None if reboot_state is None else reboot_state.summary,
+            last_uptime_s=self._as_int_or_none(
+                None if runtime_node_snapshot is None else getattr(runtime_node_snapshot, "last_uptime_s", None)
+            ),
+            last_reset_reason=self._as_int_or_none(
+                None if runtime_node_snapshot is None else getattr(runtime_node_snapshot, "reset_reason", None)
+            ),
+            last_boot_marker=last_boot_marker,
+            message=None if reboot_state is None else reboot_state.summary,
+        )
+
+    @staticmethod
+    def _resolve_monotonic_now(now: float | None) -> float:
+        if now is None:
+            return float(time.monotonic())
+        try:
+            return float(now)
+        except (TypeError, ValueError):
+            return float(time.monotonic())
+
+    @staticmethod
+    def _coerce_monotonic_ts(raw_value: object, *, fallback: float) -> float:
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            return float(fallback)
+        if value < 0:
+            return float(fallback)
+        return value
+
+    @staticmethod
+    def _resolve_boot_marker(state_flags: int | None) -> int | None:
+        if state_flags is None:
+            return None
+        if state_flags < 0:
+            return None
+        if state_flags > 0xFF:
+            return None
+        return (state_flags >> 4) & 0x0F
+
+    @staticmethod
+    def _as_int_or_none(raw_value: object) -> int | None:
+        try:
+            if raw_value is None:
+                return None
+            return int(raw_value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _as_float_or_none(raw_value: object) -> float | None:
+        try:
+            if raw_value is None:
+                return None
+            return float(raw_value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _as_text_or_none(raw_value: object) -> str | None:
+        if raw_value is None:
+            return None
+        text = str(raw_value).strip()
+        if not text:
+            return None
+        return text
 
     def _record_event(
         self,

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Protocol
 
 from control_okua.services.control_transaction_service import (
@@ -59,6 +59,9 @@ class ControlPlaneNodeStatusSnapshot:
     ack_stage: int | None
     status_code: int | None
     err_detail: int | None
+    last_error_message: str | None
+    tx_started_at_utc: str | None
+    tx_finished_at_utc: str | None
     ts_utc: str
 
 
@@ -250,6 +253,29 @@ class ControlPlaneRuntime:
             recent_results=tuple(self._recent_results),
         )
 
+    def active_node_ids(self) -> tuple[int, ...]:
+        pending_store = self._ack_listener.pending_store
+        list_pending = getattr(pending_store, "list_pending", None)
+        if not callable(list_pending):
+            return tuple()
+        try:
+            pending_rows = list_pending()
+        except Exception:
+            return tuple()
+
+        active: set[int] = set()
+        for row in pending_rows:
+            sent_command = getattr(row, "sent_command", None)
+            raw_node_id = getattr(sent_command, "node_id", None)
+            try:
+                node_id = int(raw_node_id)
+            except (TypeError, ValueError):
+                continue
+            if node_id < 1 or node_id > 0xFFFF:
+                continue
+            active.add(node_id)
+        return tuple(sorted(active))
+
     def _resolve_node_ip(self, node_id: int) -> str:
         try:
             resolved_id = int(node_id)
@@ -273,7 +299,11 @@ class ControlPlaneRuntime:
         return node_ip.strip()
 
     def _consume_transaction_result(self, result: ControlTransactionResult) -> None:
-        ts_utc = _format_utc(self._utc_now())
+        tx_finished_dt = self._utc_now()
+        elapsed_ms = max(0.0, float(result.elapsed_ms))
+        tx_started_dt = tx_finished_dt - timedelta(milliseconds=elapsed_ms)
+        tx_started_at_utc = _format_utc(tx_started_dt)
+        tx_finished_at_utc = _format_utc(tx_finished_dt)
         summary = ControlPlaneResultSummary(
             command_name=result.command_name,
             node_id=int(result.node_id),
@@ -285,8 +315,8 @@ class ControlPlaneRuntime:
             ack_stage=None if result.ack is None else result.ack.ack_stage,
             status_code=None if result.ack is None else result.ack.status_code,
             err_detail=None if result.ack is None else result.ack.err_detail,
-            elapsed_ms=float(result.elapsed_ms),
-            ts_utc=ts_utc,
+            elapsed_ms=elapsed_ms,
+            ts_utc=tx_finished_at_utc,
         )
         self._last_command = summary
         self._last_result = summary
@@ -301,7 +331,10 @@ class ControlPlaneRuntime:
             ack_stage=None if result.ack is None else result.ack.ack_stage,
             status_code=None if result.ack is None else result.ack.status_code,
             err_detail=None if result.ack is None else result.ack.err_detail,
-            ts_utc=ts_utc,
+            last_error_message=result.last_error,
+            tx_started_at_utc=tx_started_at_utc,
+            tx_finished_at_utc=tx_finished_at_utc,
+            ts_utc=tx_finished_at_utc,
         )
 
         session_id = self._session_id_provider() if self._session_id_provider is not None else None
