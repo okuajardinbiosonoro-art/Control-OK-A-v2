@@ -23,11 +23,12 @@ Estado de cierre: **marzo 23, 2026**.
 
 ## 2) Exposición UI técnica actual
 
-- Existe panel técnico en `Diagnóstico` (ubicación secundaria, operator-first preservado).
+- Existe panel técnico en `Plano de control` (ubicación secundaria, operator-first preservado).
 - Comandos expuestos en UI:
   - `PING`
   - `REQUEST_STAT_NOW`
   - `REBOOT_SOFT`
+- El operador selecciona `node_id`; la IP se resuelve automáticamente en background desde runtime UDP.
 - `REBOOT_SOFT` requiere confirmación explícita antes de enviar.
 - La UI muestra resultado legible de transacción (estado final, `cmd_seq`, `nonce`, intentos y detalles ACK).
 - Durante ejecución se deshabilitan controles del panel y se mantiene ventana responsive.
@@ -59,7 +60,7 @@ Nivel 1 (obligatorio, ejecutado):
   - `REBOOT_SOFT` con confirmación
 - Verificación de no congelamiento de UI del panel durante transacción.
 - Verificación de que `Operación` no muestra controles F3 crudos.
-- Verificación de que `Diagnóstico` sí contiene el panel técnico.
+- Verificación de que `Plano de control` sí contiene el panel técnico.
 - Verificación de ausencia de `SET_*` en UI.
 
 Nivel 2 (recomendado, ejecutado):
@@ -93,3 +94,10 @@ El bloque app-side F3 mínimo queda consolidado y listo para extenderse en la si
 - comandos `SET_*`
 - capa de evidencias/auditoría persistente
 - validación de hardware real continua en banco
+
+## 7) Continuidad (Ticket 15)
+
+- El control-plane F3 quedó integrado al runtime principal de sesión via `SessionController`.
+- El despacho operativo usa `node_id` y resuelve IP desde el estado runtime UDP activo.
+- La evidencia de control-plane se integra al `session.jsonl` existente (sin archivo paralelo).
+- Se expone snapshot runtime de control-plane para consumo de UI/diagnóstico.

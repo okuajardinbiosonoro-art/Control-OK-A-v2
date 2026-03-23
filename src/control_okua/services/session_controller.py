@@ -8,6 +8,14 @@ from typing import Any, Callable
 
 from PySide6.QtCore import QObject, Signal
 
+from control_okua.core.control_plane.runtime import (
+    ControlPlaneNodeResolutionError,
+    ControlPlaneRuntime,
+    ControlPlaneRuntimeSnapshot,
+    ControlPlaneRuntimeUnavailableError,
+    build_unavailable_control_plane_snapshot,
+)
+from control_okua.core.control_plane.pending import PendingCommandStore
 from control_okua.core.preflight import (
     PreflightReport,
     ReadinessLevel,
@@ -19,6 +27,7 @@ from control_okua.core.recording import (
     SessionReportAccumulator,
 )
 from control_okua.core.session import (
+    BackendKind,
     SessionErrorInfo,
     SessionEvent,
     SessionSnapshot,
@@ -33,6 +42,12 @@ from control_okua.core.session import (
 from control_okua.services.session_backend_factory import (
     BackendUnavailableError,
     SessionBackendFactory,
+)
+from control_okua.services.ack_listener import AckListenerService
+from control_okua.services.cmd_service import CmdService
+from control_okua.services.control_transaction_service import (
+    ControlTransactionResult,
+    ControlTransactionService,
 )
 
 ConfigProvider = Callable[[], dict[str, Any]]
@@ -64,6 +79,8 @@ class SessionController(QObject):
         self._report_accumulator: SessionReportAccumulator | None = None
         self._active_recording_paths: object | None = None
         self._last_recording_paths: object | None = None
+        self._control_plane_runtime: ControlPlaneRuntime | None = None
+        self._control_plane_node_ip_cache: dict[int, str] = {}
 
         initial_cfg = self._get_cfg()
         self._last_preflight_report = self._run_preflight(initial_cfg, emit_signal=False)
@@ -100,7 +117,9 @@ class SessionController(QObject):
         runtime_snapshot = getattr(backend, "runtime_snapshot", None)
         if callable(runtime_snapshot):
             try:
-                return runtime_snapshot()
+                snapshot = runtime_snapshot()
+                self._refresh_control_plane_node_ip_cache(snapshot)
+                return snapshot
             except Exception:
                 return None
         return None
@@ -144,6 +163,71 @@ class SessionController(QObject):
                 return None
         return None
 
+    def is_control_plane_available(self) -> bool:
+        runtime = self._control_plane_runtime
+        if runtime is None:
+            return False
+        return self.get_state() is SessionState.RUNNING and self._is_udp_runtime_spec(self._current_spec)
+
+    def get_control_plane_runtime_snapshot(self) -> ControlPlaneRuntimeSnapshot:
+        runtime = self._control_plane_runtime
+        if runtime is None:
+            return build_unavailable_control_plane_snapshot()
+        try:
+            return runtime.snapshot()
+        except Exception:
+            return build_unavailable_control_plane_snapshot(ack_port=5008)
+
+    def send_control_ping(
+        self,
+        *,
+        node_id: int,
+        ack_timeout_ms: int = 350,
+        max_retries: int = 1,
+        source: str = "manual_ui",
+    ) -> ControlTransactionResult:
+        runtime = self._ensure_control_plane_runtime()
+        return runtime.send_ping(
+            node_id=node_id,
+            ack_timeout_ms=ack_timeout_ms,
+            max_retries=max_retries,
+            source=source,
+        )
+
+    def send_control_request_stat_now(
+        self,
+        *,
+        node_id: int,
+        ack_timeout_ms: int = 350,
+        max_retries: int = 1,
+        source: str = "manual_ui",
+    ) -> ControlTransactionResult:
+        runtime = self._ensure_control_plane_runtime()
+        return runtime.send_request_stat_now(
+            node_id=node_id,
+            ack_timeout_ms=ack_timeout_ms,
+            max_retries=max_retries,
+            source=source,
+        )
+
+    def send_control_reboot_soft(
+        self,
+        *,
+        node_id: int,
+        delay_ms: int = 0,
+        ack_timeout_ms: int = 350,
+        max_retries: int = 1,
+        source: str = "manual_ui",
+    ) -> ControlTransactionResult:
+        runtime = self._ensure_control_plane_runtime()
+        return runtime.send_reboot_soft(
+            node_id=node_id,
+            delay_ms=delay_ms,
+            ack_timeout_ms=ack_timeout_ms,
+            max_retries=max_retries,
+            source=source,
+        )
+
     def start_session(self) -> bool:
         transition = self._apply_transition(
             SessionEvent.REQUEST_START,
@@ -151,6 +235,8 @@ class SessionController(QObject):
         )
         if not transition.is_valid:
             return False
+        self._shutdown_control_plane_runtime()
+        self._control_plane_node_ip_cache.clear()
 
         cfg = self._get_cfg()
         attempt_spec = self._resolve_spec_from_cfg(cfg)
@@ -228,6 +314,7 @@ class SessionController(QObject):
             if backend is not None:
                 self._record_backend_runtime_snapshot(backend, reason="start_failed")
             self._active_backend = None
+            self._shutdown_control_plane_runtime()
             self._apply_transition(
                 SessionEvent.START_FAILED,
                 detail=str(exc),
@@ -244,6 +331,7 @@ class SessionController(QObject):
             spec=self._current_spec,
             message=f"Sesion iniciada: {backend.describe()}",
         )
+        self._maybe_activate_control_plane_runtime()
         return True
 
     def stop_session(self) -> bool:
@@ -274,6 +362,7 @@ class SessionController(QObject):
             self._record_node_summary_snapshot(self._active_backend, reason="before_stop")
             self._active_backend.stop()
         except Exception as exc:
+            self._shutdown_control_plane_runtime()
             self._apply_transition(
                 SessionEvent.STOP_FAILED,
                 detail=str(exc),
@@ -289,6 +378,8 @@ class SessionController(QObject):
             },
         )
         self._active_backend = None
+        self._shutdown_control_plane_runtime()
+        self._control_plane_node_ip_cache.clear()
         self._current_spec = self._resolve_spec()
         self._apply_transition(
             SessionEvent.BACKEND_STOPPED,
@@ -309,6 +400,8 @@ class SessionController(QObject):
             final_state=SessionState.IDLE.value,
             summary="Recording cerrado por reset_error.",
         )
+        self._shutdown_control_plane_runtime()
+        self._control_plane_node_ip_cache.clear()
         self._active_backend = None
         cfg = self._get_cfg()
         preflight_report = self._run_preflight(cfg, emit_signal=True)
@@ -330,6 +423,8 @@ class SessionController(QObject):
 
     def reload_config(self, cfg_provider_or_cfg: dict[str, Any] | ConfigProvider) -> SessionSnapshot:
         self._cfg_provider = self._normalize_cfg_provider(cfg_provider_or_cfg)
+        self._shutdown_control_plane_runtime()
+        self._control_plane_node_ip_cache.clear()
         cfg = self._get_cfg()
         preflight_report = self._run_preflight(cfg, emit_signal=True)
         self._current_spec = self._resolve_spec_from_cfg(cfg)
@@ -522,6 +617,121 @@ class SessionController(QObject):
         else:
             base_dir = Path(folder) / "sessions"
         return JsonlSessionRecorder(base_sessions_dir=base_dir)
+
+    @staticmethod
+    def _is_udp_runtime_spec(spec: SessionSpec) -> bool:
+        if spec.mode != "udp":
+            return False
+        return spec.backend in {BackendKind.UDP, BackendKind.LAB}
+
+    def _maybe_activate_control_plane_runtime(self) -> None:
+        if not self._is_udp_runtime_spec(self._current_spec):
+            self._shutdown_control_plane_runtime()
+            return
+        try:
+            self._ensure_control_plane_runtime()
+        except Exception as exc:
+            self.session_message.emit(f"Control-plane no disponible en esta sesión: {exc}")
+
+    def _ensure_control_plane_runtime(self) -> ControlPlaneRuntime:
+        if self.get_state() is not SessionState.RUNNING:
+            raise ControlPlaneRuntimeUnavailableError(
+                "Control-plane requiere sesión RUNNING."
+            )
+        if not self._is_udp_runtime_spec(self._current_spec):
+            raise ControlPlaneRuntimeUnavailableError(
+                "Control-plane F3 solo está disponible para sesión UDP/LAB."
+            )
+        runtime = self._control_plane_runtime
+        if runtime is not None:
+            return runtime
+        runtime = self._build_control_plane_runtime()
+        self._control_plane_runtime = runtime
+        return runtime
+
+    def _build_control_plane_runtime(self) -> ControlPlaneRuntime:
+        pending_store = PendingCommandStore()
+        ack_listener = AckListenerService(pending_store=pending_store)
+        cmd_service = CmdService()
+        transaction_service = ControlTransactionService(
+            cmd_service=cmd_service,
+            ack_listener=ack_listener,
+            pending_store=pending_store,
+        )
+        return ControlPlaneRuntime(
+            transaction_service=transaction_service,
+            ack_listener=ack_listener,
+            node_ip_resolver=self._resolve_node_ip_for_control,
+            recording_sink=self._record_event,
+            session_id_provider=self.get_active_recording_session_id,
+        )
+
+    def _shutdown_control_plane_runtime(self) -> None:
+        runtime = self._control_plane_runtime
+        self._control_plane_runtime = None
+        if runtime is None:
+            return
+        runtime.stop()
+
+    def _refresh_control_plane_node_ip_cache(self, runtime_snapshot: object | None = None) -> None:
+        snapshot = runtime_snapshot
+        if snapshot is None:
+            backend = self._active_backend
+            if backend is None:
+                return
+            runtime_reader = getattr(backend, "runtime_snapshot", None)
+            if not callable(runtime_reader):
+                return
+            try:
+                snapshot = runtime_reader()
+            except Exception:
+                return
+        if snapshot is None:
+            return
+        for holder_name in ("last_evt", "last_stat"):
+            holder = getattr(snapshot, holder_name, None)
+            if holder is None:
+                continue
+            raw_node_id = getattr(holder, "node_id", None)
+            raw_source_ip = getattr(holder, "source_ip", None)
+            try:
+                node_id = int(raw_node_id)
+            except (TypeError, ValueError):
+                continue
+            if node_id < 1 or node_id > 0xFFFF:
+                continue
+            if not isinstance(raw_source_ip, str):
+                continue
+            source_ip = raw_source_ip.strip()
+            if not source_ip:
+                continue
+            self._control_plane_node_ip_cache[node_id] = source_ip
+
+    def _resolve_node_ip_for_control(self, node_id: int) -> str:
+        try:
+            resolved_node_id = int(node_id)
+        except (TypeError, ValueError) as exc:
+            raise ControlPlaneNodeResolutionError(
+                f"node_id inválido: {node_id!r}"
+            ) from exc
+        if resolved_node_id < 1 or resolved_node_id > 0xFFFF:
+            raise ControlPlaneNodeResolutionError(
+                f"node_id fuera de rango unicast: {node_id}"
+            )
+
+        cached = self._control_plane_node_ip_cache.get(resolved_node_id)
+        if cached:
+            return cached
+
+        self._refresh_control_plane_node_ip_cache()
+        cached = self._control_plane_node_ip_cache.get(resolved_node_id)
+        if cached:
+            return cached
+
+        raise ControlPlaneNodeResolutionError(
+            "No existe IP resoluble para ese node_id en esta sesión. "
+            "Primero recibe EVT/STAT del nodo en runtime UDP."
+        )
 
     def _record_event(
         self,

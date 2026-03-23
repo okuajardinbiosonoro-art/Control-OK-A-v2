@@ -8,7 +8,6 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QPushButton,
     QSpinBox,
@@ -22,10 +21,7 @@ from control_okua.app_qt.viewmodels.control_plane_vm import (
     build_reboot_soft_confirmation_text,
     format_control_transaction_result,
 )
-from control_okua.services.control_transaction_service import (
-    ControlTransactionResult,
-    ControlTransactionService,
-)
+from control_okua.services.control_transaction_service import ControlTransactionResult
 
 
 class _TransactionWorker(QObject):
@@ -49,39 +45,43 @@ class ControlPlanePanel(QWidget):
     def __init__(
         self,
         *,
-        transaction_service_provider: Callable[[], ControlTransactionService],
-        default_node_ip: str = "",
+        send_ping: Callable[[int, int, int], ControlTransactionResult],
+        send_request_stat_now: Callable[[int, int, int], ControlTransactionResult],
+        send_reboot_soft: Callable[[int, int, int], ControlTransactionResult],
         default_node_id: int = 1,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self._transaction_service_provider = transaction_service_provider
+        self._send_ping = send_ping
+        self._send_request_stat_now = send_request_stat_now
+        self._send_reboot_soft = send_reboot_soft
         self._active_thread: QThread | None = None
         self._active_worker: _TransactionWorker | None = None
         self._active_command_name: str = ""
 
         root = QVBoxLayout(self)
 
-        self.group = QGroupBox("Control Plane F3 (técnico)", self)
+        self.group = QGroupBox("Plano de control", self)
         group_layout = QVBoxLayout(self.group)
 
         self.status_label = QLabel(
-            "Panel técnico listo. Define target y ejecuta una acción manual."
+            "Listo. Selecciona node_id y ejecuta un comando."
         )
         self.status_label.setWordWrap(True)
         group_layout.addWidget(self.status_label)
 
         target_layout = QFormLayout()
-        self.node_ip_edit = QLineEdit(self)
-        self.node_ip_edit.setPlaceholderText("192.168.1.40")
-        self.node_ip_edit.setText(str(default_node_ip).strip())
-        target_layout.addRow("IP nodo", self.node_ip_edit)
-
         self.node_id_spin = QSpinBox(self)
         self.node_id_spin.setRange(1, 0xFFFF)
         self.node_id_spin.setValue(max(1, int(default_node_id)))
         target_layout.addRow("node_id", self.node_id_spin)
         group_layout.addLayout(target_layout)
+
+        self.target_help_label = QLabel(
+            "La IP del nodo se resuelve automáticamente desde runtime UDP."
+        )
+        self.target_help_label.setWordWrap(True)
+        group_layout.addWidget(self.target_help_label)
 
         policy_layout = QFormLayout()
         self.ack_timeout_spin = QSpinBox(self)
@@ -126,22 +126,20 @@ class ControlPlanePanel(QWidget):
     def _on_ping_clicked(self) -> None:
         self._run_transaction(
             command_name="PING",
-            execute=lambda service, node_ip, node_id, ack_timeout_ms, max_retries: service.send_ping_and_wait_ack(
-                node_ip,
+            execute=lambda node_id, ack_timeout_ms, max_retries: self._send_ping(
                 node_id,
-                ack_timeout_ms=ack_timeout_ms,
-                max_retries=max_retries,
+                ack_timeout_ms,
+                max_retries,
             ),
         )
 
     def _on_request_stat_now_clicked(self) -> None:
         self._run_transaction(
             command_name="REQUEST_STAT_NOW",
-            execute=lambda service, node_ip, node_id, ack_timeout_ms, max_retries: service.send_request_stat_now_and_wait_ack(
-                node_ip,
+            execute=lambda node_id, ack_timeout_ms, max_retries: self._send_request_stat_now(
                 node_id,
-                ack_timeout_ms=ack_timeout_ms,
-                max_retries=max_retries,
+                ack_timeout_ms,
+                max_retries,
             ),
         )
 
@@ -150,19 +148,17 @@ class ControlPlanePanel(QWidget):
             return
         self._run_transaction(
             command_name="REBOOT_SOFT",
-            execute=lambda service, node_ip, node_id, ack_timeout_ms, max_retries: service.send_reboot_soft_and_wait_ack(
-                node_ip,
+            execute=lambda node_id, ack_timeout_ms, max_retries: self._send_reboot_soft(
                 node_id,
-                ack_timeout_ms=ack_timeout_ms,
-                max_retries=max_retries,
+                ack_timeout_ms,
+                max_retries,
             ),
         )
 
     def _confirm_reboot_soft(self) -> bool:
-        node_ip = self.node_ip_edit.text().strip()
         node_id = int(self.node_id_spin.value())
         message = build_reboot_soft_confirmation_text(
-            node_ip=node_ip,
+            node_ip="resolución automática por node_id",
             node_id=node_id,
         )
         answer = QMessageBox.warning(
@@ -178,30 +174,14 @@ class ControlPlanePanel(QWidget):
         self,
         *,
         command_name: str,
-        execute: Callable[
-            [ControlTransactionService, str, int, int, int],
-            ControlTransactionResult,
-        ],
+        execute: Callable[[int, int, int], ControlTransactionResult],
     ) -> None:
         if self._active_thread is not None:
-            return
-
-        node_ip = self.node_ip_edit.text().strip()
-        if not node_ip:
-            self.status_label.setText("Error: IP de nodo requerida.")
-            self.result_view.setPlainText("Ingresa una IP de target antes de enviar comando.")
             return
 
         node_id = int(self.node_id_spin.value())
         ack_timeout_ms = int(self.ack_timeout_spin.value())
         max_retries = int(self.max_retries_spin.value())
-
-        try:
-            service = self._transaction_service_provider()
-        except Exception as exc:
-            self.status_label.setText("Error: no se pudo preparar el control-plane.")
-            self.result_view.setPlainText(str(exc))
-            return
 
         self._active_command_name = command_name
         self._set_busy(True, status_text=f"{command_name}: enviando comando...")
@@ -212,8 +192,6 @@ class ControlPlanePanel(QWidget):
 
         worker = _TransactionWorker(
             lambda: execute(
-                service,
-                node_ip,
                 node_id,
                 ack_timeout_ms,
                 max_retries,
@@ -234,7 +212,6 @@ class ControlPlanePanel(QWidget):
 
     def _set_busy(self, is_busy: bool, *, status_text: str | None = None) -> None:
         enabled = not is_busy
-        self.node_ip_edit.setEnabled(enabled)
         self.node_id_spin.setEnabled(enabled)
         self.ack_timeout_spin.setEnabled(enabled)
         self.max_retries_spin.setEnabled(enabled)

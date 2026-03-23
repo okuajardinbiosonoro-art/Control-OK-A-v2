@@ -29,6 +29,16 @@ from control_okua.core.control_plane.pending import (
     PendingCommandStore,
     SentCommandLike,
 )
+from control_okua.core.control_plane.runtime import (
+    ControlPlaneNodeResolutionError,
+    ControlPlaneNodeStatusSnapshot,
+    ControlPlaneResultSummary,
+    ControlPlaneRuntime,
+    ControlPlaneRuntimeError,
+    ControlPlaneRuntimeSnapshot,
+    ControlPlaneRuntimeUnavailableError,
+    build_unavailable_control_plane_snapshot,
+)
 from control_okua.core.control_plane.protocol import (
     AckParseError,
     AckParseErrorCode,
@@ -76,6 +86,14 @@ __all__ = [
     "SentCommandLike",
     "AckCorrelationStatus",
     "AckCorrelationResult",
+    "ControlPlaneRuntimeError",
+    "ControlPlaneRuntimeUnavailableError",
+    "ControlPlaneNodeResolutionError",
+    "ControlPlaneRuntime",
+    "ControlPlaneRuntimeSnapshot",
+    "ControlPlaneNodeStatusSnapshot",
+    "ControlPlaneResultSummary",
+    "build_unavailable_control_plane_snapshot",
     "AckParseErrorCode",
     "AckParseError",
     "ParsedOkuaAck",

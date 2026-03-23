@@ -26,6 +26,10 @@ class SessionLogEventType(str, Enum):
     SERIAL_MESSAGE = "serial_message"
     NODE_SUMMARY = "node_summary"
     REPORT_GENERATED = "report_generated"
+    COMMAND_SENT = "command_sent"
+    COMMAND_RETRY = "command_retry"
+    COMMAND_ACK = "command_ack"
+    COMMAND_TIMEOUT = "command_timeout"
 
 
 def coerce_event_type(value: SessionLogEventType | str) -> SessionLogEventType:

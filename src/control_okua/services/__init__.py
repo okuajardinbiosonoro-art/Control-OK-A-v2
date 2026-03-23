@@ -24,7 +24,6 @@ from control_okua.services.session_backend_factory import (
     SessionStopError,
     UnavailableSessionBackend,
 )
-from control_okua.services.session_controller import SessionController
 
 __all__ = [
     "AckListenerService",
@@ -47,3 +46,11 @@ __all__ = [
     "UnavailableSessionBackend",
     "SessionController",
 ]
+
+
+def __getattr__(name: str):
+    if name == "SessionController":
+        from control_okua.services.session_controller import SessionController
+
+        return SessionController
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

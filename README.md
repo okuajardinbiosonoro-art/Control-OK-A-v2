@@ -40,10 +40,11 @@ El ejecutable queda en `dist/Control Okua.exe`.
 
 La ventana principal usa flujo operator-first y separa operación rápida de acciones técnicas:
 
-- Pestañas principales: `Operación`, `Nodos`, `Diagnóstico`.
+- Pestañas principales: `Operación`, `Nodos`, `Diagnóstico`, `Plano de control`.
 - Vista `Estado actual` disponible bajo demanda desde `Ver > Estado actual` (ya no es pestaña fija).
 - Vista `Nodos` agrupada por cajas desplegables (`Caja 1` a `Caja 5`) con nombres lógicos (`EB1`, `EC1`, `...`).
 - Vista `Diagnóstico` con resumen técnico, advertencias y panel de preflight desplegable.
+- Vista `Plano de control` para acciones manuales de control-plane por `node_id`.
 
 En `Operacion` tambien aparece el bloque `Preparacion de sesion`, que resume:
 
@@ -70,7 +71,7 @@ Acciones y menú principal:
 
 - `Operación` mantiene solo acciones rápidas: `Cambiar perfil`, `Iniciar sesión`, `Detener sesión`, `Reiniciar error`.
 - `Archivo`: `Recargar configuración`, `Salir`.
-- `Ver`: `Estado actual`, `Diagnóstico`, `Errores / preflight`.
+- `Ver`: `Estado actual`, `Diagnóstico`, `Plano de control`, `Errores / preflight`.
 - `Herramientas`: `Herramientas avanzadas`.
 - `Ayuda`: `Acerca de`.
 
@@ -207,12 +208,13 @@ Campos principales:
 
 ## Control Plane F3 (Ticket 14.4)
 
-- Existe un panel técnico mínimo en `Diagnóstico` para ejecutar transacciones F3 sin usar consola.
+- Existe un panel mínimo en `Plano de control` para ejecutar transacciones F3 sin usar consola.
 - La UI expone solo:
   - `PING`
   - `REQUEST_STAT_NOW`
   - `REBOOT_SOFT`
 - El panel consume `ControlTransactionService` y muestra resultado legible (`final_status`, `cmd_seq`, `nonce`, `attempt_count`, detalles ACK).
+- El operador usa solo `node_id`; la IP del nodo se resuelve automáticamente en background desde runtime UDP.
 - `REBOOT_SOFT` requiere confirmación explícita antes de enviar.
 - Durante ejecución, el panel deshabilita controles y mantiene la ventana responsive.
 
@@ -229,6 +231,14 @@ Campos principales:
 - Se mantiene el alcance actual sin abrir `SET_*`.
 - Documento canónico de cierre del bloque:
   - `docs/app/control_plane_f3_app_minimal.md`
+
+## Control Plane F3 (Ticket 15)
+
+- El runtime de control-plane quedó integrado al lifecycle de `SessionController` (start/stop de sesión UDP/LAB).
+- El despacho de comandos desde capas superiores opera por `node_id`; la resolución `node_id -> ip` usa el runtime real de sesión.
+- Los eventos de control-plane (`command_sent`, `command_retry`, `command_ack`, `command_timeout`) se escriben en el `session.jsonl` existente.
+- Se expone `ControlPlaneRuntimeSnapshot` para consumo de UI/diagnóstico con contadores, último resultado y estado por nodo.
+- El panel técnico `Plano de control` consume la API integrada de `SessionController` (sin instancias privadas de runtime en widgets).
 
 Notas de consistencia runtime:
 

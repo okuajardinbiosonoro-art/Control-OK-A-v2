@@ -12,6 +12,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from control_okua.core.session import BackendKind, SessionSpec, SessionState  # noqa: E402
+from control_okua.core.control_plane.runtime import ControlPlaneNodeResolutionError  # noqa: E402
 from control_okua.core.udp import (  # noqa: E402
     OKUA_MAGIC,
     OKUA_VERSION,
@@ -338,3 +339,53 @@ def test_controller_udp_bus_policy_uses_node_id_not_packet_bus() -> None:
     assert runtime_snapshot.last_evt.midi_bus == 0
     assert ("note_on", 0, 0, 65, 100) in router.sent
     assert controller.stop_session() is True
+
+
+def test_controller_udp_integrates_control_plane_runtime_lifecycle(monkeypatch) -> None:
+    monkeypatch.setenv("CKV2_CONTROL_SECRET", "test-secret")
+    backend = UdpSessionBackend(
+        _build_udp_cfg(),
+        router_builder=lambda _cfg: _FakeMidiRouter(),
+        transport_builder=lambda **kwargs: _FakeUdpTransport(**kwargs),
+    )
+    controller = SessionController(
+        _build_udp_cfg(),
+        backend_factory=_RecordingBackendFactory(backend=backend),
+    )
+
+    pre_snapshot = controller.get_control_plane_runtime_snapshot()
+    assert pre_snapshot.is_available is False
+    assert controller.is_control_plane_available() is False
+
+    assert controller.start_session() is True
+    running_snapshot = controller.get_control_plane_runtime_snapshot()
+    assert running_snapshot.is_available is True
+    assert running_snapshot.ack_port == 5008
+    assert controller.is_control_plane_available() is True
+
+    assert controller.stop_session() is True
+    after_stop = controller.get_control_plane_runtime_snapshot()
+    assert after_stop.is_available is False
+    assert controller.is_control_plane_available() is False
+
+
+def test_controller_udp_control_dispatch_fails_cleanly_when_node_ip_not_resolved(monkeypatch) -> None:
+    monkeypatch.setenv("CKV2_CONTROL_SECRET", "test-secret")
+    backend = UdpSessionBackend(
+        _build_udp_cfg(),
+        router_builder=lambda _cfg: _FakeMidiRouter(),
+        transport_builder=lambda **kwargs: _FakeUdpTransport(**kwargs),
+    )
+    controller = SessionController(
+        _build_udp_cfg(),
+        backend_factory=_RecordingBackendFactory(backend=backend),
+    )
+
+    assert controller.start_session() is True
+    try:
+        controller.send_control_ping(node_id=70, ack_timeout_ms=120, max_retries=0)
+        assert False, "Se esperaba ControlPlaneNodeResolutionError"
+    except ControlPlaneNodeResolutionError as exc:
+        assert "ip resoluble" in str(exc).lower()
+    finally:
+        assert controller.stop_session() is True
