@@ -189,20 +189,21 @@ Campos principales:
 
 ## Control Plane F3 (Ticket 14.3)
 
-- Existe `ControlTransactionService` para ejecutar transacciones F3 completas sin UI:
-  - enviar CMD
-  - registrar pendiente
-  - esperar ACK
+- Existe `ControlTransactionService` para ejecutar transacciones F3 sin UI.
+- El flujo cubre:
+  - envío de CMD
+  - registro de pendiente
+  - espera de ACK
   - retry controlado
   - cierre de resultado
-- Timeout y retries son configurables por transacción (`ack_timeout_ms`, `max_retries`, `poll_interval_ms`).
-- En retries se reutilizan exactamente `cmd_seq` y `nonce` del comando lógico original.
-- El flujo expone auditoría básica en memoria (`ControlAuditEvent`) con eventos tipo:
+- Timeout y retries son configurables por transacción.
+- Los retries reutilizan exactamente `cmd_seq` y `nonce` del comando lógico original.
+- La auditoría básica expone eventos en memoria como:
   - `command_sent`
   - `command_retry`
   - `command_ack`
   - `command_timeout`
-- `INVALID_ACK` y `UNMATCHED_ACK` se observan y auditan durante la espera, sin cerrar prematuramente la transacción.
+- `INVALID_ACK` y `UNMATCHED_ACK` se observan durante la espera sin cerrar prematuramente la transacción.
 
 Notas de consistencia runtime:
 
