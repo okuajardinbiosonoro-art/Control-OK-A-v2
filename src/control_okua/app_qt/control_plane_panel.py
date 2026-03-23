@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -109,6 +110,8 @@ class ControlPlanePanel(QWidget):
         self._active_policy_text = ""
         self._last_waiting_hint_run = 0
         self._section_warning_shown = False
+        self._last_local_result_by_node: dict[int, ControlTransactionResult] = {}
+        self._last_local_result_ts_by_node: dict[int, float] = {}
         self._identity_labels: dict[str, QLabel] = {}
         self._transaction_labels: dict[str, QLabel] = {}
         self._ack_labels: dict[str, QLabel] = {}
@@ -116,78 +119,119 @@ class ControlPlanePanel(QWidget):
         self._runtime_labels: dict[str, QLabel] = {}
 
         root = QVBoxLayout(self)
+        root.setContentsMargins(10, 10, 10, 10)
+        root.setSpacing(10)
 
-        self.group = QGroupBox("Plano de control", self)
+        self.group = QGroupBox("Control por nodo (F3)", self)
         group_layout = QVBoxLayout(self.group)
+        group_layout.setSpacing(10)
 
+        status_group = QGroupBox("Estado rápido", self)
+        status_layout = QVBoxLayout(status_group)
         self.status_label = QLabel(
-            "Listo. Selecciona node_id y ejecuta un comando."
+            "Listo para enviar comandos. Selecciona un nodo."
         )
         self.status_label.setWordWrap(True)
-        group_layout.addWidget(self.status_label)
+        self.status_label.setStyleSheet("font-weight: 600;")
+        status_layout.addWidget(self.status_label)
+        group_layout.addWidget(status_group)
 
-        target_layout = QFormLayout()
+        target_group = QGroupBox("Nodo seleccionado", self)
+        target_layout = QFormLayout(target_group)
         target_row = QHBoxLayout()
         self.node_selector_combo = QComboBox(self)
         self.node_selector_combo.currentIndexChanged.connect(self._on_node_selection_changed)
         target_row.addWidget(self.node_selector_combo, 1)
-        self.refresh_nodes_button = QPushButton("Actualizar nodos", self)
+        self.refresh_nodes_button = QPushButton("Actualizar", self)
         self.refresh_nodes_button.clicked.connect(self._refresh_node_options)
         target_row.addWidget(self.refresh_nodes_button)
-        target_layout.addRow("nodo", target_row)
+        target_layout.addRow("Nodo", target_row)
 
         self.node_id_label = QLabel("-", self)
-        target_layout.addRow("node_id", self.node_id_label)
-        group_layout.addLayout(target_layout)
+        target_layout.addRow("Identidad", self.node_id_label)
 
         self.target_help_label = QLabel(
-            "Lista canónica EB1..EF5; los detectados en sesión UDP aparecen marcados."
+            "Catálogo EB1..EF5. Los nodos activos se marcan automáticamente."
         )
         self.target_help_label.setWordWrap(True)
-        group_layout.addWidget(self.target_help_label)
-        self._build_snapshot_groups(group_layout)
+        target_layout.addRow("Referencia", self.target_help_label)
+        group_layout.addWidget(target_group)
 
-        policy_layout = QFormLayout()
-        self.policy_title_label = QLabel("Política automática por comando.", self)
+        self._build_snapshot_groups()
+
+        policy_group = QGroupBox("Políticas automáticas", self)
+        policy_layout = QFormLayout(policy_group)
+        self.policy_title_label = QLabel("Timeout y reintentos por comando.", self)
         self.policy_title_label.setWordWrap(True)
-        policy_layout.addRow("policy", self.policy_title_label)
+        policy_layout.addRow("Modo", self.policy_title_label)
 
         self.policy_values_label = QLabel(self._policy_summary_text(), self)
         self.policy_values_label.setWordWrap(True)
-        policy_layout.addRow("valores", self.policy_values_label)
-        group_layout.addLayout(policy_layout)
+        policy_layout.addRow("Valores", self.policy_values_label)
+        group_layout.addWidget(policy_group)
 
-        log_tools_layout = QHBoxLayout()
-        self.clear_log_button = QPushButton("Limpiar bitácora", self)
-        self.clear_log_button.clicked.connect(self._clear_log)
-        log_tools_layout.addWidget(self.clear_log_button)
-        log_tools_layout.addStretch(1)
-        group_layout.addLayout(log_tools_layout)
-
-        actions_layout = QHBoxLayout()
+        actions_group = QGroupBox("Comandos", self)
+        actions_layout = QHBoxLayout(actions_group)
         self.ping_button = QPushButton("PING", self)
         self.ping_button.clicked.connect(self._on_ping_clicked)
         actions_layout.addWidget(self.ping_button)
 
-        self.request_stat_button = QPushButton("Solicitar STAT ahora", self)
+        self.request_stat_button = QPushButton("Pedir STAT", self)
         self.request_stat_button.clicked.connect(self._on_request_stat_now_clicked)
         actions_layout.addWidget(self.request_stat_button)
 
         self.reboot_soft_button = QPushButton("Reinicio suave", self)
         self.reboot_soft_button.clicked.connect(self._on_reboot_soft_clicked)
         actions_layout.addWidget(self.reboot_soft_button)
-        group_layout.addLayout(actions_layout)
+        group_layout.addWidget(actions_group)
+
+        self.details_tabs = QTabWidget(self)
+        self.details_tabs.setDocumentMode(True)
+
+        self.summary_tab = QWidget(self)
+        summary_layout = QVBoxLayout(self.summary_tab)
+        summary_layout.setContentsMargins(8, 8, 8, 8)
+        summary_layout.setSpacing(8)
+        summary_layout.addWidget(self.snapshot_identity_group)
+        summary_layout.addWidget(self.snapshot_transaction_group, 1)
+        self.details_tabs.addTab(self.summary_tab, "Resumen")
+
+        self.diagnostics_tab = QWidget(self)
+        diagnostics_layout = QVBoxLayout(self.diagnostics_tab)
+        diagnostics_layout.setContentsMargins(8, 8, 8, 8)
+        diagnostics_layout.setSpacing(8)
+        diagnostics_layout.addWidget(self.snapshot_ack_group)
+        diagnostics_layout.addWidget(self.snapshot_reboot_group)
+        diagnostics_layout.addWidget(self.snapshot_runtime_group)
+        diagnostics_layout.addWidget(policy_group)
+        diagnostics_layout.addStretch(1)
+        self.details_tabs.addTab(self.diagnostics_tab, "Diagnóstico")
+
+        self.log_tab = QWidget(self)
+        log_layout = QVBoxLayout(self.log_tab)
+        log_layout.setContentsMargins(8, 8, 8, 8)
+        log_layout.setSpacing(8)
+        log_tools_layout = QHBoxLayout()
+        self.clear_log_button = QPushButton("Limpiar bitácora", self)
+        self.clear_log_button.clicked.connect(self._clear_log)
+        log_tools_layout.addWidget(self.clear_log_button)
+        log_tools_layout.addStretch(1)
+        log_layout.addLayout(log_tools_layout)
 
         self.result_view = QTextEdit(self)
         self.result_view.setReadOnly(True)
+        self.result_view.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        self.result_view.setStyleSheet("font-family: Consolas, 'Courier New', monospace;")
+        self.result_view.setMinimumHeight(320)
         self.result_view.setPlaceholderText(
-            "Historial de transacciones F3 (se acumulan reintentos y resultados)."
+            "Eventos y resultados de transacciones F3."
         )
-        group_layout.addWidget(self.result_view)
-        group_layout.setStretchFactor(self.result_view, 1)
+        log_layout.addWidget(self.result_view, 1)
+        self.details_tabs.addTab(self.log_tab, "Bitácora")
+        self.details_tabs.setCurrentWidget(self.summary_tab)
+        group_layout.addWidget(self.details_tabs, 1)
 
-        root.addWidget(self.group)
-        root.setStretchFactor(self.group, 1)
+        root.addWidget(self.group, 1)
 
         self._waiting_hint_timer = QTimer(self)
         self._waiting_hint_timer.setSingleShot(True)
@@ -238,69 +282,66 @@ class ControlPlanePanel(QWidget):
             return
         self._section_warning_shown = True
         self._append_log(
-            f"[{self._now_hms()}] Aviso: el Plano de control envía comandos reales "
+            f"[{self._now_hms()}] Aviso: Control F3 envía comandos reales "
             "(PING/STAT/REBOOT). Reinicio suave puede cortar conectividad temporalmente."
         )
         QMessageBox.information(
             self,
-            "Plano de control",
+            "Control F3",
             (
                 "Este panel envía comandos reales a nodos del runtime.\n\n"
-                "- PING y Solicitar STAT ahora son diagnósticos.\n"
+                "- PING y Pedir STAT son diagnósticos.\n"
                 "- Reinicio suave puede interrumpir conectividad por unos segundos.\n\n"
                 "Este aviso se muestra una sola vez por apertura de la aplicación."
             ),
             QMessageBox.StandardButton.Ok,
         )
 
-    def _build_snapshot_groups(self, group_layout: QVBoxLayout) -> None:
+    def _build_snapshot_groups(self) -> None:
         self.snapshot_identity_group = QGroupBox("Identidad y resolución", self)
         identity_form = QFormLayout(self.snapshot_identity_group)
         self._identity_labels = self._create_form_labels(
             identity_form,
             (
-                ("node_id", "Node ID"),
-                ("label", "Label"),
+                ("node_id", "ID"),
+                ("label", "Alias"),
                 ("resolved_ip", "IP resuelta"),
-                ("resolution_status", "Estado de resolución"),
+                ("resolution_status", "Resolución"),
                 ("resolution_age", "Antigüedad"),
-                ("resolution_message", "Mensaje"),
-                ("backend_message", "Mensaje backend"),
+                ("resolution_message", "Estado"),
+                ("backend_message", "Nota backend"),
             ),
         )
-        group_layout.addWidget(self.snapshot_identity_group)
 
-        self.snapshot_transaction_group = QGroupBox("Transacción actual / última", self)
+        self.snapshot_transaction_group = QGroupBox("Última transacción", self)
         tx_form = QFormLayout(self.snapshot_transaction_group)
         self._transaction_labels = self._create_form_labels(
             tx_form,
             (
-                ("transaction_active", "Transacción activa"),
-                ("last_command", "Último comando"),
-                ("last_cmd_seq", "Último cmd_seq"),
-                ("last_nonce", "Último nonce"),
-                ("last_final_status", "Último resultado final"),
-                ("last_error", "Último error"),
-                ("last_tx_started", "Inicio última transacción"),
-                ("last_tx_finished", "Fin última transacción"),
+                ("transaction_active", "Activa"),
+                ("last_command", "Comando"),
+                ("last_cmd_seq", "Cmd seq"),
+                ("last_nonce", "Nonce"),
+                ("last_final_status", "Resultado"),
+                ("last_error", "Error"),
+                ("last_tx_started", "Inicio"),
+                ("last_tx_finished", "Fin"),
             ),
         )
-        group_layout.addWidget(self.snapshot_transaction_group)
 
-        self.snapshot_ack_group = QGroupBox("ACK", self)
+        self.snapshot_ack_group = QGroupBox("Último ACK", self)
         ack_form = QFormLayout(self.snapshot_ack_group)
         self._ack_labels = self._create_form_labels(
             ack_form,
             (
-                ("ack_stage", "ACK stage"),
-                ("status_code", "status_code"),
-                ("err_detail", "err_detail"),
+                ("ack_stage", "Etapa"),
+                ("status_code", "Código"),
+                ("err_detail", "Detalle"),
                 ("ack_message", "Resumen"),
             ),
         )
-        group_layout.addWidget(self.snapshot_ack_group)
 
-        self.snapshot_reboot_group = QGroupBox("Reboot verification", self)
+        self.snapshot_reboot_group = QGroupBox("Verificación de reinicio", self)
         reboot_form = QFormLayout(self.snapshot_reboot_group)
         self._reboot_labels = self._create_form_labels(
             reboot_form,
@@ -309,19 +350,17 @@ class ControlPlanePanel(QWidget):
                 ("reboot_summary", "Resumen"),
             ),
         )
-        group_layout.addWidget(self.snapshot_reboot_group)
 
-        self.snapshot_runtime_group = QGroupBox("Métricas runtime", self)
+        self.snapshot_runtime_group = QGroupBox("Señales runtime", self)
         runtime_form = QFormLayout(self.snapshot_runtime_group)
         self._runtime_labels = self._create_form_labels(
             runtime_form,
             (
-                ("uptime", "uptime"),
-                ("reset_reason", "reset_reason"),
-                ("boot_marker", "boot_marker"),
+                ("uptime", "Uptime (s)"),
+                ("reset_reason", "Razón de reinicio"),
+                ("boot_marker", "Marca de arranque"),
             ),
         )
-        group_layout.addWidget(self.snapshot_runtime_group)
 
     @staticmethod
     def _create_form_labels(
@@ -340,10 +379,12 @@ class ControlPlanePanel(QWidget):
         node_id = self._selected_node_id()
         selected = self._selected_node_option()
         snapshot = self._get_node_snapshot(node_id)
+        local_result = self._recent_local_result_for_node(node_id)
         view = build_control_plane_snapshot_view(
             node_id=node_id,
             snapshot=snapshot,
             fallback_label=None if selected is None else selected.node_label,
+            local_result=local_result,
         )
         self._apply_snapshot_view(view)
 
@@ -457,6 +498,8 @@ class ControlPlanePanel(QWidget):
             True,
             status_text=f"{command_name}: enviando comando ({self._active_policy_text})...",
         )
+        if hasattr(self, "details_tabs"):
+            self.details_tabs.setCurrentWidget(self.log_tab)
         self._append_log(
             f"[{self._now_hms()}] RUN {run_index} | {command_name} | "
             f"nodo={selected_label} (id={node_id}) | {self._active_policy_text}"
@@ -566,6 +609,7 @@ class ControlPlanePanel(QWidget):
 
         result_view = format_control_transaction_result(result)
         self.status_label.setText(result_view.headline)
+        self._register_local_result(result)
         self._append_log(
             f"[{self._now_hms()}] RUN {self._active_run_index} | resultado={result_view.headline}"
         )
@@ -1022,17 +1066,43 @@ class ControlPlanePanel(QWidget):
         except Exception:
             return None
 
+    def _recent_local_result_for_node(self, node_id: int) -> ControlTransactionResult | None:
+        try:
+            resolved_node_id = int(node_id)
+        except (TypeError, ValueError):
+            return None
+        cached = self._last_local_result_by_node.get(resolved_node_id)
+        if cached is None:
+            return None
+        ts = self._last_local_result_ts_by_node.get(resolved_node_id)
+        if ts is None:
+            return None
+        # Allow a short overlap window while runtime snapshot absorbs latest per-node status.
+        if time.monotonic() - float(ts) > 20.0:
+            return None
+        return cached
+
+    def _register_local_result(self, result: ControlTransactionResult) -> None:
+        try:
+            node_id = int(result.node_id)
+        except (TypeError, ValueError):
+            return
+        if node_id <= 0:
+            return
+        self._last_local_result_by_node[node_id] = result
+        self._last_local_result_ts_by_node[node_id] = float(time.monotonic())
+
     def _policy_summary_text(self) -> str:
         ping = resolve_control_command_policy("PING")
         stat = resolve_control_command_policy("REQUEST_STAT_NOW")
         reboot = resolve_control_command_policy("REBOOT_SOFT")
         return (
             "PING: "
-            f"{ping.ack_timeout_ms}ms/{ping.max_retries} retries | "
+            f"{ping.ack_timeout_ms} ms/{ping.max_retries} reintentos | "
             "REQUEST_STAT_NOW: "
-            f"{stat.ack_timeout_ms}ms/{stat.max_retries} retries | "
+            f"{stat.ack_timeout_ms} ms/{stat.max_retries} reintentos | "
             "REBOOT_SOFT: "
-            f"{reboot.ack_timeout_ms}ms/{reboot.max_retries} retries"
+            f"{reboot.ack_timeout_ms} ms/{reboot.max_retries} reintentos"
         )
 
     @staticmethod

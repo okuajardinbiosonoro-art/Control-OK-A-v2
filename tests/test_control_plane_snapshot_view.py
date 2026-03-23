@@ -13,6 +13,9 @@ if str(SRC_DIR) not in sys.path:
 from control_okua.app_qt.viewmodels.control_plane_snapshot_view import (  # noqa: E402
     build_control_plane_snapshot_view,
 )
+from control_okua.core.control_plane.runtime_snapshot import (  # noqa: E402
+    ControlPlaneNodeResolutionStatus,
+)
 
 
 @dataclass(frozen=True)
@@ -40,6 +43,28 @@ class _SnapshotStub:
     message: str | None = None
 
 
+@dataclass(frozen=True)
+class _FinalStatusStub:
+    value: str
+
+
+@dataclass(frozen=True)
+class _AckStub:
+    ack_stage: int | None = None
+    status_code: int | None = None
+    err_detail: int | None = None
+
+
+@dataclass(frozen=True)
+class _LocalResultStub:
+    command_name: str
+    cmd_seq: int
+    nonce: int
+    final_status: object
+    ack: object | None = None
+    last_error: str | None = None
+
+
 def test_snapshot_view_formats_resolved_status() -> None:
     view = build_control_plane_snapshot_view(
         node_id=1,
@@ -57,6 +82,37 @@ def test_snapshot_view_formats_resolved_status() -> None:
     assert view.resolution_message_text == "Nodo 1 resuelto a 192.168.88.121."
     assert view.is_unresolved is False
     assert view.is_stale is False
+
+
+def test_snapshot_view_accepts_resolution_enum_without_false_unresolved() -> None:
+    view = build_control_plane_snapshot_view(
+        node_id=1,
+        snapshot=_SnapshotStub(
+            label="EB1",
+            resolved_ip="192.168.88.121",
+            resolution_status=ControlPlaneNodeResolutionStatus.RESOLVED,
+            resolution_age_s=0.2,
+        ),
+    )
+
+    assert view.resolution_status_text == "RESOLVED"
+    assert view.is_unresolved is False
+    assert "resuelto" in view.resolution_message_text.lower()
+
+
+def test_snapshot_view_infers_resolution_from_ip_when_raw_status_is_legacy_string() -> None:
+    view = build_control_plane_snapshot_view(
+        node_id=1,
+        snapshot=_SnapshotStub(
+            label="EB1",
+            resolved_ip="192.168.88.121",
+            resolution_status="ControlPlaneNodeResolutionStatus.RESOLVED",
+            resolution_age_s=0.2,
+        ),
+    )
+
+    assert view.resolution_status_text == "RESOLVED"
+    assert view.is_unresolved is False
 
 
 def test_snapshot_view_formats_stale_status() -> None:
@@ -108,6 +164,62 @@ def test_snapshot_view_formats_ack_present_and_absent() -> None:
     assert with_ack.ack_status_code_text == "0"
     assert with_ack.ack_err_detail_text == "0"
     assert "ACK registrado" in with_ack.ack_message_text
+
+
+def test_snapshot_view_does_not_show_ack_empty_when_ack_matched_but_ack_fields_missing() -> None:
+    view = build_control_plane_snapshot_view(
+        node_id=1,
+        snapshot=_SnapshotStub(
+            last_final_status="ack_matched",
+            last_ack_stage=None,
+            last_status_code=None,
+            last_err_detail=None,
+        ),
+    )
+
+    assert "Sin ACK registrado" not in view.ack_message_text
+    assert "ACK correlacionado" in view.ack_message_text
+
+
+def test_snapshot_view_uses_recent_local_result_when_snapshot_lacks_ack_details() -> None:
+    local_result = _LocalResultStub(
+        command_name="REQUEST_STAT_NOW",
+        cmd_seq=123,
+        nonce=0xAA,
+        final_status=_FinalStatusStub(value="ack_matched"),
+        ack=_AckStub(ack_stage=1, status_code=0, err_detail=0),
+    )
+    view = build_control_plane_snapshot_view(
+        node_id=1,
+        snapshot=_SnapshotStub(
+            last_command_name="REQUEST_STAT_NOW",
+            last_final_status="timeout",
+            last_ack_stage=None,
+            last_status_code=None,
+            last_err_detail=None,
+        ),
+        local_result=local_result,
+    )
+
+    assert view.last_final_status_text == "ack_matched"
+    assert view.ack_stage_text == "1"
+    assert view.ack_status_code_text == "0"
+    assert view.ack_err_detail_text == "0"
+    assert "Sin ACK registrado" not in view.ack_message_text
+
+
+def test_snapshot_view_keeps_ack_empty_when_no_ack_exists() -> None:
+    view = build_control_plane_snapshot_view(
+        node_id=1,
+        snapshot=_SnapshotStub(
+            last_final_status="timeout",
+            last_ack_stage=None,
+            last_status_code=None,
+            last_err_detail=None,
+        ),
+    )
+
+    assert view.ack_message_text == "Sin ACK registrado."
 
 
 def test_snapshot_view_formats_reboot_summary_present_and_absent() -> None:
