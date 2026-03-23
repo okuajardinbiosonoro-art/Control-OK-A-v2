@@ -1,3 +1,8 @@
+from control_okua.core.control_plane.audit import (
+    ControlAuditEvent,
+    ControlAuditEventType,
+    build_control_audit_event,
+)
 from control_okua.core.control_plane.auth import (
     CONTROL_SECRET_ENV,
     CONTROL_SECRET_FILE_ENV,
@@ -48,6 +53,9 @@ from control_okua.core.control_plane.protocol import (
 )
 
 __all__ = [
+    "ControlAuditEvent",
+    "ControlAuditEventType",
+    "build_control_audit_event",
     "CONTROL_SECRET_ENV",
     "CONTROL_SECRET_FILE_ENV",
     "ControlSecretError",

@@ -187,6 +187,23 @@ Campos principales:
   - `INVALID_ACK`
 - Aún no se implementan timeout/retry ni auditoría persistente final (quedan para 14.3+).
 
+## Control Plane F3 (Ticket 14.3)
+
+- Existe `ControlTransactionService` para ejecutar transacciones F3 completas sin UI:
+  - enviar CMD
+  - registrar pendiente
+  - esperar ACK
+  - retry controlado
+  - cierre de resultado
+- Timeout y retries son configurables por transacción (`ack_timeout_ms`, `max_retries`, `poll_interval_ms`).
+- En retries se reutilizan exactamente `cmd_seq` y `nonce` del comando lógico original.
+- El flujo expone auditoría básica en memoria (`ControlAuditEvent`) con eventos tipo:
+  - `command_sent`
+  - `command_retry`
+  - `command_ack`
+  - `command_timeout`
+- `INVALID_ACK` y `UNMATCHED_ACK` se observan y auditan durante la espera, sin cerrar prematuramente la transacción.
+
 Notas de consistencia runtime:
 
 - Si `profile.active` es `null` o invalido, la app pide seleccionar perfil al iniciar.

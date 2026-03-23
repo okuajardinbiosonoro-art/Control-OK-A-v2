@@ -146,6 +146,34 @@ class CmdService:
             ),
         )
 
+    def resend_sent_command(
+        self,
+        sent_command: SentOkuaCommand,
+        *,
+        source: str = "retry",
+    ) -> SentOkuaCommand:
+        """
+        Resend an already-built logical command preserving cmd_seq/nonce/packet bytes.
+        Used by transaction retry logic (idempotent app-side retry).
+        """
+        resolved_source = source.strip() if isinstance(source, str) and source.strip() else "retry"
+        bytes_sent = self._send_packet(
+            packet=sent_command.packet,
+            node_ip=sent_command.node_ip,
+        )
+        return SentOkuaCommand(
+            source=resolved_source,
+            command_name=sent_command.command_name,
+            cmd_id=sent_command.cmd_id,
+            node_ip=sent_command.node_ip,
+            node_id=sent_command.node_id,
+            cmd_seq=sent_command.cmd_seq,
+            nonce=sent_command.nonce,
+            target_port=sent_command.target_port,
+            packet=sent_command.packet,
+            bytes_sent=bytes_sent,
+        )
+
     def _send_new_command(
         self,
         *,

@@ -150,6 +150,14 @@ class PendingCommandStore:
     def list_pending(self) -> list[PendingCommand]:
         return list(self._pending.values())
 
+    def discard_sent_command(self, sent_command: SentCommandLike) -> bool:
+        key = _command_key(
+            cmd_seq=sent_command.cmd_seq,
+            cmd_id=sent_command.cmd_id,
+            nonce=sent_command.nonce,
+        )
+        return self._pending.pop(key, None) is not None
+
 
 def _command_key(*, cmd_seq: int, cmd_id: int, nonce: int) -> tuple[int, int, int]:
     return (int(cmd_seq) & 0xFFFF, int(cmd_id) & 0xFF, int(nonce) & 0xFFFFFFFFFFFFFFFF)

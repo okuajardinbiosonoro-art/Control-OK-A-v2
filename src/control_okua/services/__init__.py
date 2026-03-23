@@ -4,6 +4,11 @@ from control_okua.services.ack_listener import (
     AckListenerOpenError,
     AckListenerService,
 )
+from control_okua.services.control_transaction_service import (
+    ControlTransactionFinalStatus,
+    ControlTransactionResult,
+    ControlTransactionService,
+)
 from control_okua.services.cmd_service import (
     CmdService,
     CmdServiceConfigError,
@@ -26,6 +31,9 @@ __all__ = [
     "AckListenerError",
     "AckListenerConfigError",
     "AckListenerOpenError",
+    "ControlTransactionService",
+    "ControlTransactionResult",
+    "ControlTransactionFinalStatus",
     "CmdService",
     "CmdServiceError",
     "CmdServiceConfigError",
