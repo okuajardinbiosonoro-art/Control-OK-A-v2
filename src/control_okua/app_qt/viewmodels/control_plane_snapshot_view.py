@@ -37,12 +37,27 @@ class ControlPlaneSnapshotView:
     is_stale: bool
 
 
+@dataclass(frozen=True)
+class _AtomicTransactionState:
+    command_name: str | None = None
+    cmd_seq: int | None = None
+    nonce: int | None = None
+    final_status: str | None = None
+    error_message: str | None = None
+    ack_stage: int | None = None
+    ack_status_code: int | None = None
+    ack_err_detail: int | None = None
+    tx_started_at: str | None = None
+    tx_finished_at: str | None = None
+
+
 def build_control_plane_snapshot_view(
     *,
     node_id: int,
     snapshot: object | None,
     fallback_label: str | None = None,
     local_result: object | None = None,
+    local_result_age_s: float | None = None,
 ) -> ControlPlaneSnapshotView:
     resolved_node_id = _safe_int(node_id)
     if resolved_node_id is None or resolved_node_id <= 0:
@@ -75,57 +90,22 @@ def build_control_plane_snapshot_view(
     )
     backend_message_text = _text_or_dash(_read_attr(snapshot, "message"))
 
-    local_result_command = _text_or_none(_read_attr(local_result, "command_name"))
-    local_result_cmd_seq = _safe_int(_read_attr(local_result, "cmd_seq"))
-    local_result_nonce = _safe_int(_read_attr(local_result, "nonce"))
-    local_result_last_error = _text_or_none(_read_attr(local_result, "last_error"))
-    local_result_ack = _read_attr(local_result, "ack")
+    snapshot_tx = _build_snapshot_tx_state(snapshot)
+    local_tx = _build_local_tx_state(local_result)
+    effective_tx = _select_effective_transaction_state(
+        snapshot_tx=snapshot_tx,
+        local_tx=local_tx,
+        local_result_age_s=local_result_age_s,
+    )
+    effective_final_status = effective_tx.final_status
 
-    snapshot_final_status = _normalize_final_status(_read_attr(snapshot, "last_final_status"))
-    local_final_status = _normalize_final_status(_read_local_final_status(local_result))
-
-    snapshot_ack_stage = _safe_int(_read_attr(snapshot, "last_ack_stage"))
-    snapshot_ack_status_code = _safe_int(_read_attr(snapshot, "last_status_code"))
-    snapshot_ack_err_detail = _safe_int(_read_attr(snapshot, "last_err_detail"))
-    snapshot_has_ack = (
-        snapshot_ack_stage is not None
-        or snapshot_ack_status_code is not None
-        or snapshot_ack_err_detail is not None
-    )
-    effective_final_status = snapshot_final_status
-    if _should_prefer_local_result(
-        snapshot_final_status=snapshot_final_status,
-        local_final_status=local_final_status,
-        snapshot_has_ack=snapshot_has_ack,
-    ):
-        effective_final_status = local_final_status
-
-    last_command_text = _first_text(
-        _text_or_none(_read_attr(snapshot, "last_command_name")),
-        local_result_command,
-    )
-    last_cmd_seq = _first_int(
-        _safe_int(_read_attr(snapshot, "last_cmd_seq")),
-        local_result_cmd_seq,
-    )
-    last_nonce = _first_int(
-        _safe_int(_read_attr(snapshot, "last_nonce")),
-        local_result_nonce,
-    )
-    last_error_text = _first_text(
-        _text_or_none(_read_attr(snapshot, "last_error_message")),
-        local_result_last_error,
-    )
-
-    ack_stage = _first_int(snapshot_ack_stage, _safe_int(_read_attr(local_result_ack, "ack_stage")))
-    ack_status_code = _first_int(
-        snapshot_ack_status_code,
-        _safe_int(_read_attr(local_result_ack, "status_code")),
-    )
-    ack_err_detail = _first_int(
-        snapshot_ack_err_detail,
-        _safe_int(_read_attr(local_result_ack, "err_detail")),
-    )
+    last_command_text = effective_tx.command_name
+    last_cmd_seq = effective_tx.cmd_seq
+    last_nonce = effective_tx.nonce
+    last_error_text = effective_tx.error_message
+    ack_stage = effective_tx.ack_stage
+    ack_status_code = effective_tx.ack_status_code
+    ack_err_detail = effective_tx.ack_err_detail
     ack_message_text = _build_ack_message(
         ack_stage=ack_stage,
         status_code=ack_status_code,
@@ -153,8 +133,8 @@ def build_control_plane_snapshot_view(
         last_nonce_text=_format_optional_nonce(last_nonce),
         last_final_status_text=_text_or_dash(effective_final_status),
         last_error_text=_text_or_dash(last_error_text),
-        last_tx_started_text=_text_or_dash(_read_attr(snapshot, "last_tx_started_at")),
-        last_tx_finished_text=_text_or_dash(_read_attr(snapshot, "last_tx_finished_at")),
+        last_tx_started_text=_text_or_dash(effective_tx.tx_started_at),
+        last_tx_finished_text=_text_or_dash(effective_tx.tx_finished_at),
         ack_stage_text=_format_optional_int(ack_stage),
         ack_status_code_text=_format_optional_int(ack_status_code),
         ack_err_detail_text=_format_optional_int(ack_err_detail),
@@ -212,6 +192,155 @@ def _infer_resolution_status_from_ip(
     ):
         return "STALE"
     return "RESOLVED"
+
+
+def _build_snapshot_tx_state(snapshot: object | None) -> _AtomicTransactionState:
+    return _AtomicTransactionState(
+        command_name=_text_or_none(_read_attr(snapshot, "last_command_name")),
+        cmd_seq=_safe_int(_read_attr(snapshot, "last_cmd_seq")),
+        nonce=_safe_int(_read_attr(snapshot, "last_nonce")),
+        final_status=_normalize_final_status(_read_attr(snapshot, "last_final_status")),
+        error_message=_text_or_none(_read_attr(snapshot, "last_error_message")),
+        ack_stage=_safe_int(_read_attr(snapshot, "last_ack_stage")),
+        ack_status_code=_safe_int(_read_attr(snapshot, "last_status_code")),
+        ack_err_detail=_safe_int(_read_attr(snapshot, "last_err_detail")),
+        tx_started_at=_text_or_none(_read_attr(snapshot, "last_tx_started_at")),
+        tx_finished_at=_text_or_none(_read_attr(snapshot, "last_tx_finished_at")),
+    )
+
+
+def _build_local_tx_state(local_result: object | None) -> _AtomicTransactionState:
+    local_ack = _read_attr(local_result, "ack")
+    return _AtomicTransactionState(
+        command_name=_text_or_none(_read_attr(local_result, "command_name")),
+        cmd_seq=_safe_int(_read_attr(local_result, "cmd_seq")),
+        nonce=_safe_int(_read_attr(local_result, "nonce")),
+        final_status=_normalize_final_status(_read_local_final_status(local_result)),
+        error_message=_text_or_none(_read_attr(local_result, "last_error")),
+        ack_stage=_safe_int(_read_attr(local_ack, "ack_stage")),
+        ack_status_code=_safe_int(_read_attr(local_ack, "status_code")),
+        ack_err_detail=_safe_int(_read_attr(local_ack, "err_detail")),
+        tx_started_at=None,
+        tx_finished_at=None,
+    )
+
+
+def _select_effective_transaction_state(
+    *,
+    snapshot_tx: _AtomicTransactionState,
+    local_tx: _AtomicTransactionState,
+    local_result_age_s: float | None,
+) -> _AtomicTransactionState:
+    normalized_snapshot = _normalize_transaction_state(snapshot_tx)
+    normalized_local = _normalize_transaction_state(local_tx)
+
+    if normalized_local.final_status is None:
+        return normalized_snapshot
+
+    local_age = _safe_float(local_result_age_s)
+    if local_age is not None and local_age > 20.0:
+        return normalized_snapshot
+
+    if normalized_snapshot.final_status is None:
+        return normalized_local
+
+    snapshot_seq = normalized_snapshot.cmd_seq
+    local_seq = normalized_local.cmd_seq
+    if snapshot_seq is not None and local_seq is not None:
+        if snapshot_seq != local_seq:
+            if _is_cmd_seq_newer(local_seq, snapshot_seq):
+                return normalized_local
+            return normalized_snapshot
+        if _state_completeness_score(normalized_local) > _state_completeness_score(normalized_snapshot):
+            return normalized_local
+        return normalized_snapshot
+
+    if snapshot_seq is None and local_seq is not None:
+        if _state_completeness_score(normalized_local) > _state_completeness_score(normalized_snapshot):
+            return normalized_local
+        return normalized_snapshot
+
+    if snapshot_seq is not None and local_seq is None:
+        return normalized_snapshot
+
+    if local_age is not None and local_age <= 3.0:
+        if normalized_snapshot.final_status != normalized_local.final_status:
+            return normalized_local
+
+    return normalized_snapshot
+
+
+def _normalize_transaction_state(state: _AtomicTransactionState) -> _AtomicTransactionState:
+    final_status = _normalize_final_status(state.final_status)
+    error = _text_or_none(state.error_message)
+    ack_stage = state.ack_stage
+    ack_status_code = state.ack_status_code
+    ack_err_detail = state.ack_err_detail
+
+    if final_status == "ack_matched":
+        if _looks_like_timeout_error(error):
+            error = None
+    elif final_status == "timeout":
+        ack_stage = None
+        ack_status_code = None
+        ack_err_detail = None
+        if error is None:
+            error = "Timeout esperando ACK."
+
+    return _AtomicTransactionState(
+        command_name=state.command_name,
+        cmd_seq=state.cmd_seq,
+        nonce=state.nonce,
+        final_status=final_status,
+        error_message=error,
+        ack_stage=ack_stage,
+        ack_status_code=ack_status_code,
+        ack_err_detail=ack_err_detail,
+        tx_started_at=state.tx_started_at,
+        tx_finished_at=state.tx_finished_at,
+    )
+
+
+def _state_completeness_score(state: _AtomicTransactionState) -> int:
+    score = 0
+    if state.command_name is not None:
+        score += 1
+    if state.cmd_seq is not None:
+        score += 1
+    if state.nonce is not None:
+        score += 1
+    if state.final_status is not None:
+        score += 2
+    if state.error_message is not None:
+        score += 1
+    if _tx_has_ack(state):
+        score += 3
+    if state.tx_finished_at is not None:
+        score += 1
+    return score
+
+
+def _tx_has_ack(state: _AtomicTransactionState) -> bool:
+    return (
+        state.ack_stage is not None
+        or state.ack_status_code is not None
+        or state.ack_err_detail is not None
+    )
+
+
+def _is_cmd_seq_newer(candidate: int, reference: int) -> bool:
+    left = int(candidate) & 0xFFFF
+    right = int(reference) & 0xFFFF
+    diff = (left - right) & 0xFFFF
+    return 0 < diff < 0x8000
+
+
+def _looks_like_timeout_error(raw_error: str | None) -> bool:
+    text = _text_or_none(raw_error)
+    if text is None:
+        return False
+    lowered = text.lower()
+    return "timeout" in lowered
 
 
 def _build_resolution_message(
@@ -313,35 +442,6 @@ def _read_local_final_status(local_result: object | None) -> object:
     if enum_value is not None:
         return enum_value
     return final_status
-
-
-def _should_prefer_local_result(
-    *,
-    snapshot_final_status: str | None,
-    local_final_status: str | None,
-    snapshot_has_ack: bool,
-) -> bool:
-    if local_final_status is None:
-        return False
-    if snapshot_final_status is None:
-        return True
-    if snapshot_final_status == local_final_status:
-        return False
-    if local_final_status == "ack_matched" and not snapshot_has_ack:
-        return True
-    return False
-
-
-def _first_text(primary: str | None, fallback: str | None) -> str | None:
-    if primary is not None:
-        return primary
-    return fallback
-
-
-def _first_int(primary: int | None, fallback: int | None) -> int | None:
-    if primary is not None:
-        return primary
-    return fallback
 
 
 def _text_or_none(raw_value: object) -> str | None:

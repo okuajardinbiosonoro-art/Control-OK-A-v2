@@ -379,12 +379,16 @@ class ControlPlanePanel(QWidget):
         node_id = self._selected_node_id()
         selected = self._selected_node_option()
         snapshot = self._get_node_snapshot(node_id)
-        local_result = self._recent_local_result_for_node(node_id)
+        local_result, local_result_age_s = self._recent_local_result_for_node(
+            node_id,
+            snapshot=snapshot,
+        )
         view = build_control_plane_snapshot_view(
             node_id=node_id,
             snapshot=snapshot,
             fallback_label=None if selected is None else selected.node_label,
             local_result=local_result,
+            local_result_age_s=local_result_age_s,
         )
         self._apply_snapshot_view(view)
 
@@ -1066,21 +1070,43 @@ class ControlPlanePanel(QWidget):
         except Exception:
             return None
 
-    def _recent_local_result_for_node(self, node_id: int) -> ControlTransactionResult | None:
+    def _recent_local_result_for_node(
+        self,
+        node_id: int,
+        *,
+        snapshot: object | None = None,
+    ) -> tuple[ControlTransactionResult | None, float | None]:
         try:
             resolved_node_id = int(node_id)
         except (TypeError, ValueError):
-            return None
+            return None, None
         cached = self._last_local_result_by_node.get(resolved_node_id)
         if cached is None:
-            return None
+            return None, None
         ts = self._last_local_result_ts_by_node.get(resolved_node_id)
         if ts is None:
-            return None
+            return None, None
         # Allow a short overlap window while runtime snapshot absorbs latest per-node status.
-        if time.monotonic() - float(ts) > 20.0:
-            return None
-        return cached
+        age_s = max(0.0, float(time.monotonic()) - float(ts))
+        if age_s > 20.0:
+            self._last_local_result_by_node.pop(resolved_node_id, None)
+            self._last_local_result_ts_by_node.pop(resolved_node_id, None)
+            return None, None
+
+        snapshot_cmd_seq = self._as_int_or_none(
+            None if snapshot is None else getattr(snapshot, "last_cmd_seq", None)
+        )
+        local_cmd_seq = self._as_int_or_none(getattr(cached, "cmd_seq", None))
+        if (
+            snapshot_cmd_seq is not None
+            and local_cmd_seq is not None
+            and self._is_cmd_seq_newer(snapshot_cmd_seq, local_cmd_seq)
+        ):
+            self._last_local_result_by_node.pop(resolved_node_id, None)
+            self._last_local_result_ts_by_node.pop(resolved_node_id, None)
+            return None, None
+
+        return cached, age_s
 
     def _register_local_result(self, result: ControlTransactionResult) -> None:
         try:
@@ -1091,6 +1117,22 @@ class ControlPlanePanel(QWidget):
             return
         self._last_local_result_by_node[node_id] = result
         self._last_local_result_ts_by_node[node_id] = float(time.monotonic())
+
+    @staticmethod
+    def _is_cmd_seq_newer(candidate: int, reference: int) -> bool:
+        left = int(candidate) & 0xFFFF
+        right = int(reference) & 0xFFFF
+        diff = (left - right) & 0xFFFF
+        return 0 < diff < 0x8000
+
+    @staticmethod
+    def _as_int_or_none(raw_value: object) -> int | None:
+        if raw_value is None:
+            return None
+        try:
+            return int(raw_value)
+        except (TypeError, ValueError):
+            return None
 
     def _policy_summary_text(self) -> str:
         ping = resolve_control_command_policy("PING")

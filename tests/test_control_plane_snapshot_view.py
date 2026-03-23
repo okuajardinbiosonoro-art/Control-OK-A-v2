@@ -22,7 +22,7 @@ from control_okua.core.control_plane.runtime_snapshot import (  # noqa: E402
 class _SnapshotStub:
     label: str | None = None
     resolved_ip: str | None = None
-    resolution_status: str | None = None
+    resolution_status: object | None = None
     resolution_age_s: float | None = None
     transaction_active: bool = False
     last_command_name: str | None = None
@@ -181,6 +181,43 @@ def test_snapshot_view_does_not_show_ack_empty_when_ack_matched_but_ack_fields_m
     assert "ACK correlacionado" in view.ack_message_text
 
 
+def test_snapshot_view_ack_matched_clears_timeout_error_text() -> None:
+    view = build_control_plane_snapshot_view(
+        node_id=1,
+        snapshot=_SnapshotStub(
+            last_final_status="ack_matched",
+            last_error_message="Timeout esperando ACK para REQUEST_STAT_NOW.",
+            last_ack_stage=1,
+            last_status_code=0,
+            last_err_detail=0,
+        ),
+    )
+
+    assert view.last_final_status_text == "ack_matched"
+    assert view.last_error_text == "-"
+    assert view.ack_message_text.startswith("ACK registrado:")
+
+
+def test_snapshot_view_timeout_forces_ack_absent_and_timeout_error() -> None:
+    view = build_control_plane_snapshot_view(
+        node_id=1,
+        snapshot=_SnapshotStub(
+            last_final_status="timeout",
+            last_error_message=None,
+            last_ack_stage=1,
+            last_status_code=0,
+            last_err_detail=0,
+        ),
+    )
+
+    assert view.last_final_status_text == "timeout"
+    assert "timeout" in view.last_error_text.lower()
+    assert view.ack_stage_text == "-"
+    assert view.ack_status_code_text == "-"
+    assert view.ack_err_detail_text == "-"
+    assert view.ack_message_text == "Sin ACK registrado."
+
+
 def test_snapshot_view_uses_recent_local_result_when_snapshot_lacks_ack_details() -> None:
     local_result = _LocalResultStub(
         command_name="REQUEST_STAT_NOW",
@@ -199,6 +236,7 @@ def test_snapshot_view_uses_recent_local_result_when_snapshot_lacks_ack_details(
             last_err_detail=None,
         ),
         local_result=local_result,
+        local_result_age_s=0.8,
     )
 
     assert view.last_final_status_text == "ack_matched"
@@ -206,6 +244,100 @@ def test_snapshot_view_uses_recent_local_result_when_snapshot_lacks_ack_details(
     assert view.ack_status_code_text == "0"
     assert view.ack_err_detail_text == "0"
     assert "Sin ACK registrado" not in view.ack_message_text
+
+
+def test_snapshot_view_snapshot_complete_has_priority_when_same_cmd_seq() -> None:
+    local_result = _LocalResultStub(
+        command_name="REQUEST_STAT_NOW",
+        cmd_seq=222,
+        nonce=0xAA,
+        final_status=_FinalStatusStub(value="timeout"),
+        ack=None,
+        last_error="Timeout esperando ACK para REQUEST_STAT_NOW.",
+    )
+    view = build_control_plane_snapshot_view(
+        node_id=1,
+        snapshot=_SnapshotStub(
+            last_command_name="REQUEST_STAT_NOW",
+            last_cmd_seq=222,
+            last_nonce=0xAA,
+            last_final_status="ack_matched",
+            last_ack_stage=1,
+            last_status_code=0,
+            last_err_detail=0,
+            last_error_message=None,
+            last_tx_finished_at="2026-03-23T10:00:00.000Z",
+        ),
+        local_result=local_result,
+        local_result_age_s=0.2,
+    )
+
+    assert view.last_final_status_text == "ack_matched"
+    assert view.last_error_text == "-"
+    assert view.ack_stage_text == "1"
+    assert "Sin ACK registrado" not in view.ack_message_text
+
+
+def test_snapshot_view_local_newer_cmd_seq_replaces_full_result_atomically() -> None:
+    local_result = _LocalResultStub(
+        command_name="REQUEST_STAT_NOW",
+        cmd_seq=301,
+        nonce=0xBB,
+        final_status=_FinalStatusStub(value="ack_matched"),
+        ack=_AckStub(ack_stage=1, status_code=0, err_detail=0),
+        last_error=None,
+    )
+    view = build_control_plane_snapshot_view(
+        node_id=1,
+        snapshot=_SnapshotStub(
+            last_command_name="REQUEST_STAT_NOW",
+            last_cmd_seq=300,
+            last_nonce=0xAA,
+            last_final_status="timeout",
+            last_ack_stage=None,
+            last_status_code=None,
+            last_err_detail=None,
+            last_error_message="Timeout esperando ACK para REQUEST_STAT_NOW.",
+        ),
+        local_result=local_result,
+        local_result_age_s=0.4,
+    )
+
+    assert view.last_cmd_seq_text == "301"
+    assert view.last_final_status_text == "ack_matched"
+    assert view.last_error_text == "-"
+    assert view.ack_stage_text == "1"
+    assert "Sin ACK registrado" not in view.ack_message_text
+
+
+def test_snapshot_view_old_local_fallback_does_not_contaminate_newer_snapshot() -> None:
+    local_result = _LocalResultStub(
+        command_name="REQUEST_STAT_NOW",
+        cmd_seq=401,
+        nonce=0xCC,
+        final_status=_FinalStatusStub(value="ack_matched"),
+        ack=_AckStub(ack_stage=1, status_code=0, err_detail=0),
+    )
+    view = build_control_plane_snapshot_view(
+        node_id=1,
+        snapshot=_SnapshotStub(
+            last_command_name="REQUEST_STAT_NOW",
+            last_cmd_seq=402,
+            last_nonce=0xDD,
+            last_final_status="timeout",
+            last_ack_stage=None,
+            last_status_code=None,
+            last_err_detail=None,
+            last_error_message="Timeout esperando ACK para REQUEST_STAT_NOW.",
+        ),
+        local_result=local_result,
+        local_result_age_s=25.0,
+    )
+
+    assert view.last_cmd_seq_text == "402"
+    assert view.last_final_status_text == "timeout"
+    assert "timeout" in view.last_error_text.lower()
+    assert view.ack_message_text == "Sin ACK registrado."
 
 
 def test_snapshot_view_keeps_ack_empty_when_no_ack_exists() -> None:
