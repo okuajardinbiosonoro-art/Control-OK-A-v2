@@ -1,8 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 from pathlib import Path
-# Opcional (solo si quieres blindaje extra):
-# from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_submodules
 
 PROJECT_DIR = Path(SPEC).resolve().parent
 
@@ -20,10 +19,12 @@ else:
 hiddenimports = [
     "rtmidi",
     "mido.backends.rtmidi",
+    "control_okua.app_qt.app",
 ]
 
-# Blindaje extra opcional (si alguna vez vuelve a molestar rtmidi en runtime):
-# hiddenimports += collect_submodules("rtmidi")
+# main.py usa importlib para cargar control_okua.app_qt.app; este collect evita
+# builds incompletos cuando el análisis estático no detecta toda la cadena.
+hiddenimports += collect_submodules("control_okua")
 
 a = Analysis(
     ["main.py"],

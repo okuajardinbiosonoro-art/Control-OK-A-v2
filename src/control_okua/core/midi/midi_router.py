@@ -24,12 +24,16 @@ class MidiRouter:
         backend: str = "rtmidi",
         send_noteoff_on_vel0: bool = True,
         strict_ports: bool = False,
+        open_retry_ms: int = 5000,
+        open_retry_interval_ms: int = 350,
     ) -> None:
         self.outputs = dict(outputs)
         self.flush_ms = max(1, int(flush_ms))
         self.backend = backend
         self.send_noteoff_on_vel0 = bool(send_noteoff_on_vel0)
         self.strict_ports = bool(strict_ports)
+        self.open_retry_ms = max(0, int(open_retry_ms))
+        self.open_retry_interval_ms = max(50, int(open_retry_interval_ms))
 
         self._ports: dict[int, Any] = {}
         self._resolved_outputs: dict[int, str] = {}
@@ -96,32 +100,138 @@ class MidiRouter:
         if not isinstance(strict_ports, bool):
             strict_ports = False
 
+        open_retry_candidate = midi_cfg.get("open_retry_ms", 5000)
+        try:
+            open_retry_ms = int(open_retry_candidate)
+        except (TypeError, ValueError):
+            open_retry_ms = 5000
+        if open_retry_ms < 0:
+            open_retry_ms = 0
+
+        open_retry_interval_candidate = midi_cfg.get("open_retry_interval_ms", 350)
+        try:
+            open_retry_interval_ms = int(open_retry_interval_candidate)
+        except (TypeError, ValueError):
+            open_retry_interval_ms = 350
+        if open_retry_interval_ms < 50:
+            open_retry_interval_ms = 50
+
         return MidiRouter(
             outputs=outputs,
             flush_ms=flush_ms,
             backend=backend,
             send_noteoff_on_vel0=send_noteoff_on_vel0,
             strict_ports=strict_ports,
+            open_retry_ms=open_retry_ms,
+            open_retry_interval_ms=open_retry_interval_ms,
         )
 
     def open(self) -> None:
         if self._ports:
             return
-
-        backend_label = self.backend
-        if self.backend == "rtmidi":
-            mido.set_backend("mido.backends.rtmidi")
-            backend_label = "rtmidi"
-        elif self.backend:
-            mido.set_backend(self.backend)
-            backend_label = self.backend
-
-        available_outputs = mido.get_output_names()
-        output_mapping = {str(bus): name for bus, name in sorted(self.outputs.items())}
-        print(f"[midi] backend={backend_label}")
-        print(f"[midi] outputs={output_mapping}")
-        print(f"[midi] available_outputs={available_outputs}")
+        self._ports = {}
         self._resolved_outputs = {}
+
+        backend_candidates = self._backend_candidates()
+        output_mapping = {str(bus): name for bus, name in sorted(self.outputs.items())}
+        print(f"[midi] outputs={output_mapping}")
+        print(
+            "[midi] open policy: "
+            f"retry_ms={self.open_retry_ms}, retry_interval_ms={self.open_retry_interval_ms}, "
+            f"strict_ports={self.strict_ports}, backends={backend_candidates}"
+        )
+
+        start_ts = time.monotonic()
+        deadline_ts = start_ts + (self.open_retry_ms / 1000.0)
+        last_detail = "sin detalle"
+        attempt = 0
+
+        while True:
+            attempt += 1
+            for backend_name in backend_candidates:
+                opened, detail = self._open_with_backend(backend_name)
+                if opened:
+                    self.start()
+                    return
+                last_detail = detail
+
+            if time.monotonic() >= deadline_ts:
+                break
+
+            remaining = max(0.0, deadline_ts - time.monotonic())
+            sleep_s = min(self.open_retry_interval_ms / 1000.0, remaining)
+            if sleep_s <= 0.0:
+                break
+            print(
+                f"[midi] no hay puertos abiertos aún; reintentando en {sleep_s:.2f}s "
+                f"(attempt={attempt})"
+            )
+            time.sleep(sleep_s)
+
+        raise RuntimeError(
+            "No se pudo abrir ningun puerto MIDI. "
+            "Verifica loopMIDI y nombres de puertos. "
+            f"Ultimo detalle: {last_detail}"
+        )
+
+    def _backend_candidates(self) -> list[str | None]:
+        requested_raw = self.backend.strip() if isinstance(self.backend, str) else ""
+        candidates: list[str | None] = []
+
+        if requested_raw:
+            if requested_raw == "rtmidi":
+                candidates.append("mido.backends.rtmidi")
+            else:
+                candidates.append(requested_raw)
+
+        if "mido.backends.rtmidi" not in candidates:
+            candidates.append("mido.backends.rtmidi")
+
+        # Fallback al backend por defecto de Mido para cubrir entornos donde
+        # el backend configurado no levanta salidas temporalmente.
+        candidates.append(None)
+
+        unique: list[str | None] = []
+        for candidate in candidates:
+            if candidate not in unique:
+                unique.append(candidate)
+        return unique
+
+    @staticmethod
+    def _backend_label(backend_name: str | None) -> str:
+        return backend_name if backend_name else "<default>"
+
+    @staticmethod
+    def _close_local_ports(ports: dict[int, Any]) -> None:
+        for port in ports.values():
+            try:
+                port.close()
+            except Exception:
+                pass
+
+    def _open_with_backend(self, backend_name: str | None) -> tuple[bool, str]:
+        backend_label = self._backend_label(backend_name)
+
+        try:
+            backend_obj = mido.Backend(backend_name) if backend_name else mido.Backend()
+        except Exception as exc:
+            detail = f"[midi] backend={backend_label} no disponible: {exc}"
+            print(detail)
+            return False, detail
+
+        try:
+            available_outputs = list(backend_obj.get_output_names())
+        except Exception as exc:
+            detail = f"[midi] backend={backend_label} no pudo listar salidas: {exc}"
+            print(detail)
+            return False, detail
+
+        print(f"[midi] backend={backend_label}")
+        print(f"[midi] available_outputs={available_outputs}")
+
+        local_ports: dict[int, Any] = {}
+        local_resolved: dict[int, str] = {}
+        attempt_issues: list[str] = []
 
         for bus, requested_name in sorted(self.outputs.items()):
             resolved_name, reason = self.resolve_output_name(
@@ -133,8 +243,11 @@ class MidiRouter:
                     f"[midi] resolve bus {bus}: '{requested_name}' -> <none> ({reason}). "
                     f"available_outputs={available_outputs}"
                 )
+                attempt_issues.append(msg)
                 if self.strict_ports:
-                    raise RuntimeError(msg)
+                    self._close_local_ports(local_ports)
+                    print(msg)
+                    return False, msg
                 print(msg)
                 continue
 
@@ -143,28 +256,35 @@ class MidiRouter:
                 f"'{resolved_name}' ({reason})"
             )
             try:
-                port = mido.open_output(resolved_name)
+                port = backend_obj.open_output(resolved_name)
             except Exception as exc:
                 msg = (
                     f"[midi] no se pudo abrir bus {bus} "
                     f"(requested='{requested_name}', resolved='{resolved_name}'): {exc}. "
-                    "Compara con mido.get_output_names()."
+                    "Compara con get_output_names()."
                 )
+                attempt_issues.append(msg)
                 if self.strict_ports:
-                    raise RuntimeError(msg) from exc
+                    self._close_local_ports(local_ports)
+                    print(msg)
+                    return False, msg
                 print(msg)
                 continue
 
-            self._ports[bus] = port
-            self._resolved_outputs[bus] = resolved_name
+            local_ports[bus] = port
+            local_resolved[bus] = resolved_name
             print(f"[midi] bus {bus} abierto -> {resolved_name}")
 
-        if not self._ports:
-            raise RuntimeError(
-                "No se pudo abrir ningun puerto MIDI. Verifica loopMIDI y nombres de puertos."
+        if not local_ports:
+            detail = (
+                f"[midi] backend={backend_label} sin buses abiertos. "
+                f"issues={attempt_issues if attempt_issues else ['none']}"
             )
+            return False, detail
 
-        self.start()
+        self._ports = local_ports
+        self._resolved_outputs = local_resolved
+        return True, f"[midi] backend={backend_label} ok"
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():

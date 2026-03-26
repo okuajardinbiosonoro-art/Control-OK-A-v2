@@ -5,6 +5,7 @@ import hmac
 import os
 from pathlib import Path
 import re
+import sys
 from typing import Final
 
 CONTROL_SECRET_ENV: Final[str] = "CKV2_CONTROL_SECRET"
@@ -61,8 +62,8 @@ def resolve_control_secret(
 
     raise ControlSecretNotConfiguredError(
         "No hay secreto de control configurado. Define CKV2_CONTROL_SECRET "
-        "o CKV2_CONTROL_SECRET_FILE; tambien puedes usar el archivo local "
-        "firmware/okua_node_udp_v1/okua_node_secrets.h."
+        "o CKV2_CONTROL_SECRET_FILE; tambien puedes usar control_plane_secret.txt "
+        "junto al ejecutable (build) o firmware/okua_node_udp_v1/okua_node_secrets.h (dev)."
     )
 
 
@@ -138,12 +139,34 @@ def _extract_secret_from_header_text(text: str) -> str:
 
 
 def _iter_default_secret_candidates() -> tuple[Path, ...]:
-    repo_root = _resolve_repo_root()
-    return (
-        repo_root / ".control_plane_secret",
-        repo_root / "control_plane_secret.txt",
-        repo_root / "firmware" / "okua_node_udp_v1" / "okua_node_secrets.h",
-    )
+    dirs: list[Path] = []
+    if getattr(sys, "frozen", False):
+        dirs.extend(
+            [
+                Path(sys.executable).resolve().parent,
+                Path.cwd().resolve(),
+            ]
+        )
+    else:
+        repo_root = _resolve_repo_root()
+        dirs.extend([repo_root, Path.cwd().resolve()])
+
+    seen: set[Path] = set()
+    candidates: list[Path] = []
+    for base_dir in dirs:
+        resolved_base = base_dir.resolve()
+        if resolved_base in seen:
+            continue
+        seen.add(resolved_base)
+        candidates.extend(
+            [
+                resolved_base / ".control_plane_secret",
+                resolved_base / "control_plane_secret.txt",
+                resolved_base / "okua_node_secrets.h",
+                resolved_base / "firmware" / "okua_node_udp_v1" / "okua_node_secrets.h",
+            ]
+        )
+    return tuple(candidates)
 
 
 def _resolve_repo_root() -> Path:

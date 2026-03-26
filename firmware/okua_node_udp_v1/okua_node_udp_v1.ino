@@ -35,22 +35,30 @@
 //-------------------- Modo de operacion -----------------------------------------------------
 #define MODE_TEST   1
 #define MODE_FIELD  2
+#ifndef ACTIVE_MODE
 #define ACTIVE_MODE MODE_TEST
+#endif
 
 //-------------------- Tipo de nodo ----------------------------------------------------------
 #define SENSOR_PLANT 1
 #define SENSOR_FRUIT 2
+#ifndef ACTIVE_SENSOR
 #define ACTIVE_SENSOR SENSOR_PLANT
+#endif
 
 //-------------------- LEDs ------------------------------------------------------------------
 #define LED_DISABLED 0
 #define LED_SIMPLE   1
+#ifndef LED_PROFILE
 #define LED_PROFILE  LED_DISABLED
+#endif
 
 //-------------------- Variante de fruta -----------------------------------------------------
 #define FRUIT_VARIANT_V1 1
 #define FRUIT_VARIANT_V2 2
+#ifndef ACTIVE_FRUIT_VARIANT
 #define ACTIVE_FRUIT_VARIANT FRUIT_VARIANT_V2
+#endif
 
 
 /*============================================================================================
@@ -128,12 +136,39 @@ IPAddress PC_IP(PC_IP_A, PC_IP_B, PC_IP_C, PC_IP_D);
 
 #if LED_PROFILE == LED_SIMPLE
   #include <Adafruit_NeoPixel.h>
-  #define DATA_PIN      22
+  #ifndef LED_DATA_PIN
+  #define LED_DATA_PIN  23
+  #endif
+  #ifndef LEDS_FISICOS
   #define LEDS_FISICOS  300
-  #define LEDS_POR_PIXEL 3
+  #endif
+  #ifndef LEDS_POR_PIXEL
+  #define LEDS_POR_PIXEL 1
+  #endif
+  #if (LEDS_POR_PIXEL < 1)
+    #undef LEDS_POR_PIXEL
+    #define LEDS_POR_PIXEL 1
+  #endif
   #define NUM_PIXELS    (LEDS_FISICOS / LEDS_POR_PIXEL)
+  #ifndef LED_BRIGHT
   #define LED_BRIGHT    100
-  Adafruit_NeoPixel strip(NUM_PIXELS, DATA_PIN, NEO_GRB + NEO_KHZ800);
+  #endif
+  #ifndef LED_WAVE_POOL_CAP
+  #define LED_WAVE_POOL_CAP 50
+  #endif
+  #ifndef LED_WAVE_SPEED
+  #define LED_WAVE_SPEED 0.7f
+  #endif
+  #ifndef LED_WAVE_RADIUS
+  #define LED_WAVE_RADIUS 4.0f
+  #endif
+  #ifndef LED_WAVE_FREQ
+  #define LED_WAVE_FREQ 0.4f
+  #endif
+  #ifndef LED_FPS
+  #define LED_FPS 60
+  #endif
+  Adafruit_NeoPixel strip(NUM_PIXELS, LED_DATA_PIN, NEO_GRB + NEO_KHZ800);
 #endif
 
 
@@ -149,6 +184,9 @@ IPAddress PC_IP(PC_IP_A, PC_IP_B, PC_IP_C, PC_IP_D);
 //-------------------- Planta (un unico destino) ---------------------------------------------
 #define PLANT_MIDI_BUS        1
 #define PLANT_MIDI_CHANNEL_1B 2    // humano 1..16
+#ifndef PLANT_CHANNEL_FROM_NODE_ID
+#define PLANT_CHANNEL_FROM_NODE_ID 1
+#endif
 #define PLANT_NOTE_LOW        32
 #define PLANT_NOTE_HIGH       84
 
@@ -159,17 +197,66 @@ struct MidiRoute {
   uint8_t note;
 };
 
-// EJEMPLO EB1:
-// activa canales 1, 3, 4 y 5
-// Si quieres EC1, deja solo el canal 2.
+// Rutas FRUTA parametrizables por entorno de compilacion.
+// Permite elegir 1..4 destinos sin tocar logica.
+#ifndef FRUIT_ROUTE_COUNT_CFG
+#define FRUIT_ROUTE_COUNT_CFG 4
+#endif
+
+#ifndef FRUIT_ROUTE_1_BUS
+#define FRUIT_ROUTE_1_BUS 0
+#endif
+#ifndef FRUIT_ROUTE_1_CH
+#define FRUIT_ROUTE_1_CH 1
+#endif
+#ifndef FRUIT_ROUTE_1_NOTE
+#define FRUIT_ROUTE_1_NOTE 57
+#endif
+
+#ifndef FRUIT_ROUTE_2_BUS
+#define FRUIT_ROUTE_2_BUS 0
+#endif
+#ifndef FRUIT_ROUTE_2_CH
+#define FRUIT_ROUTE_2_CH 3
+#endif
+#ifndef FRUIT_ROUTE_2_NOTE
+#define FRUIT_ROUTE_2_NOTE 57
+#endif
+
+#ifndef FRUIT_ROUTE_3_BUS
+#define FRUIT_ROUTE_3_BUS 0
+#endif
+#ifndef FRUIT_ROUTE_3_CH
+#define FRUIT_ROUTE_3_CH 4
+#endif
+#ifndef FRUIT_ROUTE_3_NOTE
+#define FRUIT_ROUTE_3_NOTE 57
+#endif
+
+#ifndef FRUIT_ROUTE_4_BUS
+#define FRUIT_ROUTE_4_BUS 0
+#endif
+#ifndef FRUIT_ROUTE_4_CH
+#define FRUIT_ROUTE_4_CH 5
+#endif
+#ifndef FRUIT_ROUTE_4_NOTE
+#define FRUIT_ROUTE_4_NOTE 57
+#endif
+
 static const MidiRoute FRUIT_ROUTES[] = {
-  {0, 1, 57},
-  {0, 3, 57},
-  {0, 4, 57},
-  {0, 5, 57},
+  {(uint8_t)FRUIT_ROUTE_1_BUS, (uint8_t)FRUIT_ROUTE_1_CH, (uint8_t)FRUIT_ROUTE_1_NOTE},
+  {(uint8_t)FRUIT_ROUTE_2_BUS, (uint8_t)FRUIT_ROUTE_2_CH, (uint8_t)FRUIT_ROUTE_2_NOTE},
+  {(uint8_t)FRUIT_ROUTE_3_BUS, (uint8_t)FRUIT_ROUTE_3_CH, (uint8_t)FRUIT_ROUTE_3_NOTE},
+  {(uint8_t)FRUIT_ROUTE_4_BUS, (uint8_t)FRUIT_ROUTE_4_CH, (uint8_t)FRUIT_ROUTE_4_NOTE},
 };
 
-static const uint8_t FRUIT_ROUTE_COUNT = sizeof(FRUIT_ROUTES) / sizeof(FRUIT_ROUTES[0]);
+#if FRUIT_ROUTE_COUNT_CFG < 1
+static const uint8_t FRUIT_ROUTE_COUNT = 1;
+#elif FRUIT_ROUTE_COUNT_CFG > 4
+static const uint8_t FRUIT_ROUTE_COUNT = 4;
+#else
+static const uint8_t FRUIT_ROUTE_COUNT = FRUIT_ROUTE_COUNT_CFG;
+#endif
 
 // Keepalive de fruta: por defecto desactivado para no retriggerar
 #define FRUIT_KEEPALIVE_ENABLE 0
@@ -206,6 +293,15 @@ static const uint8_t FRUIT_ROUTE_COUNT = sizeof(FRUIT_ROUTES) / sizeof(FRUIT_ROU
 #define FRUIT_AUTOCAL_REFINE_MS 8000
 #define FRUIT_HARD_TIMEOUT_MS  60000
 #define FRUIT_RECOVERY_MS        250
+#ifndef FRUIT_FIXED_OFFSET_V
+#define FRUIT_FIXED_OFFSET_V    -1.0f
+#endif
+#ifndef FRUIT_FIXED_OFFSET_WINDOW_V
+#define FRUIT_FIXED_OFFSET_WINDOW_V 0.35f
+#endif
+#ifndef FRUIT_ENTER_MIN_SLOPE_ABS
+#define FRUIT_ENTER_MIN_SLOPE_ABS 0.05f
+#endif
 
 
 /*============================================================================================
@@ -217,6 +313,7 @@ static const uint8_t FRUIT_ROUTE_COUNT = sizeof(FRUIT_ROUTES) / sizeof(FRUIT_ROU
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <esp_wifi.h>
+#include <algorithm>
 #include <math.h>
 #include <string.h>
 #include <mbedtls/md.h>
@@ -271,7 +368,22 @@ static inline uint8_t toMidiCh0(uint8_t ch1b) {
   return (uint8_t)(ch1b - 1);
 }
 
+static inline uint8_t resolvePlantMidiChannel1b() {
+#if PLANT_CHANNEL_FROM_NODE_ID
+  // Regla operacional:
+  // - node_id 1..15  => canales 1..15 (cajas 1..3, bus 0)
+  // - node_id 16..25 => canales 1..10 (cajas 4..5, bus 1)
+  const int node_id = NODE_ID;
+  if (node_id >= 1 && node_id <= 15) return (uint8_t)node_id;
+  if (node_id >= 16 && node_id <= 25) return (uint8_t)(node_id - 15);
+#endif
+  return clamp_u8(PLANT_MIDI_CHANNEL_1B, 1, 16);
+}
+
 float readV() {
+  // Igualar comportamiento estable del firmware ESPNOW legado.
+  analogRead(PIN_SIGNAL);
+  delayMicroseconds(120);
   return analogRead(PIN_SIGNAL) * (3.3f / 4095.0f);
 }
 
@@ -290,12 +402,109 @@ float readVmed3() {
 ============================================================================================*/
 
 #if LED_PROFILE == LED_SIMPLE
-uint32_t noteToColor(uint8_t note) {
-  if (note <= 40) return strip.Color(0, 255, 0);
-  if (note <= 50) return strip.Color(255, 180, 0);
-  if (note <= 60) return strip.Color(255, 0, 255);
-  if (note <= 80) return strip.Color(120, 180, 255);
-  return strip.Color(255, 255, 255);
+struct LedWave {
+  float pos;
+  float vel;
+  uint8_t r;
+  uint8_t g;
+  uint8_t b;
+  bool active;
+};
+
+LedWave g_ledWavePool[LED_WAVE_POOL_CAP] = {};
+uint32_t g_ledLastRenderMs = 0;
+
+static inline uint16_t ledFrameDelayMs() {
+  return (LED_FPS > 0) ? (uint16_t)(1000 / LED_FPS) : (uint16_t)16;
+}
+
+void noteToColor(uint8_t note, uint8_t* r, uint8_t* g, uint8_t* b) {
+  if (r == nullptr || g == nullptr || b == nullptr) return;
+
+  if (note <= 40) {
+    *r = 0; *g = 255; *b = 0;
+    return;
+  }
+  if (note <= 50) {
+    float t = (float)(note - 40) / 10.0f;
+    *r = (uint8_t)(255.0f * t + 0.5f);
+    *g = (uint8_t)(255.0f * (1.0f - t) + 0.5f);
+    *b = 0;
+    return;
+  }
+  if (note <= 60) {
+    float t = (float)(note - 50) / 10.0f;
+    *r = (uint8_t)(255.0f * (1.0f - t) + 0.5f);
+    *g = 0;
+    *b = (uint8_t)(255.0f * t + 0.5f);
+    return;
+  }
+  if (note <= 80) {
+    float t = (float)(note - 60) / 20.0f;
+    uint8_t v = (uint8_t)(255.0f * t + 0.5f);
+    *r = v;
+    *g = v;
+    *b = 255;
+    return;
+  }
+  *r = 255; *g = 255; *b = 255;
+}
+
+void ledLaunchWave(uint8_t note) {
+  for (int i = 0; i < LED_WAVE_POOL_CAP; ++i) {
+    if (g_ledWavePool[i].active) continue;
+    g_ledWavePool[i].pos = 0.0f;
+    g_ledWavePool[i].vel = LED_WAVE_SPEED;
+    noteToColor(note, &g_ledWavePool[i].r, &g_ledWavePool[i].g, &g_ledWavePool[i].b);
+    g_ledWavePool[i].active = true;
+    return;
+  }
+}
+
+void ledRender() {
+  uint32_t now = millis();
+  if (now - g_ledLastRenderMs < ledFrameDelayMs()) return;
+  g_ledLastRenderMs = now;
+
+  for (int i = 0; i < LED_WAVE_POOL_CAP; ++i) {
+    LedWave* wave = &g_ledWavePool[i];
+    if (!wave->active) continue;
+    wave->pos += wave->vel;
+    if (wave->pos > ((float)NUM_PIXELS + 5.0f)) {
+      wave->active = false;
+    }
+  }
+
+  strip.clear();
+
+  for (int i = 0; i < LED_WAVE_POOL_CAP; ++i) {
+    const LedWave& wave = g_ledWavePool[i];
+    if (!wave.active) continue;
+
+    const float center = wave.pos;
+    for (int j = 0; j < NUM_PIXELS; ++j) {
+      float d = fabsf((float)j - center);
+      if (d > LED_WAVE_RADIUS) continue;
+
+      float k = cosf(d * LED_WAVE_FREQ);
+      if (k <= 0.0f) continue;
+
+      uint8_t r = (uint8_t)((float)wave.r * k);
+      uint8_t g = (uint8_t)((float)wave.g * k);
+      uint8_t b = (uint8_t)((float)wave.b * k);
+
+      uint32_t prev = strip.getPixelColor(j);
+      uint8_t pr = (uint8_t)((prev >> 16) & 0xFF);
+      uint8_t pg = (uint8_t)((prev >> 8) & 0xFF);
+      uint8_t pb = (uint8_t)(prev & 0xFF);
+
+      uint8_t nr = (uint8_t)std::min<int>(255, (int)pr + (int)r);
+      uint8_t ng = (uint8_t)std::min<int>(255, (int)pg + (int)g);
+      uint8_t nb = (uint8_t)std::min<int>(255, (int)pb + (int)b);
+      strip.setPixelColor(j, nr, ng, nb);
+    }
+  }
+  strip.show();
 }
 
 void ledInit() {
@@ -303,22 +512,30 @@ void ledInit() {
   strip.clear();
   strip.setBrightness(LED_BRIGHT);
   strip.show();
+  for (int i = 0; i < LED_WAVE_POOL_CAP; ++i) {
+    g_ledWavePool[i].active = false;
+  }
+  g_ledLastRenderMs = 0;
 }
 
 void ledOff() {
-  strip.clear();
-  strip.show();
+  // Mantener ondas activas (comportamiento estilo ESPNOW).
+  // El apagado natural ocurre cuando no quedan ondas en el render loop.
 }
 
 void ledShowNote(uint8_t note) {
-  uint32_t c = noteToColor(note);
-  strip.fill(c);
-  strip.show();
+  ledLaunchWave(note);
 }
+
+void ledTick() {
+  ledRender();
+}
+
 #else
 void ledInit() {}
 void ledOff() {}
 void ledShowNote(uint8_t note) { (void)note; }
+void ledTick() {}
 #endif
 
 
@@ -1273,22 +1490,25 @@ uint8_t plantLimitJump(uint8_t n) {
 bool plantSendNoteOn(uint8_t note, uint8_t vel, bool force = false) {
   uint32_t now = millis();
   if (!force && (now - g_plantLastSentMs < PLANT_THROTTLE_MS)) return false;
-  bool ok = sendOkuaEvt(PLANT_MIDI_BUS, toMidiCh0(PLANT_MIDI_CHANNEL_1B), note, vel, 0);
+  const uint8_t midi_ch0 = toMidiCh0(resolvePlantMidiChannel1b());
+  bool ok = sendOkuaEvt(PLANT_MIDI_BUS, midi_ch0, note, vel, 0);
   if (ok) {
     g_plantLastSentMs = now;
     g_plantNoteActive = true;
     g_plantLastPlayedNote = note;
-    ledShowNote(note);
   }
+  ledShowNote(note);
   return ok;
 }
 
 bool plantSendNoteOff(uint8_t note) {
-  bool ok = sendOkuaEvt(PLANT_MIDI_BUS, toMidiCh0(PLANT_MIDI_CHANNEL_1B), note, 0, 0);
+  const uint8_t midi_ch0 = toMidiCh0(resolvePlantMidiChannel1b());
+  bool ok = sendOkuaEvt(PLANT_MIDI_BUS, midi_ch0, note, 0, 0);
   if (ok) {
     g_plantNoteActive = false;
-    ledOff();
   }
+  // En legado ESPNOW cada paquete (incluido note-off) dispara onda.
+  ledShowNote(note);
   return ok;
 }
 
@@ -1354,6 +1574,12 @@ void servicePlantField() {
         g_plantState = PLANT_IDLE;
       }
       break;
+  }
+
+  if (g_plantState == PLANT_ACTIVE || g_plantState == PLANT_DECAY) {
+    g_lastStateFlags |= STATF_TOUCH_ACTIVE;
+  } else {
+    g_lastStateFlags &= (uint8_t)~STATF_TOUCH_ACTIVE;
   }
 }
 
@@ -1500,6 +1726,15 @@ void serviceFruitField() {
   float vRaw = readVmed3();
   g_fruitFilteredV = FRUIT_FILTER_ALPHA * vRaw + (1.0f - FRUIT_FILTER_ALPHA) * g_fruitFilteredV;
 
+  // Offset fijo opcional (ej. EB1 ~1.5V) usado como semilla.
+  // No se bloquea el baseline por ciclo para evitar "contacto permanente"
+  // cuando el offset real en reposo no coincide exacto.
+  if (FRUIT_FIXED_OFFSET_V > 0.0f && !g_fruitCalFastDone) {
+    g_fruitBaselineV = fmaxf(FRUIT_FIXED_OFFSET_V, FRUIT_BASE_CLAMP_MIN);
+    g_fruitCalFastDone = true;
+    g_fruitCalRefineDone = true;
+  }
+
   if (!g_fruitCalFastDone || !g_fruitCalRefineDone) {
     calibrateFruit2Phases(g_fruitFilteredV);
     g_lastStateFlags |= STATF_CALIBRATING;
@@ -1538,7 +1773,8 @@ void serviceFruitField() {
   bool ampStrong = (dv_proj >= FD.abs_strong_up);
   bool ampGate   = (dv_proj >= th_up);
   bool slopeGate = (slope_proj >= FD.slope_min_strong);
-  bool enterCand = ampStrong || (ampGate && slopeGate);
+  bool motionAbsGate = (fabsf(dv_dt) >= FRUIT_ENTER_MIN_SLOPE_ABS);
+  bool enterCand = (ampStrong && motionAbsGate) || (ampGate && slopeGate);
 
   if (enterCand) {
     if (g_fruitUpHoldStartMs == 0) g_fruitUpHoldStartMs = now;
@@ -1606,8 +1842,16 @@ void serviceFruitField() {
   }
 
   if (!g_fruitContactActive && now >= g_fruitRecoveryUntilMs) {
-    g_fruitBaselineV += FRUIT_BASE_A * (g_fruitFilteredV - g_fruitBaselineV);
-    if (g_fruitBaselineV < FRUIT_BASE_CLAMP_MIN) g_fruitBaselineV = FRUIT_BASE_CLAMP_MIN;
+    if (FRUIT_FIXED_OFFSET_V > 0.0f) {
+      float nextBase = g_fruitBaselineV + FRUIT_BASE_A * (g_fruitFilteredV - g_fruitBaselineV);
+      float baseLo = FRUIT_FIXED_OFFSET_V - FRUIT_FIXED_OFFSET_WINDOW_V;
+      float baseHi = FRUIT_FIXED_OFFSET_V + FRUIT_FIXED_OFFSET_WINDOW_V;
+      if (baseLo < FRUIT_BASE_CLAMP_MIN) baseLo = FRUIT_BASE_CLAMP_MIN;
+      g_fruitBaselineV = clampf(nextBase, baseLo, baseHi);
+    } else {
+      g_fruitBaselineV += FRUIT_BASE_A * (g_fruitFilteredV - g_fruitBaselineV);
+      if (g_fruitBaselineV < FRUIT_BASE_CLAMP_MIN) g_fruitBaselineV = FRUIT_BASE_CLAMP_MIN;
+    }
   }
 }
 
@@ -1631,12 +1875,13 @@ void servicePlantTest() {
   int nextNote = (int)g_testPlantNote + step;
   if (nextNote < PLANT_NOTE_LOW) nextNote = PLANT_NOTE_LOW;
   if (nextNote > PLANT_NOTE_HIGH) nextNote = PLANT_NOTE_HIGH;
+  const uint8_t midi_ch0 = toMidiCh0(resolvePlantMidiChannel1b());
 
   // note off previo
-  sendOkuaEvt(PLANT_MIDI_BUS, toMidiCh0(PLANT_MIDI_CHANNEL_1B), g_testPlantNote, 0, 0);
+  sendOkuaEvt(PLANT_MIDI_BUS, midi_ch0, g_testPlantNote, 0, 0);
 
   g_testPlantNote = (uint8_t)nextNote;
-  sendOkuaEvt(PLANT_MIDI_BUS, toMidiCh0(PLANT_MIDI_CHANNEL_1B), g_testPlantNote, 90, 0);
+  sendOkuaEvt(PLANT_MIDI_BUS, midi_ch0, g_testPlantNote, 90, 0);
   ledShowNote(g_testPlantNote);
 }
 
@@ -1684,6 +1929,11 @@ void setup() {
   g_fruitBootMs = millis();
   g_fruitFilteredV = readVmed3();
   g_fruitPrevV = g_fruitFilteredV;
+  if (FRUIT_FIXED_OFFSET_V > 0.0f) {
+    g_fruitBaselineV = fmaxf(FRUIT_FIXED_OFFSET_V, FRUIT_BASE_CLAMP_MIN);
+    g_fruitCalFastDone = true;
+    g_fruitCalRefineDone = true;
+  }
   g_plantSmoothV = readVmed3();
   g_plantLastRawV = g_plantSmoothV;
 
@@ -1703,6 +1953,10 @@ void setup() {
   Serial.print("UDP_BIND_PORT : "); Serial.println(OKUA_NODE_BIND_PORT);
   Serial.print("MODE          : "); Serial.println((ACTIVE_MODE == MODE_TEST) ? "TEST" : "FIELD");
   Serial.print("SENSOR        : "); Serial.println((ACTIVE_SENSOR == SENSOR_PLANT) ? "PLANT" : "FRUIT");
+  Serial.print("PLANT_MIDI_CH : "); Serial.println(resolvePlantMidiChannel1b());
+#if LED_PROFILE == LED_SIMPLE
+  Serial.print("LED_DATA_PIN  : "); Serial.println(LED_DATA_PIN);
+#endif
   Serial.print("BOOT_MARKER4  : "); Serial.println(g_bootMarker4);
   Serial.println("==========================================");
 
@@ -1744,6 +1998,8 @@ void loop() {
   if (millis() - g_lastStatMs >= STAT_INTERVAL_MS) {
     sendOkuaStat(g_lastStateFlags);
   }
+
+  ledTick();
 
   delay(2);
 }

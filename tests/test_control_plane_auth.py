@@ -79,3 +79,23 @@ def test_resolve_control_secret_rejects_placeholder_from_auto_file(
     with pytest.raises(ControlSecretNotConfiguredError):
         resolve_control_secret()
 
+
+def test_resolve_control_secret_uses_exe_sidecar_file_when_frozen(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    exe_dir = tmp_path / "dist"
+    exe_dir.mkdir(parents=True, exist_ok=True)
+    sidecar = exe_dir / "control_plane_secret.txt"
+    sidecar.write_text("EXE_SIDE_SECRET_789\n", encoding="utf-8")
+
+    fake_exe = exe_dir / "Control Okua.exe"
+    fake_exe.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(fake_exe), raising=False)
+    monkeypatch.delenv(CONTROL_SECRET_ENV, raising=False)
+    monkeypatch.delenv(CONTROL_SECRET_FILE_ENV, raising=False)
+
+    resolved = resolve_control_secret()
+    assert resolved == b"EXE_SIDE_SECRET_789"

@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sys
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
@@ -33,7 +33,19 @@ def run_app() -> int:
     for warning in warnings:
         print(f"[config] {warning}")
 
+    # Ayuda a evitar clipping visual cuando el factor DPI es fraccional
+    # (caso frecuente en equipos de campo con escalado 125%/150%).
+    if hasattr(QApplication, "setHighDpiScaleFactorRoundingPolicy") and hasattr(
+        Qt, "HighDpiScaleFactorRoundingPolicy"
+    ):
+        try:
+            QApplication.setHighDpiScaleFactorRoundingPolicy(
+                Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+            )
+        except Exception:
+            pass
     app = QApplication(sys.argv)
+    app.setStyle("Fusion")
 
     qss_path = resource_path("assets/theme.qss")
     if qss_path.exists():

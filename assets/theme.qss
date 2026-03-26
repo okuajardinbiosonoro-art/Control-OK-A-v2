@@ -176,3 +176,37 @@ QStatusBar {
     padding: 3px 10px;
     font-weight: bold;
 }
+
+/* --- Tablas, Árboles y Encabezados (robusto entre equipos) --- */
+QAbstractScrollArea {
+    background-color: #1E1E1E;
+    border: 1px solid #444444;
+    border-radius: 4px;
+}
+
+QTableWidget, QTableView, QTreeWidget {
+    background-color: #1E1E1E;
+    alternate-background-color: #262626;
+    color: #cbbba0;
+    gridline-color: #3A3A3A;
+    selection-background-color: #2FACC6;
+    selection-color: #FFFFFF;
+    border: 1px solid #444444;
+}
+
+QTableWidget::item, QTableView::item, QTreeWidget::item {
+    padding: 4px 6px;
+}
+
+QHeaderView::section {
+    background-color: #303030;
+    color: #cbbba0;
+    border: 1px solid #444444;
+    padding: 6px;
+    font-weight: bold;
+}
+
+QTableCornerButton::section {
+    background-color: #303030;
+    border: 1px solid #444444;
+}
