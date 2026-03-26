@@ -101,6 +101,11 @@ def test_reboot_probe_emits_progress_and_returns_confirmation() -> None:
         send_ping=_send_ping,
         send_request_stat_now=_send_request_stat,
         send_reboot_soft=_send_reboot,
+        send_set_stat_rate=lambda *_: _tx_result(
+            command_name="SET_STAT_RATE",
+            cmd_id=0x05,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
         available_node_ids_provider=lambda: [3],
         node_snapshot_provider=_snapshot_provider,
         default_node_id=3,
@@ -168,6 +173,11 @@ def test_reboot_probe_confirms_using_boot_marker_change() -> None:
         send_ping=_send_ping,
         send_request_stat_now=_send_request_stat,
         send_reboot_soft=_send_reboot,
+        send_set_stat_rate=lambda *_: _tx_result(
+            command_name="SET_STAT_RATE",
+            cmd_id=0x05,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
         available_node_ids_provider=lambda: [3],
         node_snapshot_provider=_snapshot_provider,
         default_node_id=3,
@@ -206,6 +216,11 @@ def test_reboot_transaction_writes_fallback_feedback_when_post_lines_are_empty()
         send_reboot_soft=lambda *_: _tx_result(
             command_name="REBOOT_SOFT",
             cmd_id=0x02,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
+        send_set_stat_rate=lambda *_: _tx_result(
+            command_name="SET_STAT_RATE",
+            cmd_id=0x05,
             final_status=ControlTransactionFinalStatus.ACK_MATCHED,
         ),
         available_node_ids_provider=lambda: [3],
@@ -261,6 +276,11 @@ def test_section_warning_is_shown_only_once(monkeypatch) -> None:
             cmd_id=0x02,
             final_status=ControlTransactionFinalStatus.ACK_MATCHED,
         ),
+        send_set_stat_rate=lambda *_: _tx_result(
+            command_name="SET_STAT_RATE",
+            cmd_id=0x05,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
         available_node_ids_provider=lambda: [1],
         default_node_id=1,
     )
@@ -290,6 +310,11 @@ def test_run_transaction_logs_when_command_is_ignored() -> None:
         send_reboot_soft=lambda *_: _tx_result(
             command_name="REBOOT_SOFT",
             cmd_id=0x02,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
+        send_set_stat_rate=lambda *_: _tx_result(
+            command_name="SET_STAT_RATE",
+            cmd_id=0x05,
             final_status=ControlTransactionFinalStatus.ACK_MATCHED,
         ),
         available_node_ids_provider=lambda: [1],
@@ -322,6 +347,11 @@ def test_reboot_click_runs_transaction_without_confirmation_dialog() -> None:
             cmd_id=0x02,
             final_status=ControlTransactionFinalStatus.ACK_MATCHED,
         ),
+        send_set_stat_rate=lambda *_: _tx_result(
+            command_name="SET_STAT_RATE",
+            cmd_id=0x05,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
         available_node_ids_provider=lambda: [1],
         default_node_id=1,
     )
@@ -334,5 +364,47 @@ def test_reboot_click_runs_transaction_without_confirmation_dialog() -> None:
         panel._run_transaction = _fake_run_transaction  # type: ignore[method-assign]
         panel._on_reboot_soft_clicked()
         assert captured.get("command_name") == "REBOOT_SOFT"
+    finally:
+        panel.close()
+
+
+def test_set_stat_rate_ui_is_curated_and_dispatches_command() -> None:
+    _ensure_qapp()
+    panel = ControlPlanePanel(
+        send_ping=lambda *_: _tx_result(
+            command_name="PING",
+            cmd_id=0x01,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
+        send_request_stat_now=lambda *_: _tx_result(
+            command_name="REQUEST_STAT_NOW",
+            cmd_id=0x07,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
+        send_reboot_soft=lambda *_: _tx_result(
+            command_name="REBOOT_SOFT",
+            cmd_id=0x02,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
+        send_set_stat_rate=lambda *_: _tx_result(
+            command_name="SET_STAT_RATE",
+            cmd_id=0x05,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
+        available_node_ids_provider=lambda: [1],
+        default_node_id=1,
+    )
+    captured: dict[str, object] = {}
+
+    def _fake_run_transaction(*, command_name, execute):
+        captured["command_name"] = command_name
+
+    try:
+        options = [panel.stat_rate_combo.itemData(i) for i in range(panel.stat_rate_combo.count())]
+        assert options == [1000, 2000, 5000]
+        panel.stat_rate_combo.setCurrentIndex(2)
+        panel._run_transaction = _fake_run_transaction  # type: ignore[method-assign]
+        panel._on_set_stat_rate_clicked()
+        assert captured.get("command_name") == "SET_STAT_RATE"
     finally:
         panel.close()

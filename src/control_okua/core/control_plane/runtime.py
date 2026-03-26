@@ -229,6 +229,27 @@ class ControlPlaneRuntime:
         self.record_transaction_result(result)
         return result
 
+    def send_set_stat_rate(
+        self,
+        *,
+        node_id: int,
+        stat_rate_ms: int,
+        ack_timeout_ms: int = 350,
+        max_retries: int = 1,
+        source: str = "manual_ui",
+    ) -> ControlTransactionResult:
+        node_ip = self._resolve_node_ip(node_id)
+        result = self._transaction_service.send_set_stat_rate_and_wait_ack(
+            node_ip,
+            int(node_id),
+            stat_rate_ms=stat_rate_ms,
+            source=source,
+            ack_timeout_ms=ack_timeout_ms,
+            max_retries=max_retries,
+        )
+        self.record_transaction_result(result)
+        return result
+
     def record_transaction_result(self, result: ControlTransactionResult) -> None:
         self._consume_transaction_result(result)
 

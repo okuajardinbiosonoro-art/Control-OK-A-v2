@@ -58,6 +58,9 @@ class _RebootProbeOutcome:
     final_boot_marker: int | None
 
 
+_SET_STAT_RATE_PRESETS_MS: tuple[int, ...] = (1000, 2000, 5000)
+
+
 class _TransactionWorker(QObject):
     finished = Signal(object, object)
     progress = Signal(str)
@@ -88,6 +91,7 @@ class ControlPlanePanel(QWidget):
         send_ping: Callable[[int, int, int], ControlTransactionResult],
         send_request_stat_now: Callable[[int, int, int], ControlTransactionResult],
         send_reboot_soft: Callable[[int, int, int], ControlTransactionResult],
+        send_set_stat_rate: Callable[[int, int, int, int], ControlTransactionResult],
         available_node_ids_provider: Callable[[], list[int]] | None = None,
         node_snapshot_provider: Callable[[int], object | None] | None = None,
         reboot_verification_reporter: Callable[[int, str, str], None] | None = None,
@@ -98,6 +102,7 @@ class ControlPlanePanel(QWidget):
         self._send_ping = send_ping
         self._send_request_stat_now = send_request_stat_now
         self._send_reboot_soft = send_reboot_soft
+        self._send_set_stat_rate = send_set_stat_rate
         self._available_node_ids_provider = available_node_ids_provider
         self._node_snapshot_provider = node_snapshot_provider
         self._reboot_verification_reporter = reboot_verification_reporter
@@ -184,6 +189,17 @@ class ControlPlanePanel(QWidget):
         self.reboot_soft_button.clicked.connect(self._on_reboot_soft_clicked)
         actions_layout.addWidget(self.reboot_soft_button)
         group_layout.addWidget(actions_group)
+
+        stat_rate_group = QGroupBox("Cadencia STAT", self)
+        stat_rate_layout = QHBoxLayout(stat_rate_group)
+        self.stat_rate_combo = QComboBox(self)
+        for value_ms in _SET_STAT_RATE_PRESETS_MS:
+            self.stat_rate_combo.addItem(f"{value_ms} ms", value_ms)
+        stat_rate_layout.addWidget(self.stat_rate_combo, 1)
+        self.set_stat_rate_button = QPushButton("Aplicar STAT rate", self)
+        self.set_stat_rate_button.clicked.connect(self._on_set_stat_rate_clicked)
+        stat_rate_layout.addWidget(self.set_stat_rate_button)
+        group_layout.addWidget(stat_rate_group)
 
         self.details_tabs = QTabWidget(self)
         self.details_tabs.setDocumentMode(True)
@@ -277,13 +293,27 @@ class ControlPlanePanel(QWidget):
             ),
         )
 
+    def _on_set_stat_rate_clicked(self) -> None:
+        stat_rate_ms = self._selected_stat_rate_ms()
+        self._run_transaction(
+            command_name="SET_STAT_RATE",
+            execute=lambda node_id, ack_timeout_ms, max_retries, _progress: _PanelRunOutcome(
+                result=self._send_set_stat_rate(
+                    node_id,
+                    stat_rate_ms,
+                    ack_timeout_ms,
+                    max_retries,
+                )
+            ),
+        )
+
     def on_section_activated(self) -> None:
         if self._section_warning_shown:
             return
         self._section_warning_shown = True
         self._append_log(
             f"[{self._now_hms()}] Aviso: Control F3 envía comandos reales "
-            "(PING/STAT/REBOOT). Reinicio suave puede cortar conectividad temporalmente."
+            "(PING/STAT/STAT_RATE/REBOOT). Reinicio suave puede cortar conectividad temporalmente."
         )
         QMessageBox.information(
             self,
@@ -291,6 +321,7 @@ class ControlPlanePanel(QWidget):
             (
                 "Este panel envía comandos reales a nodos del runtime.\n\n"
                 "- PING y Pedir STAT son diagnósticos.\n"
+                "- STAT rate ajusta la cadencia de STAT del nodo (presets curados).\n"
                 "- Reinicio suave puede interrumpir conectividad por unos segundos.\n\n"
                 "Este aviso se muestra una sola vez por apertura de la aplicación."
             ),
@@ -546,6 +577,8 @@ class ControlPlanePanel(QWidget):
         self.ping_button.setEnabled(enabled)
         self.request_stat_button.setEnabled(enabled)
         self.reboot_soft_button.setEnabled(enabled)
+        self.stat_rate_combo.setEnabled(enabled)
+        self.set_stat_rate_button.setEnabled(enabled)
         if status_text:
             self.status_label.setText(status_text)
 
@@ -686,6 +719,16 @@ class ControlPlanePanel(QWidget):
         except (TypeError, ValueError):
             return self._default_node_id
         return max(1, value)
+
+    def _selected_stat_rate_ms(self) -> int:
+        raw = self.stat_rate_combo.currentData()
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            return _SET_STAT_RATE_PRESETS_MS[0]
+        if value in _SET_STAT_RATE_PRESETS_MS:
+            return value
+        return _SET_STAT_RATE_PRESETS_MS[0]
 
     def _selected_node_option(self) -> ControlPlaneNodeOption | None:
         node_id = self._selected_node_id()
@@ -1137,12 +1180,15 @@ class ControlPlanePanel(QWidget):
     def _policy_summary_text(self) -> str:
         ping = resolve_control_command_policy("PING")
         stat = resolve_control_command_policy("REQUEST_STAT_NOW")
+        stat_rate = resolve_control_command_policy("SET_STAT_RATE")
         reboot = resolve_control_command_policy("REBOOT_SOFT")
         return (
             "PING: "
             f"{ping.ack_timeout_ms} ms/{ping.max_retries} reintentos | "
             "REQUEST_STAT_NOW: "
             f"{stat.ack_timeout_ms} ms/{stat.max_retries} reintentos | "
+            "SET_STAT_RATE: "
+            f"{stat_rate.ack_timeout_ms} ms/{stat_rate.max_retries} reintentos | "
             "REBOOT_SOFT: "
             f"{reboot.ack_timeout_ms} ms/{reboot.max_retries} reintentos"
         )

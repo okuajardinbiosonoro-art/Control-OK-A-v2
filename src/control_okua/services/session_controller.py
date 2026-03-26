@@ -366,6 +366,26 @@ class SessionController(QObject):
         self._record_control_plane_transaction_result(result=result, runtime=runtime)
         return result
 
+    def send_control_set_stat_rate(
+        self,
+        *,
+        node_id: int,
+        stat_rate_ms: int,
+        ack_timeout_ms: int = 350,
+        max_retries: int = 1,
+        source: str = "manual_ui",
+    ) -> ControlTransactionResult:
+        runtime = self._ensure_control_plane_runtime()
+        result = runtime.send_set_stat_rate(
+            node_id=node_id,
+            stat_rate_ms=stat_rate_ms,
+            ack_timeout_ms=ack_timeout_ms,
+            max_retries=max_retries,
+            source=source,
+        )
+        self._record_control_plane_transaction_result(result=result, runtime=runtime)
+        return result
+
     def start_session(self) -> bool:
         transition = self._apply_transition(
             SessionEvent.REQUEST_START,

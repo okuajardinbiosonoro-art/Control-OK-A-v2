@@ -17,6 +17,7 @@ from control_okua.core.control_plane.protocol import (
     build_ping_command,
     build_reboot_soft_command,
     build_request_stat_now_command,
+    build_set_stat_rate_command,
 )
 
 
@@ -143,6 +144,29 @@ class CmdService:
                 cmd_seq=cmd_seq,
                 nonce=nonce,
                 delay_ms=delay_ms,
+            ),
+        )
+
+    def send_set_stat_rate(
+        self,
+        node_ip: str,
+        node_id: int,
+        *,
+        stat_rate_ms: int,
+        source: str = "manual",
+    ) -> SentOkuaCommand:
+        return self._send_new_command(
+            node_ip=node_ip,
+            node_id=node_id,
+            source=source,
+            command_name="SET_STAT_RATE",
+            cmd_id=int(OkuaCmdId.SET_STAT_RATE),
+            packet_builder=lambda resolved_node_id, cmd_seq, nonce: build_set_stat_rate_command(
+                secret=self._secret,
+                node_id_target=resolved_node_id,
+                cmd_seq=cmd_seq,
+                nonce=nonce,
+                stat_rate_ms=stat_rate_ms,
             ),
         )
 

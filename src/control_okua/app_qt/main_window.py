@@ -569,6 +569,7 @@ class MainWindow(QMainWindow):
             send_ping=self._send_control_ping_from_ui,
             send_request_stat_now=self._send_control_request_stat_now_from_ui,
             send_reboot_soft=self._send_control_reboot_soft_from_ui,
+            send_set_stat_rate=self._send_control_set_stat_rate_from_ui,
             available_node_ids_provider=self._available_control_node_ids_from_runtime,
             node_snapshot_provider=self._control_node_snapshot_from_runtime,
             reboot_verification_reporter=self._record_control_reboot_verification_from_ui,
@@ -852,6 +853,21 @@ class MainWindow(QMainWindow):
     ) -> ControlTransactionResult:
         return self.session_controller.send_control_reboot_soft(
             node_id=node_id,
+            ack_timeout_ms=ack_timeout_ms,
+            max_retries=max_retries,
+            source="ui_manual",
+        )
+
+    def _send_control_set_stat_rate_from_ui(
+        self,
+        node_id: int,
+        stat_rate_ms: int,
+        ack_timeout_ms: int,
+        max_retries: int,
+    ) -> ControlTransactionResult:
+        return self.session_controller.send_control_set_stat_rate(
+            node_id=node_id,
+            stat_rate_ms=stat_rate_ms,
             ack_timeout_ms=ack_timeout_ms,
             max_retries=max_retries,
             source="ui_manual",

@@ -131,11 +131,13 @@ def test_reboot_soft_confirmation_text_is_explicit() -> None:
 def test_resolve_control_command_policy_returns_auto_values() -> None:
     ping = resolve_control_command_policy("PING")
     stat = resolve_control_command_policy("REQUEST_STAT_NOW")
+    stat_rate = resolve_control_command_policy("SET_STAT_RATE")
     reboot = resolve_control_command_policy("REBOOT_SOFT")
     unknown = resolve_control_command_policy("X_UNKNOWN")
 
     assert (ping.ack_timeout_ms, ping.max_retries) == (600, 2)
     assert (stat.ack_timeout_ms, stat.max_retries) == (900, 2)
+    assert (stat_rate.ack_timeout_ms, stat_rate.max_retries) == (900, 1)
     assert (reboot.ack_timeout_ms, reboot.max_retries) == (1200, 0)
     assert (unknown.ack_timeout_ms, unknown.max_retries) == (600, 1)
 

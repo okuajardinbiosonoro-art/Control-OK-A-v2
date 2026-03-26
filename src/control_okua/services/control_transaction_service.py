@@ -70,6 +70,16 @@ class CmdTransactionClient(Protocol):
     ) -> SentOkuaCommand:
         ...
 
+    def send_set_stat_rate(
+        self,
+        node_ip: str,
+        node_id: int,
+        *,
+        stat_rate_ms: int,
+        source: str = "manual",
+    ) -> SentOkuaCommand:
+        ...
+
     def resend_sent_command(
         self,
         sent_command: SentOkuaCommand,
@@ -193,6 +203,33 @@ class ControlTransactionService:
                 node_ip,
                 node_id,
                 delay_ms=delay_ms,
+                source=source,
+            ),
+        )
+
+    def send_set_stat_rate_and_wait_ack(
+        self,
+        node_ip: str,
+        node_id: int,
+        *,
+        stat_rate_ms: int,
+        source: str = "manual",
+        ack_timeout_ms: int = 350,
+        max_retries: int = 1,
+        poll_interval_ms: int = 20,
+    ) -> ControlTransactionResult:
+        return self._execute_transaction(
+            command_name="SET_STAT_RATE",
+            cmd_id=0x05,
+            node_ip=node_ip,
+            node_id=node_id,
+            ack_timeout_ms=ack_timeout_ms,
+            max_retries=max_retries,
+            poll_interval_ms=poll_interval_ms,
+            initial_send=lambda: self._cmd_service.send_set_stat_rate(
+                node_ip,
+                node_id,
+                stat_rate_ms=stat_rate_ms,
                 source=source,
             ),
         )

@@ -84,6 +84,23 @@ class _FakeCmdService:
             source=source,
         )
 
+    def send_set_stat_rate(
+        self,
+        node_ip: str,
+        node_id: int,
+        *,
+        stat_rate_ms: int,
+        source: str = "manual",
+    ) -> SentOkuaCommand:
+        _ = stat_rate_ms
+        return self._send(
+            command_name="SET_STAT_RATE",
+            cmd_id=0x05,
+            node_ip=node_ip,
+            node_id=node_id,
+            source=source,
+        )
+
     def resend_sent_command(
         self,
         sent_command: SentOkuaCommand,
@@ -578,3 +595,45 @@ def test_unmatched_ack_seen_status_when_only_unmatched_acks_and_timeout() -> Non
     )
 
     assert result.final_status is ControlTransactionFinalStatus.UNMATCHED_ACK_SEEN
+
+
+def test_set_stat_rate_transaction_uses_same_ack_pipeline() -> None:
+    clock = _FakeClock()
+    store = PendingCommandStore(clock=clock)
+    cmd = _FakeCmdService(cmd_seq=930, nonce=0xBBBB000000000001)
+    expected_sent = _make_sent(
+        command_name="SET_STAT_RATE",
+        cmd_id=0x05,
+        node_ip="192.168.88.249",
+        node_id=16,
+        cmd_seq=930,
+        nonce=0xBBBB000000000001,
+    )
+    listener = _FakeAckListener(
+        pending_store=store,
+        scripted_results=[_matched_for(expected_sent)],
+        running=True,
+    )
+    service = ControlTransactionService(
+        cmd_service=cmd,
+        ack_listener=listener,
+        clock=clock,
+        sleep_fn=clock.sleep,
+    )
+
+    result = service.send_set_stat_rate_and_wait_ack(
+        "192.168.88.249",
+        16,
+        stat_rate_ms=2000,
+        ack_timeout_ms=120,
+        max_retries=0,
+    )
+
+    assert result.command_name == "SET_STAT_RATE"
+    assert result.cmd_id == 0x05
+    assert result.final_status is ControlTransactionFinalStatus.ACK_MATCHED
+    assert result.attempt_count == 1
+    assert _event_types(result) == [
+        ControlAuditEventType.COMMAND_SENT.value,
+        ControlAuditEventType.COMMAND_ACK.value,
+    ]

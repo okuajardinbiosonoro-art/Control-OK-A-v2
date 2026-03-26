@@ -5,6 +5,7 @@ from control_okua.core.control_plane.protocol import (
     OKUA_CMD_PACKET_SIZE,
     OKUA_CMD_PORT,
     CmdSequenceManager,
+    OkuaCmdId,
 )
 from control_okua.services.cmd_service import CmdService
 
@@ -93,3 +94,40 @@ def test_cmd_service_cmd_seq_increments_for_new_logical_commands(tmp_path) -> No
     assert sent_2.target_port == OKUA_CMD_PORT
     assert len(created_sockets) == 2
     assert all(entry[1][1] == OKUA_CMD_PORT for sock in created_sockets for entry in sock.sent)
+
+
+def test_cmd_service_send_set_stat_rate_uses_curated_value(tmp_path) -> None:
+    created_sockets: list[_FakeSendOnlySocket] = []
+
+    def socket_factory() -> _FakeSendOnlySocket:
+        sock = _FakeSendOnlySocket()
+        created_sockets.append(sock)
+        return sock
+
+    service = CmdService(
+        secret=b"ticket-17-2-secret",
+        nonce_manager=NonceManager(
+            state_path=tmp_path / "control_plane_state.json",
+            time_provider=lambda: 1_910_000_000,
+        ),
+        seq_manager=CmdSequenceManager(start_seq=77),
+        socket_factory=socket_factory,
+    )
+    sent = service.send_set_stat_rate(
+        "192.168.88.250",
+        19,
+        stat_rate_ms=5000,
+        source="ui_manual",
+    )
+
+    assert sent.command_name == "SET_STAT_RATE"
+    assert sent.cmd_id == int(OkuaCmdId.SET_STAT_RATE)
+    assert sent.cmd_seq == 77
+    assert sent.target_port == OKUA_CMD_PORT
+    assert len(created_sockets) == 1
+    payload, target = created_sockets[0].sent[0]
+    assert target == ("192.168.88.250", OKUA_CMD_PORT)
+    assert len(payload) == OKUA_CMD_PACKET_SIZE
+    # cmd_id is byte 8, arg0 little-endian at bytes 10..11
+    assert payload[8] == int(OkuaCmdId.SET_STAT_RATE)
+    assert payload[10:12] == (5000).to_bytes(2, byteorder="little")

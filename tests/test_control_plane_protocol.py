@@ -8,9 +8,11 @@ from control_okua.core.control_plane.protocol import (
     CmdSequenceManager,
     OKUA_CMD_PACKET_SIZE,
     OKUA_TYPE_CMD,
+    SET_STAT_RATE_ALLOWED_MS,
     OkuaCmdId,
     build_ping_command,
     build_request_stat_now_command,
+    build_set_stat_rate_command,
 )
 from control_okua.core.udp.packet_models import OKUA_MAGIC, OKUA_VERSION
 
@@ -105,3 +107,39 @@ def test_cmd_seq_manager_is_monotonic_and_reflected_in_hdr_seq() -> None:
     assert seq2 == 1001
     assert unpacked1[4] == seq1
     assert unpacked2[4] == seq2
+
+
+def test_set_stat_rate_command_serializes_allowlist_value() -> None:
+    secret = b"ticket-17-2-secret"
+    packet = build_set_stat_rate_command(
+        secret=secret,
+        node_id_target=12,
+        cmd_seq=321,
+        nonce=0x0102030405060708,
+        stat_rate_ms=2000,
+    )
+    unpacked = _CMD_STRUCT.unpack(packet)
+
+    assert len(packet) == OKUA_CMD_PACKET_SIZE
+    assert unpacked[5] == int(OkuaCmdId.SET_STAT_RATE)
+    assert unpacked[7] == 2000
+    assert unpacked[8] == 0
+    assert unpacked[6] == CMD_FLAG_ACK_REQUIRED
+
+
+def test_set_stat_rate_command_rejects_values_outside_allowlist() -> None:
+    secret = b"ticket-17-2-secret"
+    assert SET_STAT_RATE_ALLOWED_MS == (1000, 2000, 5000)
+
+    try:
+        build_set_stat_rate_command(
+            secret=secret,
+            node_id_target=12,
+            cmd_seq=1,
+            nonce=1,
+            stat_rate_ms=1500,
+        )
+    except ValueError as exc:
+        assert "stat_rate_ms invalido" in str(exc)
+    else:
+        raise AssertionError("Se esperaba ValueError para stat_rate_ms fuera de allowlist.")

@@ -27,7 +27,11 @@ _ACK_STRUCT = struct.Struct("<HBBHHBBBBHHQI")
 class OkuaCmdId(IntEnum):
     PING = 0x01
     REBOOT_SOFT = 0x02
+    SET_STAT_RATE = 0x05
     REQUEST_STAT_NOW = 0x07
+
+
+SET_STAT_RATE_ALLOWED_MS: Final[tuple[int, ...]] = (1000, 2000, 5000)
 
 
 class CmdSequenceManager:
@@ -212,6 +216,33 @@ def build_reboot_soft_command(
     )
 
 
+def build_set_stat_rate_command(
+    *,
+    secret: bytes,
+    node_id_target: int,
+    cmd_seq: int,
+    nonce: int,
+    stat_rate_ms: int,
+    is_retry: bool = False,
+) -> bytes:
+    resolved_node_id = _validate_u16("node_id_target", node_id_target)
+    if resolved_node_id == 0:
+        raise ValueError("SET_STAT_RATE solo permite unicast (node_id_target > 0).")
+
+    resolved_stat_rate = _validate_set_stat_rate_ms(stat_rate_ms)
+    return build_okua_cmd_bytes(
+        secret=secret,
+        node_id_target=resolved_node_id,
+        cmd_seq=cmd_seq,
+        cmd_id=int(OkuaCmdId.SET_STAT_RATE),
+        nonce=nonce,
+        arg0=resolved_stat_rate,
+        arg1=0,
+        is_retry=is_retry,
+        broadcast_intent=False,
+    )
+
+
 def build_cmd_flags(*, is_retry: bool, broadcast_intent: bool) -> int:
     flags = CMD_FLAG_ACK_REQUIRED
     if is_retry:
@@ -294,6 +325,17 @@ def _validate_broadcast_flags(*, node_id_target: int, broadcast_intent: bool) ->
         raise ValueError("node_id_target=0 requiere broadcast_intent=1.")
     if node_id_target != 0 and broadcast_intent:
         raise ValueError("broadcast_intent=1 solo es valido cuando node_id_target=0.")
+
+
+def _validate_set_stat_rate_ms(stat_rate_ms: int) -> int:
+    resolved = _validate_u16("stat_rate_ms", stat_rate_ms)
+    if resolved in SET_STAT_RATE_ALLOWED_MS:
+        return resolved
+    allowed = ", ".join(str(value) for value in SET_STAT_RATE_ALLOWED_MS)
+    raise ValueError(
+        f"stat_rate_ms invalido para SET_STAT_RATE: {stat_rate_ms}. "
+        f"Permitidos: {allowed}."
+    )
 
 
 def _validate_u8(field_name: str, value: int) -> int:
