@@ -23,11 +23,17 @@
 - `REBOOT_SOFT`
   - ACK: `ACCEPTED + OK`
   - deferred reboot scheduled in loop (ACK-first behavior)
+- `SET_STAT_RATE` (curado, runtime-only)
+  - ACK success: `ACCEPTED + OK`
+  - ACK reject invalid arg: `REJECTED + INVALID_ARG`
+  - apply scope: actualiza solo la cadencia periodica de `STAT` en RAM
+  - allowlist v17.1: `1000ms`, `2000ms`, `5000ms`
+  - `arg1` debe ser `0`
+  - no persistencia (tras reboot vuelve al default compile-time)
 
 ## Known but not implemented commands
 - `SET_PROFILE` -> `REJECTED + UNSUPPORTED_CMD`
 - `SET_THROTTLE` -> `REJECTED + UNSUPPORTED_CMD`
-- `SET_STAT_RATE` -> `REJECTED + UNSUPPORTED_CMD`
 - `SET_DEBUG` -> `REJECTED + UNSUPPORTED_CMD`
 
 ## Current ACK policy
@@ -46,9 +52,9 @@
   - `REQUEST_STAT_NOW`
 - Broadcast blocked for:
   - `REBOOT_SOFT`
+  - `SET_STAT_RATE`
   - all `SET_*`
 
 ## Notes for next stage
-- Pending handler implementation for `SET_PROFILE`, `SET_THROTTLE`, `SET_STAT_RATE`, `SET_DEBUG`.
-- In this environment, firmware toolchain compile checks were not available (`arduino-cli` / `platformio` not installed).
+- Pending handler implementation for `SET_PROFILE`, `SET_THROTTLE`, `SET_DEBUG`.
 - End-to-end app+firmware validation should be executed in the next stage with the real toolchain and network path.

@@ -184,6 +184,15 @@ static const uint8_t FRUIT_ROUTE_COUNT = sizeof(FRUIT_ROUTES) / sizeof(FRUIT_ROU
 #define WIFI_RETRY_DELAY_MS       300
 
 #define STAT_INTERVAL_MS         1000
+#ifndef SET_STAT_RATE_ALLOW_1_MS
+#define SET_STAT_RATE_ALLOW_1_MS STAT_INTERVAL_MS
+#endif
+#ifndef SET_STAT_RATE_ALLOW_2_MS
+#define SET_STAT_RATE_ALLOW_2_MS 2000
+#endif
+#ifndef SET_STAT_RATE_ALLOW_3_MS
+#define SET_STAT_RATE_ALLOW_3_MS 5000
+#endif
 #define TEST_PLANT_EVENT_MS       220
 #define TEST_FRUIT_TOUCH_EVERY_MS 2000
 #define TEST_FRUIT_TOUCH_LEN_MS    450
@@ -334,6 +343,7 @@ uint16_t g_seqEvt = 0;
 uint16_t g_seqStat = 0;
 
 uint32_t g_lastStatMs = 0;
+uint32_t g_statIntervalMs = STAT_INTERVAL_MS;
 uint32_t g_evtCountSinceLastStat = 0;
 uint32_t g_lastEvtCounterResetMs = 0;
 
@@ -728,9 +738,46 @@ static inline bool okuaIsImplementedCmdId(uint8_t cmd_id) {
     case OKUA_CMD_PING:
     case OKUA_CMD_REQUEST_STAT_NOW:
     case OKUA_CMD_REBOOT_SOFT:
+    case OKUA_CMD_SET_STAT_RATE:
       return true;
     default:
       return false;
+  }
+}
+
+static inline bool isAllowedSetStatRateMs(uint16_t rate_ms) {
+  return (rate_ms == (uint16_t)SET_STAT_RATE_ALLOW_1_MS) ||
+         (rate_ms == (uint16_t)SET_STAT_RATE_ALLOW_2_MS) ||
+         (rate_ms == (uint16_t)SET_STAT_RATE_ALLOW_3_MS);
+}
+
+void applyCommandSpecificAckPolicy(const ParsedCmdFrame& frame, OkuaAckPacket* ack) {
+  if (ack == nullptr) return;
+  if (ack->ack_stage != OKUA_ACK_STAGE_ACCEPTED || ack->status_code != OKUA_STATUS_OK) return;
+
+  switch (frame.packet.cmd_id) {
+    case OKUA_CMD_SET_STAT_RATE: {
+      if (frame.packet.arg1 != 0) {
+        ack->ack_stage = OKUA_ACK_STAGE_REJECTED;
+        ack->status_code = OKUA_STATUS_INVALID_ARG;
+        ack->err_detail = OKUA_ERR_ARG1_OUT_OF_RANGE;
+        break;
+      }
+      if (!isAllowedSetStatRateMs(frame.packet.arg0)) {
+        ack->ack_stage = OKUA_ACK_STAGE_REJECTED;
+        ack->status_code = OKUA_STATUS_INVALID_ARG;
+        ack->err_detail = OKUA_ERR_STAT_RATE_INVALID;
+        break;
+      }
+      // Valid SET_STAT_RATE remains ACCEPTED + OK (no EXECUTED stage in this flow).
+      ack->ack_stage = OKUA_ACK_STAGE_ACCEPTED;
+      ack->status_code = OKUA_STATUS_OK;
+      ack->err_detail = OKUA_ERR_NONE;
+      break;
+    }
+
+    default:
+      break;
   }
 }
 
@@ -1001,6 +1048,7 @@ bool buildAckForFrameWithSecurity(const ParsedCmdFrame& frame, OkuaAckPacket* ac
   }
 
   fillAckForParseResult(frame, ack);
+  applyCommandSpecificAckPolicy(frame, ack);
   if (!setAckAuthTag32(ack)) return false;
   storeAckCacheEntry(frame, *ack, now_ms);
   return true;
@@ -1130,13 +1178,20 @@ void dispatchAcceptedCommandMinimal(const ParsedCmdFrame& frame) {
       scheduleSoftReboot();
       return;
 
+    case OKUA_CMD_SET_STAT_RATE:
+      // Runtime-only (RAM) policy: applies to periodic STAT cadence and
+      // naturally resets to compile-time default after reboot.
+      g_statIntervalMs = frame.packet.arg0;
+      return;
+
     default:
       return;
   }
 }
 
-// Control-plane ingress for Ticket 13.6:
-// parse + security + ACK + minimal command dispatch (PING/REQUEST_STAT_NOW/REBOOT_SOFT).
+// Control-plane ingress:
+// parse + security + ACK + minimal command dispatch
+// (PING/REQUEST_STAT_NOW/REBOOT_SOFT/SET_STAT_RATE).
 void serviceControlPlaneIngress() {
   ParsedCmdFrame frame;
   CmdParseResult result = parseIncomingCmdFrame(&frame);
@@ -1741,7 +1796,8 @@ void loop() {
     }
   }
 
-  if (millis() - g_lastStatMs >= STAT_INTERVAL_MS) {
+  const uint32_t stat_interval_ms = (g_statIntervalMs > 0) ? g_statIntervalMs : (uint32_t)STAT_INTERVAL_MS;
+  if (millis() - g_lastStatMs >= stat_interval_ms) {
     sendOkuaStat(g_lastStateFlags);
   }
 

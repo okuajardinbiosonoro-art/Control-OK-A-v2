@@ -257,7 +257,7 @@ Ejemplo de manifest:
 ### B. Conviene volver runtime-configurable (futuro, con guardrails)
 
 1. `set_profile`: seleccion de `deploy_target` permitido.
-2. `set_stat_rate`: sobre `STAT_INTERVAL_MS` dentro de rango seguro.
+2. `set_stat_rate`: sobre `STAT_INTERVAL_MS` dentro de rango seguro (implementado de forma curada en Ticket 17.1 con allowlist pequeña).
 3. `set_throttle`: sobre ritmo de emision dentro de rango seguro.
 4. `set_debug`: nivel de telemetria acotado.
 5. `request_stat_now`.
