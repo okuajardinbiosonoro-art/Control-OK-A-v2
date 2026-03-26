@@ -29,7 +29,7 @@ Estado de cierre: **marzo 23, 2026**.
   - `PING`
   - `REQUEST_STAT_NOW`
   - `REBOOT_SOFT`
-  - `SET_STAT_RATE` con presets cerrados (`1000`, `2000`, `5000` ms)
+  - `SET_STAT_RATE` con presets cerrados (`1000`, `2000`, `5000` ms), visible como fila técnica dentro del bloque `Comandos`
 - El operador selecciona `node_id`; la IP se resuelve automáticamente en background desde runtime UDP.
 - `REBOOT_SOFT` requiere confirmación explícita antes de enviar.
 - La UI muestra resultado legible de transacción (estado final, `cmd_seq`, `nonce`, intentos y detalles ACK).

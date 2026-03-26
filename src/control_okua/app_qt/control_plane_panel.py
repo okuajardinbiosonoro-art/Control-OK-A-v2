@@ -176,22 +176,31 @@ class ControlPlanePanel(QWidget):
         group_layout.addWidget(policy_group)
 
         actions_group = QGroupBox("Comandos", self)
-        actions_layout = QHBoxLayout(actions_group)
+        actions_layout = QVBoxLayout(actions_group)
+        actions_layout.setContentsMargins(8, 8, 8, 8)
+        actions_layout.setSpacing(8)
+
+        command_row = QHBoxLayout()
+        command_row.setSpacing(8)
         self.ping_button = QPushButton("PING", self)
         self.ping_button.clicked.connect(self._on_ping_clicked)
-        actions_layout.addWidget(self.ping_button)
+        command_row.addWidget(self.ping_button)
 
         self.request_stat_button = QPushButton("Pedir STAT", self)
         self.request_stat_button.clicked.connect(self._on_request_stat_now_clicked)
-        actions_layout.addWidget(self.request_stat_button)
+        command_row.addWidget(self.request_stat_button)
 
         self.reboot_soft_button = QPushButton("Reinicio suave", self)
         self.reboot_soft_button.clicked.connect(self._on_reboot_soft_clicked)
-        actions_layout.addWidget(self.reboot_soft_button)
-        group_layout.addWidget(actions_group)
+        command_row.addWidget(self.reboot_soft_button)
+        actions_layout.addLayout(command_row)
 
-        stat_rate_group = QGroupBox("Cadencia STAT", self)
-        stat_rate_layout = QHBoxLayout(stat_rate_group)
+        self.stat_rate_controls_widget = QWidget(self)
+        stat_rate_layout = QHBoxLayout(self.stat_rate_controls_widget)
+        stat_rate_layout.setContentsMargins(0, 0, 0, 0)
+        stat_rate_layout.setSpacing(8)
+        self.stat_rate_label = QLabel("Cadencia STAT", self.stat_rate_controls_widget)
+        stat_rate_layout.addWidget(self.stat_rate_label)
         self.stat_rate_combo = QComboBox(self)
         for value_ms in _SET_STAT_RATE_PRESETS_MS:
             self.stat_rate_combo.addItem(f"{value_ms} ms", value_ms)
@@ -199,7 +208,8 @@ class ControlPlanePanel(QWidget):
         self.set_stat_rate_button = QPushButton("Aplicar STAT rate", self)
         self.set_stat_rate_button.clicked.connect(self._on_set_stat_rate_clicked)
         stat_rate_layout.addWidget(self.set_stat_rate_button)
-        group_layout.addWidget(stat_rate_group)
+        actions_layout.addWidget(self.stat_rate_controls_widget)
+        group_layout.addWidget(actions_group)
 
         self.details_tabs = QTabWidget(self)
         self.details_tabs.setDocumentMode(True)

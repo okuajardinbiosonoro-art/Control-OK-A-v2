@@ -369,7 +369,7 @@ def test_reboot_click_runs_transaction_without_confirmation_dialog() -> None:
 
 
 def test_set_stat_rate_ui_is_curated_and_dispatches_command() -> None:
-    _ensure_qapp()
+    app = _ensure_qapp()
     panel = ControlPlanePanel(
         send_ping=lambda *_: _tx_result(
             command_name="PING",
@@ -400,8 +400,26 @@ def test_set_stat_rate_ui_is_curated_and_dispatches_command() -> None:
         captured["command_name"] = command_name
 
     try:
+        panel.resize(1200, 760)
+        panel.show()
+        app.processEvents()
+
         options = [panel.stat_rate_combo.itemData(i) for i in range(panel.stat_rate_combo.count())]
         assert options == [1000, 2000, 5000]
+        assert panel.stat_rate_label.text() == "Cadencia STAT"
+        assert panel.ping_button.isVisible()
+        assert panel.request_stat_button.isVisible()
+        assert panel.reboot_soft_button.isVisible()
+        assert panel.stat_rate_controls_widget.isVisible()
+        assert panel.set_stat_rate_button.isVisible()
+
+        command_row_y = panel.ping_button.mapTo(panel, panel.ping_button.rect().topLeft()).y()
+        stat_row_y = panel.stat_rate_controls_widget.mapTo(
+            panel,
+            panel.stat_rate_controls_widget.rect().topLeft(),
+        ).y()
+        assert stat_row_y >= command_row_y
+
         panel.stat_rate_combo.setCurrentIndex(2)
         panel._run_transaction = _fake_run_transaction  # type: ignore[method-assign]
         panel._on_set_stat_rate_clicked()
