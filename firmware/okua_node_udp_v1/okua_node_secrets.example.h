@@ -24,3 +24,20 @@
 // Optional Wi-Fi channel lock override.
 // Use 0 to let station scan/connect without forcing a fixed channel.
 // #define WIFI_CHANNEL 13
+
+// ---------------------------------------------------------------------------
+// Test-bank notes (no production defaults changed):
+// - Current firmware defaults are already:
+//   ACTIVE_MODE   = MODE_TEST
+//   ACTIVE_SENSOR = SENSOR_PLANT
+// - That means automatic note generation is already enabled in this branch.
+// - For test nodes EB2/EC2/ED2 only override identity + Wi-Fi + PC_IP here.
+//
+// Example for EB2 in a local test network:
+// #define NODE_LABEL "EB2"
+// #define NODE_ID 6
+// #define WIFI_CHANNEL 0
+// #define PC_IP_A 192
+// #define PC_IP_B 168
+// #define PC_IP_C 1
+// #define PC_IP_D 57
