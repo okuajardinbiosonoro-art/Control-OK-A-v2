@@ -18,6 +18,7 @@ from control_okua.core.control_plane.protocol import (
     build_reboot_soft_command,
     build_request_stat_now_command,
     build_set_stat_rate_command,
+    build_set_throttle_command,
 )
 
 
@@ -167,6 +168,29 @@ class CmdService:
                 cmd_seq=cmd_seq,
                 nonce=nonce,
                 stat_rate_ms=stat_rate_ms,
+            ),
+        )
+
+    def send_set_throttle(
+        self,
+        node_ip: str,
+        node_id: int,
+        *,
+        throttle_percent: int,
+        source: str = "manual",
+    ) -> SentOkuaCommand:
+        return self._send_new_command(
+            node_ip=node_ip,
+            node_id=node_id,
+            source=source,
+            command_name="SET_THROTTLE",
+            cmd_id=int(OkuaCmdId.SET_THROTTLE),
+            packet_builder=lambda resolved_node_id, cmd_seq, nonce: build_set_throttle_command(
+                secret=self._secret,
+                node_id_target=resolved_node_id,
+                cmd_seq=cmd_seq,
+                nonce=nonce,
+                throttle_percent=throttle_percent,
             ),
         )
 

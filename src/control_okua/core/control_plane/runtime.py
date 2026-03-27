@@ -250,6 +250,27 @@ class ControlPlaneRuntime:
         self.record_transaction_result(result)
         return result
 
+    def send_set_throttle(
+        self,
+        *,
+        node_id: int,
+        throttle_percent: int,
+        ack_timeout_ms: int = 350,
+        max_retries: int = 1,
+        source: str = "manual_ui",
+    ) -> ControlTransactionResult:
+        node_ip = self._resolve_node_ip(node_id)
+        result = self._transaction_service.send_set_throttle_and_wait_ack(
+            node_ip,
+            int(node_id),
+            throttle_percent=throttle_percent,
+            source=source,
+            ack_timeout_ms=ack_timeout_ms,
+            max_retries=max_retries,
+        )
+        self.record_transaction_result(result)
+        return result
+
     def record_transaction_result(self, result: ControlTransactionResult) -> None:
         self._consume_transaction_result(result)
 

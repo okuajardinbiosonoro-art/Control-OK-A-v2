@@ -27,10 +27,12 @@ _ACK_STRUCT = struct.Struct("<HBBHHBBBBHHQI")
 class OkuaCmdId(IntEnum):
     PING = 0x01
     REBOOT_SOFT = 0x02
+    SET_THROTTLE = 0x04
     SET_STAT_RATE = 0x05
     REQUEST_STAT_NOW = 0x07
 
 
+SET_THROTTLE_ALLOWED_PERCENT: Final[tuple[int, ...]] = (25, 50, 100)
 SET_STAT_RATE_ALLOWED_MS: Final[tuple[int, ...]] = (1000, 2000, 5000)
 
 
@@ -243,6 +245,33 @@ def build_set_stat_rate_command(
     )
 
 
+def build_set_throttle_command(
+    *,
+    secret: bytes,
+    node_id_target: int,
+    cmd_seq: int,
+    nonce: int,
+    throttle_percent: int,
+    is_retry: bool = False,
+) -> bytes:
+    resolved_node_id = _validate_u16("node_id_target", node_id_target)
+    if resolved_node_id == 0:
+        raise ValueError("SET_THROTTLE solo permite unicast (node_id_target > 0).")
+
+    resolved_throttle_percent = _validate_set_throttle_percent(throttle_percent)
+    return build_okua_cmd_bytes(
+        secret=secret,
+        node_id_target=resolved_node_id,
+        cmd_seq=cmd_seq,
+        cmd_id=int(OkuaCmdId.SET_THROTTLE),
+        nonce=nonce,
+        arg0=resolved_throttle_percent,
+        arg1=0,
+        is_retry=is_retry,
+        broadcast_intent=False,
+    )
+
+
 def build_cmd_flags(*, is_retry: bool, broadcast_intent: bool) -> int:
     flags = CMD_FLAG_ACK_REQUIRED
     if is_retry:
@@ -334,6 +363,17 @@ def _validate_set_stat_rate_ms(stat_rate_ms: int) -> int:
     allowed = ", ".join(str(value) for value in SET_STAT_RATE_ALLOWED_MS)
     raise ValueError(
         f"stat_rate_ms invalido para SET_STAT_RATE: {stat_rate_ms}. "
+        f"Permitidos: {allowed}."
+    )
+
+
+def _validate_set_throttle_percent(throttle_percent: int) -> int:
+    resolved = _validate_u16("throttle_percent", throttle_percent)
+    if resolved in SET_THROTTLE_ALLOWED_PERCENT:
+        return resolved
+    allowed = ", ".join(str(value) for value in SET_THROTTLE_ALLOWED_PERCENT)
+    raise ValueError(
+        f"throttle_percent invalido para SET_THROTTLE: {throttle_percent}. "
         f"Permitidos: {allowed}."
     )
 

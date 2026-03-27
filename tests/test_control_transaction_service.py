@@ -101,6 +101,23 @@ class _FakeCmdService:
             source=source,
         )
 
+    def send_set_throttle(
+        self,
+        node_ip: str,
+        node_id: int,
+        *,
+        throttle_percent: int,
+        source: str = "manual",
+    ) -> SentOkuaCommand:
+        _ = throttle_percent
+        return self._send(
+            command_name="SET_THROTTLE",
+            cmd_id=0x04,
+            node_ip=node_ip,
+            node_id=node_id,
+            source=source,
+        )
+
     def resend_sent_command(
         self,
         sent_command: SentOkuaCommand,
@@ -631,6 +648,48 @@ def test_set_stat_rate_transaction_uses_same_ack_pipeline() -> None:
 
     assert result.command_name == "SET_STAT_RATE"
     assert result.cmd_id == 0x05
+    assert result.final_status is ControlTransactionFinalStatus.ACK_MATCHED
+    assert result.attempt_count == 1
+    assert _event_types(result) == [
+        ControlAuditEventType.COMMAND_SENT.value,
+        ControlAuditEventType.COMMAND_ACK.value,
+    ]
+
+
+def test_set_throttle_transaction_uses_same_ack_pipeline() -> None:
+    clock = _FakeClock()
+    store = PendingCommandStore(clock=clock)
+    cmd = _FakeCmdService(cmd_seq=931, nonce=0xBBBB000000000002)
+    expected_sent = _make_sent(
+        command_name="SET_THROTTLE",
+        cmd_id=0x04,
+        node_ip="192.168.88.250",
+        node_id=18,
+        cmd_seq=931,
+        nonce=0xBBBB000000000002,
+    )
+    listener = _FakeAckListener(
+        pending_store=store,
+        scripted_results=[_matched_for(expected_sent)],
+        running=True,
+    )
+    service = ControlTransactionService(
+        cmd_service=cmd,
+        ack_listener=listener,
+        clock=clock,
+        sleep_fn=clock.sleep,
+    )
+
+    result = service.send_set_throttle_and_wait_ack(
+        "192.168.88.250",
+        18,
+        throttle_percent=50,
+        ack_timeout_ms=120,
+        max_retries=0,
+    )
+
+    assert result.command_name == "SET_THROTTLE"
+    assert result.cmd_id == 0x04
     assert result.final_status is ControlTransactionFinalStatus.ACK_MATCHED
     assert result.attempt_count == 1
     assert _event_types(result) == [

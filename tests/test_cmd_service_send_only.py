@@ -131,3 +131,40 @@ def test_cmd_service_send_set_stat_rate_uses_curated_value(tmp_path) -> None:
     # cmd_id is byte 8, arg0 little-endian at bytes 10..11
     assert payload[8] == int(OkuaCmdId.SET_STAT_RATE)
     assert payload[10:12] == (5000).to_bytes(2, byteorder="little")
+
+
+def test_cmd_service_send_set_throttle_uses_curated_value(tmp_path) -> None:
+    created_sockets: list[_FakeSendOnlySocket] = []
+
+    def socket_factory() -> _FakeSendOnlySocket:
+        sock = _FakeSendOnlySocket()
+        created_sockets.append(sock)
+        return sock
+
+    service = CmdService(
+        secret=b"ticket-18-2-secret",
+        nonce_manager=NonceManager(
+            state_path=tmp_path / "control_plane_state.json",
+            time_provider=lambda: 1_920_000_000,
+        ),
+        seq_manager=CmdSequenceManager(start_seq=91),
+        socket_factory=socket_factory,
+    )
+    sent = service.send_set_throttle(
+        "192.168.88.250",
+        19,
+        throttle_percent=50,
+        source="ui_manual",
+    )
+
+    assert sent.command_name == "SET_THROTTLE"
+    assert sent.cmd_id == int(OkuaCmdId.SET_THROTTLE)
+    assert sent.cmd_seq == 91
+    assert sent.target_port == OKUA_CMD_PORT
+    assert len(created_sockets) == 1
+    payload, target = created_sockets[0].sent[0]
+    assert target == ("192.168.88.250", OKUA_CMD_PORT)
+    assert len(payload) == OKUA_CMD_PACKET_SIZE
+    # cmd_id is byte 8, arg0 little-endian at bytes 10..11
+    assert payload[8] == int(OkuaCmdId.SET_THROTTLE)
+    assert payload[10:12] == (50).to_bytes(2, byteorder="little")

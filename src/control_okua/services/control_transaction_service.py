@@ -80,6 +80,16 @@ class CmdTransactionClient(Protocol):
     ) -> SentOkuaCommand:
         ...
 
+    def send_set_throttle(
+        self,
+        node_ip: str,
+        node_id: int,
+        *,
+        throttle_percent: int,
+        source: str = "manual",
+    ) -> SentOkuaCommand:
+        ...
+
     def resend_sent_command(
         self,
         sent_command: SentOkuaCommand,
@@ -230,6 +240,33 @@ class ControlTransactionService:
                 node_ip,
                 node_id,
                 stat_rate_ms=stat_rate_ms,
+                source=source,
+            ),
+        )
+
+    def send_set_throttle_and_wait_ack(
+        self,
+        node_ip: str,
+        node_id: int,
+        *,
+        throttle_percent: int,
+        source: str = "manual",
+        ack_timeout_ms: int = 350,
+        max_retries: int = 1,
+        poll_interval_ms: int = 20,
+    ) -> ControlTransactionResult:
+        return self._execute_transaction(
+            command_name="SET_THROTTLE",
+            cmd_id=0x04,
+            node_ip=node_ip,
+            node_id=node_id,
+            ack_timeout_ms=ack_timeout_ms,
+            max_retries=max_retries,
+            poll_interval_ms=poll_interval_ms,
+            initial_send=lambda: self._cmd_service.send_set_throttle(
+                node_ip,
+                node_id,
+                throttle_percent=throttle_percent,
                 source=source,
             ),
         )

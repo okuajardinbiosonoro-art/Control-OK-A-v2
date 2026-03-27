@@ -59,6 +59,7 @@ class _RebootProbeOutcome:
 
 
 _SET_STAT_RATE_PRESETS_MS: tuple[int, ...] = (1000, 2000, 5000)
+_SET_THROTTLE_PRESETS_PERCENT: tuple[int, ...] = (25, 50, 100)
 
 
 class _TransactionWorker(QObject):
@@ -92,6 +93,7 @@ class ControlPlanePanel(QWidget):
         send_request_stat_now: Callable[[int, int, int], ControlTransactionResult],
         send_reboot_soft: Callable[[int, int, int], ControlTransactionResult],
         send_set_stat_rate: Callable[[int, int, int, int], ControlTransactionResult],
+        send_set_throttle: Callable[[int, int, int, int], ControlTransactionResult] | None = None,
         available_node_ids_provider: Callable[[], list[int]] | None = None,
         node_snapshot_provider: Callable[[int], object | None] | None = None,
         reboot_verification_reporter: Callable[[int, str, str], None] | None = None,
@@ -103,6 +105,7 @@ class ControlPlanePanel(QWidget):
         self._send_request_stat_now = send_request_stat_now
         self._send_reboot_soft = send_reboot_soft
         self._send_set_stat_rate = send_set_stat_rate
+        self._send_set_throttle = send_set_throttle or _missing_set_throttle_handler
         self._available_node_ids_provider = available_node_ids_provider
         self._node_snapshot_provider = node_snapshot_provider
         self._reboot_verification_reporter = reboot_verification_reporter
@@ -209,6 +212,21 @@ class ControlPlanePanel(QWidget):
         self.set_stat_rate_button.clicked.connect(self._on_set_stat_rate_clicked)
         stat_rate_layout.addWidget(self.set_stat_rate_button)
         actions_layout.addWidget(self.stat_rate_controls_widget)
+
+        self.throttle_controls_widget = QWidget(self)
+        throttle_layout = QHBoxLayout(self.throttle_controls_widget)
+        throttle_layout.setContentsMargins(0, 0, 0, 0)
+        throttle_layout.setSpacing(8)
+        self.throttle_label = QLabel("Throttle planta", self.throttle_controls_widget)
+        throttle_layout.addWidget(self.throttle_label)
+        self.throttle_combo = QComboBox(self)
+        for value_percent in _SET_THROTTLE_PRESETS_PERCENT:
+            self.throttle_combo.addItem(f"{value_percent}%", value_percent)
+        throttle_layout.addWidget(self.throttle_combo, 1)
+        self.set_throttle_button = QPushButton("Aplicar throttle", self)
+        self.set_throttle_button.clicked.connect(self._on_set_throttle_clicked)
+        throttle_layout.addWidget(self.set_throttle_button)
+        actions_layout.addWidget(self.throttle_controls_widget)
         group_layout.addWidget(actions_group)
 
         self.details_tabs = QTabWidget(self)
@@ -317,13 +335,27 @@ class ControlPlanePanel(QWidget):
             ),
         )
 
+    def _on_set_throttle_clicked(self) -> None:
+        throttle_percent = self._selected_throttle_percent()
+        self._run_transaction(
+            command_name="SET_THROTTLE",
+            execute=lambda node_id, ack_timeout_ms, max_retries, _progress: _PanelRunOutcome(
+                result=self._send_set_throttle(
+                    node_id,
+                    throttle_percent,
+                    ack_timeout_ms,
+                    max_retries,
+                )
+            ),
+        )
+
     def on_section_activated(self) -> None:
         if self._section_warning_shown:
             return
         self._section_warning_shown = True
         self._append_log(
             f"[{self._now_hms()}] Aviso: Control F3 envía comandos reales "
-            "(PING/STAT/STAT_RATE/REBOOT). Reinicio suave puede cortar conectividad temporalmente."
+            "(PING/STAT/THROTTLE/STAT_RATE/REBOOT). Reinicio suave puede cortar conectividad temporalmente."
         )
         QMessageBox.information(
             self,
@@ -331,6 +363,7 @@ class ControlPlanePanel(QWidget):
             (
                 "Este panel envía comandos reales a nodos del runtime.\n\n"
                 "- PING y Pedir STAT son diagnósticos.\n"
+                "- Throttle planta ajusta el ritmo de emisión en presets curados.\n"
                 "- STAT rate ajusta la cadencia de STAT del nodo (presets curados).\n"
                 "- Reinicio suave puede interrumpir conectividad por unos segundos.\n\n"
                 "Este aviso se muestra una sola vez por apertura de la aplicación."
@@ -589,6 +622,8 @@ class ControlPlanePanel(QWidget):
         self.reboot_soft_button.setEnabled(enabled)
         self.stat_rate_combo.setEnabled(enabled)
         self.set_stat_rate_button.setEnabled(enabled)
+        self.throttle_combo.setEnabled(enabled)
+        self.set_throttle_button.setEnabled(enabled)
         if status_text:
             self.status_label.setText(status_text)
 
@@ -739,6 +774,16 @@ class ControlPlanePanel(QWidget):
         if value in _SET_STAT_RATE_PRESETS_MS:
             return value
         return _SET_STAT_RATE_PRESETS_MS[0]
+
+    def _selected_throttle_percent(self) -> int:
+        raw = self.throttle_combo.currentData()
+        try:
+            value = int(raw)
+        except (TypeError, ValueError):
+            return _SET_THROTTLE_PRESETS_PERCENT[0]
+        if value in _SET_THROTTLE_PRESETS_PERCENT:
+            return value
+        return _SET_THROTTLE_PRESETS_PERCENT[0]
 
     def _selected_node_option(self) -> ControlPlaneNodeOption | None:
         node_id = self._selected_node_id()
@@ -1190,6 +1235,7 @@ class ControlPlanePanel(QWidget):
     def _policy_summary_text(self) -> str:
         ping = resolve_control_command_policy("PING")
         stat = resolve_control_command_policy("REQUEST_STAT_NOW")
+        throttle = resolve_control_command_policy("SET_THROTTLE")
         stat_rate = resolve_control_command_policy("SET_STAT_RATE")
         reboot = resolve_control_command_policy("REBOOT_SOFT")
         return (
@@ -1197,6 +1243,8 @@ class ControlPlanePanel(QWidget):
             f"{ping.ack_timeout_ms} ms/{ping.max_retries} reintentos | "
             "REQUEST_STAT_NOW: "
             f"{stat.ack_timeout_ms} ms/{stat.max_retries} reintentos | "
+            "SET_THROTTLE: "
+            f"{throttle.ack_timeout_ms} ms/{throttle.max_retries} reintentos | "
             "SET_STAT_RATE: "
             f"{stat_rate.ack_timeout_ms} ms/{stat_rate.max_retries} reintentos | "
             "REBOOT_SOFT: "
@@ -1246,3 +1294,12 @@ def _fmt_int_or_dash(value: int | None) -> str:
     if value is None:
         return "-"
     return str(int(value))
+
+
+def _missing_set_throttle_handler(
+    _node_id: int,
+    _throttle_percent: int,
+    _ack_timeout_ms: int,
+    _max_retries: int,
+) -> ControlTransactionResult:
+    raise RuntimeError("send_set_throttle no está configurado en ControlPlanePanel.")

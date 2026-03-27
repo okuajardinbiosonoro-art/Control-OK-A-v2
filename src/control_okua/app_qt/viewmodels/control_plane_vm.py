@@ -36,6 +36,7 @@ _AUTO_POLICIES: dict[str, ControlCommandPolicy] = {
     "PING": ControlCommandPolicy(ack_timeout_ms=600, max_retries=2),
     "REQUEST_STAT_NOW": ControlCommandPolicy(ack_timeout_ms=900, max_retries=2),
     "REBOOT_SOFT": ControlCommandPolicy(ack_timeout_ms=1200, max_retries=0),
+    "SET_THROTTLE": ControlCommandPolicy(ack_timeout_ms=900, max_retries=1),
     "SET_STAT_RATE": ControlCommandPolicy(ack_timeout_ms=900, max_retries=1),
 }
 

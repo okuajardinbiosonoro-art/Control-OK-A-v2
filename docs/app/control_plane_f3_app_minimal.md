@@ -8,6 +8,7 @@ Estado de cierre: **marzo 23, 2026**.
   - `PING`
   - `REQUEST_STAT_NOW`
   - `REBOOT_SOFT`
+  - `SET_THROTTLE` (curado)
   - `SET_STAT_RATE` (curado)
 - `auth_tag32` real (sobre bytes `0..23`) según contrato F3.
 - `nonce` persistente/monotónico y `cmd_seq` monotónico para comandos lógicos nuevos.
@@ -29,6 +30,7 @@ Estado de cierre: **marzo 23, 2026**.
   - `PING`
   - `REQUEST_STAT_NOW`
   - `REBOOT_SOFT`
+  - `SET_THROTTLE` con presets cerrados (`25`, `50`, `100` %), visible como fila técnica dentro del bloque `Comandos`
   - `SET_STAT_RATE` con presets cerrados (`1000`, `2000`, `5000` ms), visible como fila técnica dentro del bloque `Comandos`
 - El operador selecciona `node_id`; la IP se resuelve automáticamente en background desde runtime UDP.
 - `REBOOT_SOFT` requiere confirmación explícita antes de enviar.
@@ -63,7 +65,8 @@ Nivel 1 (obligatorio, ejecutado):
 - Verificación de no congelamiento de UI del panel durante transacción.
 - Verificación de que `Operación` no muestra controles F3 crudos.
 - Verificación de que `Plano de control` sí contiene el panel técnico.
-- Verificación de ausencia de otros `SET_*` en UI (solo `SET_STAT_RATE` habilitado).
+- Verificación de ausencia de otros `SET_*` en UI (solo `SET_THROTTLE` y `SET_STAT_RATE` habilitados).
+- Verificación de curaduría de `SET_THROTTLE` en UI (`25/50/100` %, sin input libre).
 - Verificación de curaduría de `SET_STAT_RATE` en UI (`1000/2000/5000` ms, sin input libre).
 
 Nivel 2 (recomendado, ejecutado):
@@ -84,7 +87,7 @@ Nivel 3 (hardware real):
 
 ## 5) Fuera de alcance (aún no implementado)
 
-- `SET_PROFILE`, `SET_THROTTLE`, `SET_DEBUG`
+- `SET_PROFILE`, `SET_DEBUG`
 - Auditoría persistente final de control-plane
 - Historial avanzado en UI técnica
 - Broadcast como caso principal
@@ -101,6 +104,10 @@ El bloque app-side F3 mínimo queda consolidado y listo para extenderse en la si
 Nota de continuidad Ticket 17:
 - `SET_STAT_RATE` quedó expuesto en app/UI técnica con presets curados.
 - La validación real multi-nodo en campo queda como cierre operativo del siguiente ticket (`17.3`).
+
+Nota de continuidad Ticket 18:
+- `SET_THROTTLE` quedó expuesto en app/UI técnica con presets curados (`25/50/100`).
+- La validación física multi-nodo de `SET_THROTTLE` queda para el ticket `18.3`.
 
 ## 7) Continuidad (Ticket 15)
 

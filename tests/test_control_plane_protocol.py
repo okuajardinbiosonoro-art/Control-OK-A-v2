@@ -8,10 +8,12 @@ from control_okua.core.control_plane.protocol import (
     CmdSequenceManager,
     OKUA_CMD_PACKET_SIZE,
     OKUA_TYPE_CMD,
+    SET_THROTTLE_ALLOWED_PERCENT,
     SET_STAT_RATE_ALLOWED_MS,
     OkuaCmdId,
     build_ping_command,
     build_request_stat_now_command,
+    build_set_throttle_command,
     build_set_stat_rate_command,
 )
 from control_okua.core.udp.packet_models import OKUA_MAGIC, OKUA_VERSION
@@ -143,3 +145,39 @@ def test_set_stat_rate_command_rejects_values_outside_allowlist() -> None:
         assert "stat_rate_ms invalido" in str(exc)
     else:
         raise AssertionError("Se esperaba ValueError para stat_rate_ms fuera de allowlist.")
+
+
+def test_set_throttle_command_serializes_allowlist_value() -> None:
+    secret = b"ticket-18-2-secret"
+    packet = build_set_throttle_command(
+        secret=secret,
+        node_id_target=12,
+        cmd_seq=654,
+        nonce=0x0807060504030201,
+        throttle_percent=50,
+    )
+    unpacked = _CMD_STRUCT.unpack(packet)
+
+    assert len(packet) == OKUA_CMD_PACKET_SIZE
+    assert unpacked[5] == int(OkuaCmdId.SET_THROTTLE)
+    assert unpacked[7] == 50
+    assert unpacked[8] == 0
+    assert unpacked[6] == CMD_FLAG_ACK_REQUIRED
+
+
+def test_set_throttle_command_rejects_values_outside_allowlist() -> None:
+    secret = b"ticket-18-2-secret"
+    assert SET_THROTTLE_ALLOWED_PERCENT == (25, 50, 100)
+
+    try:
+        build_set_throttle_command(
+            secret=secret,
+            node_id_target=12,
+            cmd_seq=1,
+            nonce=1,
+            throttle_percent=75,
+        )
+    except ValueError as exc:
+        assert "throttle_percent invalido" in str(exc)
+    else:
+        raise AssertionError("Se esperaba ValueError para throttle_percent fuera de allowlist.")

@@ -406,23 +406,36 @@ def test_set_stat_rate_ui_is_curated_and_dispatches_command() -> None:
 
         options = [panel.stat_rate_combo.itemData(i) for i in range(panel.stat_rate_combo.count())]
         assert options == [1000, 2000, 5000]
+        throttle_options = [panel.throttle_combo.itemData(i) for i in range(panel.throttle_combo.count())]
+        assert throttle_options == [25, 50, 100]
         assert panel.stat_rate_label.text() == "Cadencia STAT"
+        assert panel.throttle_label.text() == "Throttle planta"
         assert panel.ping_button.isVisible()
         assert panel.request_stat_button.isVisible()
         assert panel.reboot_soft_button.isVisible()
         assert panel.stat_rate_controls_widget.isVisible()
         assert panel.set_stat_rate_button.isVisible()
+        assert panel.throttle_controls_widget.isVisible()
+        assert panel.set_throttle_button.isVisible()
 
         command_row_y = panel.ping_button.mapTo(panel, panel.ping_button.rect().topLeft()).y()
         stat_row_y = panel.stat_rate_controls_widget.mapTo(
             panel,
             panel.stat_rate_controls_widget.rect().topLeft(),
         ).y()
+        throttle_row_y = panel.throttle_controls_widget.mapTo(
+            panel,
+            panel.throttle_controls_widget.rect().topLeft(),
+        ).y()
         assert stat_row_y >= command_row_y
+        assert throttle_row_y >= stat_row_y
 
         panel.stat_rate_combo.setCurrentIndex(2)
         panel._run_transaction = _fake_run_transaction  # type: ignore[method-assign]
         panel._on_set_stat_rate_clicked()
         assert captured.get("command_name") == "SET_STAT_RATE"
+        panel.throttle_combo.setCurrentIndex(1)
+        panel._on_set_throttle_clicked()
+        assert captured.get("command_name") == "SET_THROTTLE"
     finally:
         panel.close()
