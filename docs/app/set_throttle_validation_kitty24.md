@@ -148,9 +148,63 @@ Conclusiones de la corrida:
 - El bloqueo actual es de version de firmware en nodos (`SET_THROTTLE` rechazado como `UNSUPPORTED_CMD`).
 - **No se puede declarar cerrado formalmente el TICKET 18.3** hasta cargar firmware con soporte real de `SET_THROTTLE` en al menos dos nodos activos.
 
+### 9.3 Rerun posterior a reflasheo EB2/EC2/ED2 (precondicion cumplida)
+
+Precondicion de red: **cumplida**.
+
+- Host CKv2: `192.168.1.57` (Ethernet).
+- Nodos detectados en trafico UDP:
+  - `EB2` (`node_id=6`) -> `192.168.1.67`
+  - `EC2` (`node_id=7`) -> `192.168.1.71`
+  - `ED2` (`node_id=8`) -> `192.168.1.65`
+
+Control positivo del canal F3:
+
+- `PING` en `6/7/8`: `ACK (1,0,0)`.
+
+Validacion `SET_THROTTLE` (corrida principal):
+
+- `node 6`: `25` -> `ACK (1,0,0)`, `100` -> `ACK (1,0,0)`.
+- `node 8`: `25` -> `ACK (1,0,0)`, `100` -> `ACK (1,0,0)`.
+- `node 7`: `25` -> `ACK (1,0,0)`, `100` -> `timeout` en esta ventana.
+- Restore de cierre:
+  - `SET_THROTTLE=50` en `6/7/8` -> `ACK (1,0,0)`.
+
+Persistencia/runtime-only (opcional ejecutada):
+
+- `node 6`: `SET_THROTTLE=25` -> `ACK (1,0,0)`.
+- `REBOOT_SOFT` -> `ACK (1,0,0)`.
+- Nodo vuelve a emitir EVT/STAT tras reinicio (comando runtime-only aceptado; no persistencia demostrable por cadencia en este modo).
+
+Evidencia de ritmo EVT (Hz, ventana 6 s, corrida principal):
+
+- `baseline`: node6=`9.00`, node7=`8.667`, node8=`9.167`
+- `post node6 thr25`: node6=`9.333`, node7=`0.167`, node8=`9.00`
+- `post node6 thr100`: node6=`9.00`, node7=`0.00`, node8=`9.00`
+- `post node7 thr25`: node6=`9.00`, node7=`8.50`, node8=`8.667`
+- `post node7 thr100`: node6=`9.00`, node7=`0.00`, node8=`9.00`
+- `post node8 thr25`: node6=`9.00`, node7=`0.00`, node8=`9.333`
+- `post node8 thr100`: node6=`9.333`, node7=`9.167`, node8=`9.00`
+
+Interpretacion tecnica del rerun:
+
+- El comando `SET_THROTTLE` ya no cae en `UNSUPPORTED_CMD` para nodos activos (6 y 8, y parcialmente 7).
+- Hay confirmacion real de pipeline transaccional+ACK por nodo en hardware.
+- Sin embargo, **no hay diferencia de cadencia EVT consistente entre 25% y 100%** en este banco de prueba.
+- Revisando firmware actual:
+  - `SET_THROTTLE` actualiza `g_plantThrottleMs` (runtime).
+  - En `MODE_TEST + SENSOR_PLANT`, `servicePlantTest()` emite con `TEST_PLANT_EVENT_MS` fijo y no usa `g_plantThrottleMs`.
+- Por lo tanto, en este modo de banco no se puede demostrar el efecto fisico de throttle por frecuencia de EVT.
+
+Artefacto de evidencia de esta corrida:
+
+- `artifacts/validation/ticket18_3_set_throttle_rerun_20260327_103402.json`
+
 ## 10) Siguiente paso operativo
 
-1. Reflashear nodos de prueba con firmware que incluya `SET_THROTTLE` (ticket 18.1) y verificar version activa.
-2. Confirmar presencia de al menos dos nodos (ideal `6/7/8`) en trafico UDP.
-3. Repetir secuencia del punto 4 (`25` y `100` por nodo) y consolidar ACK de exito (`1,0,0`).
-4. Repetir medicion EVT para demostrar diferencia real `25%` vs `100%`.
+1. Resolver la observabilidad de efecto throttle en banco:
+   - opcion A: validar en `MODE_FIELD` con estimulo real de planta;
+   - opcion B: micro-fix firmware para que `servicePlantTest()` respete `g_plantThrottleMs`.
+2. Repetir secuencia `25 -> 100` por nodo con metrica EVT/pps y evidenciar diferencia real.
+3. Confirmar estabilidad de `EC2` (`node_id=7`) para reducir timeouts intermitentes durante ventana de prueba.
+4. Con esa evidencia, cerrar formalmente `TICKET 18.3`.
