@@ -23,6 +23,14 @@
 - `REBOOT_SOFT`
   - ACK: `ACCEPTED + OK`
   - deferred reboot scheduled in loop (ACK-first behavior)
+- `SET_THROTTLE` (curado, runtime-only)
+  - ACK success: `ACCEPTED + OK`
+  - ACK reject invalid arg: `REJECTED + INVALID_ARG`
+  - apply scope: actualiza solo el throttle efectivo en RAM para `plantSendNoteOn`
+  - allowlist v18.1: `25%`, `50%`, `100%`
+  - `arg1` debe ser `0`
+  - mapeo runtime: `PLANT_THROTTLE_MS * (100 / throttle_percent)` (con redondeo conservador)
+  - no persistencia (tras reboot vuelve al default compile-time)
 - `SET_STAT_RATE` (curado, runtime-only)
   - ACK success: `ACCEPTED + OK`
   - ACK reject invalid arg: `REJECTED + INVALID_ARG`
@@ -33,7 +41,6 @@
 
 ## Known but not implemented commands
 - `SET_PROFILE` -> `REJECTED + UNSUPPORTED_CMD`
-- `SET_THROTTLE` -> `REJECTED + UNSUPPORTED_CMD`
 - `SET_DEBUG` -> `REJECTED + UNSUPPORTED_CMD`
 
 ## Current ACK policy
@@ -52,9 +59,10 @@
   - `REQUEST_STAT_NOW`
 - Broadcast blocked for:
   - `REBOOT_SOFT`
+  - `SET_THROTTLE`
   - `SET_STAT_RATE`
   - all `SET_*`
 
 ## Notes for next stage
-- Pending handler implementation for `SET_PROFILE`, `SET_THROTTLE`, `SET_DEBUG`.
+- Pending handler implementation for `SET_PROFILE`, `SET_DEBUG`.
 - End-to-end app+firmware validation should be executed in the next stage with the real toolchain and network path.

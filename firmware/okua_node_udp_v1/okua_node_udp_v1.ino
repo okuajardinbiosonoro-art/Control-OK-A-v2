@@ -193,6 +193,15 @@ static const uint8_t FRUIT_ROUTE_COUNT = sizeof(FRUIT_ROUTES) / sizeof(FRUIT_ROU
 #ifndef SET_STAT_RATE_ALLOW_3_MS
 #define SET_STAT_RATE_ALLOW_3_MS 5000
 #endif
+#ifndef SET_THROTTLE_ALLOW_1_PERCENT
+#define SET_THROTTLE_ALLOW_1_PERCENT 25
+#endif
+#ifndef SET_THROTTLE_ALLOW_2_PERCENT
+#define SET_THROTTLE_ALLOW_2_PERCENT 50
+#endif
+#ifndef SET_THROTTLE_ALLOW_3_PERCENT
+#define SET_THROTTLE_ALLOW_3_PERCENT 100
+#endif
 #define TEST_PLANT_EVENT_MS       220
 #define TEST_FRUIT_TOUCH_EVERY_MS 2000
 #define TEST_FRUIT_TOUCH_LEN_MS    450
@@ -344,6 +353,8 @@ uint16_t g_seqStat = 0;
 
 uint32_t g_lastStatMs = 0;
 uint32_t g_statIntervalMs = STAT_INTERVAL_MS;
+uint16_t g_plantThrottlePercent = (uint16_t)SET_THROTTLE_ALLOW_3_PERCENT;
+uint32_t g_plantThrottleMs = (uint32_t)PLANT_THROTTLE_MS;
 uint32_t g_evtCountSinceLastStat = 0;
 uint32_t g_lastEvtCounterResetMs = 0;
 
@@ -738,11 +749,26 @@ static inline bool okuaIsImplementedCmdId(uint8_t cmd_id) {
     case OKUA_CMD_PING:
     case OKUA_CMD_REQUEST_STAT_NOW:
     case OKUA_CMD_REBOOT_SOFT:
+    case OKUA_CMD_SET_THROTTLE:
     case OKUA_CMD_SET_STAT_RATE:
       return true;
     default:
       return false;
   }
+}
+
+static inline bool isAllowedSetThrottlePercent(uint16_t throttle_percent) {
+  return (throttle_percent == (uint16_t)SET_THROTTLE_ALLOW_1_PERCENT) ||
+         (throttle_percent == (uint16_t)SET_THROTTLE_ALLOW_2_PERCENT) ||
+         (throttle_percent == (uint16_t)SET_THROTTLE_ALLOW_3_PERCENT);
+}
+
+static inline uint32_t setThrottlePercentToMs(uint16_t throttle_percent) {
+  if (throttle_percent == 0) return (uint32_t)PLANT_THROTTLE_MS;
+  const uint32_t numerator = ((uint32_t)PLANT_THROTTLE_MS) * 100UL;
+  uint32_t throttle_ms = (numerator + (uint32_t)throttle_percent - 1UL) / (uint32_t)throttle_percent;
+  if (throttle_ms == 0) throttle_ms = 1;
+  return throttle_ms;
 }
 
 static inline bool isAllowedSetStatRateMs(uint16_t rate_ms) {
@@ -756,6 +782,26 @@ void applyCommandSpecificAckPolicy(const ParsedCmdFrame& frame, OkuaAckPacket* a
   if (ack->ack_stage != OKUA_ACK_STAGE_ACCEPTED || ack->status_code != OKUA_STATUS_OK) return;
 
   switch (frame.packet.cmd_id) {
+    case OKUA_CMD_SET_THROTTLE: {
+      if (frame.packet.arg1 != 0) {
+        ack->ack_stage = OKUA_ACK_STAGE_REJECTED;
+        ack->status_code = OKUA_STATUS_INVALID_ARG;
+        ack->err_detail = OKUA_ERR_ARG1_OUT_OF_RANGE;
+        break;
+      }
+      if (!isAllowedSetThrottlePercent(frame.packet.arg0)) {
+        ack->ack_stage = OKUA_ACK_STAGE_REJECTED;
+        ack->status_code = OKUA_STATUS_INVALID_ARG;
+        ack->err_detail = OKUA_ERR_THROTTLE_INVALID;
+        break;
+      }
+      // Valid SET_THROTTLE remains ACCEPTED + OK (no EXECUTED stage in this flow).
+      ack->ack_stage = OKUA_ACK_STAGE_ACCEPTED;
+      ack->status_code = OKUA_STATUS_OK;
+      ack->err_detail = OKUA_ERR_NONE;
+      break;
+    }
+
     case OKUA_CMD_SET_STAT_RATE: {
       if (frame.packet.arg1 != 0) {
         ack->ack_stage = OKUA_ACK_STAGE_REJECTED;
@@ -1178,6 +1224,13 @@ void dispatchAcceptedCommandMinimal(const ParsedCmdFrame& frame) {
       scheduleSoftReboot();
       return;
 
+    case OKUA_CMD_SET_THROTTLE:
+      // Runtime-only (RAM): adjusts plant note-on throttle.
+      // Lower percentage -> larger inter-event spacing.
+      g_plantThrottlePercent = frame.packet.arg0;
+      g_plantThrottleMs = setThrottlePercentToMs(frame.packet.arg0);
+      return;
+
     case OKUA_CMD_SET_STAT_RATE:
       // Runtime-only (RAM) policy: applies to periodic STAT cadence and
       // naturally resets to compile-time default after reboot.
@@ -1191,7 +1244,7 @@ void dispatchAcceptedCommandMinimal(const ParsedCmdFrame& frame) {
 
 // Control-plane ingress:
 // parse + security + ACK + minimal command dispatch
-// (PING/REQUEST_STAT_NOW/REBOOT_SOFT/SET_STAT_RATE).
+// (PING/REQUEST_STAT_NOW/REBOOT_SOFT/SET_THROTTLE/SET_STAT_RATE).
 void serviceControlPlaneIngress() {
   ParsedCmdFrame frame;
   CmdParseResult result = parseIncomingCmdFrame(&frame);
@@ -1327,7 +1380,8 @@ uint8_t plantLimitJump(uint8_t n) {
 
 bool plantSendNoteOn(uint8_t note, uint8_t vel, bool force = false) {
   uint32_t now = millis();
-  if (!force && (now - g_plantLastSentMs < PLANT_THROTTLE_MS)) return false;
+  const uint32_t throttle_ms = (g_plantThrottleMs > 0) ? g_plantThrottleMs : (uint32_t)PLANT_THROTTLE_MS;
+  if (!force && (now - g_plantLastSentMs < throttle_ms)) return false;
   bool ok = sendOkuaEvt(PLANT_MIDI_BUS, toMidiCh0(PLANT_MIDI_CHANNEL_1B), note, vel, 0);
   if (ok) {
     g_plantLastSentMs = now;
