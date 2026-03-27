@@ -1229,6 +1229,10 @@ void dispatchAcceptedCommandMinimal(const ParsedCmdFrame& frame) {
       // Lower percentage -> larger inter-event spacing.
       g_plantThrottlePercent = frame.packet.arg0;
       g_plantThrottleMs = setThrottlePercentToMs(frame.packet.arg0);
+      Serial.printf(
+          "[F3] SET_THROTTLE accepted: percent=%u cadence_ms=%lu\r\n",
+          (unsigned)g_plantThrottlePercent,
+          (unsigned long)g_plantThrottleMs);
       return;
 
     case OKUA_CMD_SET_STAT_RATE:
@@ -1733,7 +1737,12 @@ uint8_t g_testPlantNote = 60;
 
 void servicePlantTest() {
   uint32_t now = millis();
-  if (now - g_testLastPlantEvtMs < TEST_PLANT_EVENT_MS) return;
+  // Align test-bench plant auto-notes with runtime throttle semantics.
+  // SET_THROTTLE updates g_plantThrottleMs (runtime-only), and this cadence
+  // must reflect it so 25/50/100 become observable during validation runs.
+  uint32_t cadence_ms = (g_plantThrottleMs > 0) ? g_plantThrottleMs : (uint32_t)PLANT_THROTTLE_MS;
+  if (cadence_ms == 0) cadence_ms = (uint32_t)TEST_PLANT_EVENT_MS;
+  if (now - g_testLastPlantEvtMs < cadence_ms) return;
   g_testLastPlantEvtMs = now;
 
   int step = (esp_random() % 7) - 3;
