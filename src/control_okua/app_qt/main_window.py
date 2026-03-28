@@ -72,7 +72,7 @@ from control_okua.app_qt.viewmodels import (
     build_session_capabilities_summary,
     build_session_message_summary,
     build_session_status_summary,
-    format_node_status_detail,
+    build_node_runtime_tooltip,
     build_transport_summary,
 )
 from control_okua.core.preflight import PreflightReport
@@ -1247,14 +1247,23 @@ class MainWindow(QMainWindow):
                 )
                 node_id = getattr(snapshot, "node_id", None)
                 if node_id is not None:
+                    runtime_tooltip = build_node_runtime_tooltip(
+                        snapshot,
+                        now_monotonic=now_monotonic,
+                    )
                     child_item.setToolTip(
                         0,
                         (
                             f"node_id={node_id} | {identity.box_label} | "
-                            f"bus MIDI={identity.midi_bus}"
+                            f"bus MIDI={identity.midi_bus}\n{runtime_tooltip}"
                         ),
                     )
-                child_item.setToolTip(1, format_node_status_detail(snapshot))
+                else:
+                    runtime_tooltip = build_node_runtime_tooltip(
+                        snapshot,
+                        now_monotonic=now_monotonic,
+                    )
+                child_item.setToolTip(1, runtime_tooltip)
                 status_key = str(getattr(getattr(snapshot, "status", None), "value", "")).lower()
                 if status_key == "online":
                     child_item.setForeground(1, QBrush(QColor("#2F9E44")))

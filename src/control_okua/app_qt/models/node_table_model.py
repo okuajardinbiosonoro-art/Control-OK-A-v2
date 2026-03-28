@@ -6,13 +6,13 @@ from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
 from PySide6.QtGui import QColor
 
 from control_okua.app_qt.viewmodels import (
+    build_node_runtime_tooltip,
     format_node_label,
     format_node_last_note_velocity,
     format_node_last_seen,
     format_node_loss,
     format_node_pps,
     format_node_rssi,
-    format_node_status_detail,
     format_node_status,
     format_node_type,
     node_status_key,
@@ -78,7 +78,10 @@ class NodeTableModel(QAbstractTableModel):
             return self._display_value(snapshot, col)
 
         if role == Qt.ToolTipRole and col == 3:
-            return format_node_status_detail(snapshot)
+            return build_node_runtime_tooltip(
+                snapshot,
+                now_monotonic=self._now_monotonic,
+            )
 
         if role == Qt.ForegroundRole and col == 3:
             status = node_status_key(snapshot)

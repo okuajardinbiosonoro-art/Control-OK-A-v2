@@ -82,6 +82,9 @@ def test_node_table_model_exposes_status_reason_as_tooltip() -> None:
     model.set_snapshots(snapshots, now_monotonic=100.5)
 
     assert model.data(model.index(0, 3), Qt.DisplayRole) == "En calibración"
-    assert "motivo: en calibración" in str(
+    tooltip = str(
         model.data(model.index(0, 3), Qt.ToolTipRole)
     ).lower()
+    assert "estado: en calibración" in tooltip
+    assert "motivo: en calibración" in tooltip
+    assert "último paquete" in tooltip

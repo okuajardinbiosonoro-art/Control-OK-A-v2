@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 from typing import Callable
 import time
 
@@ -9,6 +10,10 @@ from control_okua.core.registry.node_models import (
     NodeSnapshot,
     NodeState,
     NodeStatus,
+)
+from control_okua.core.registry.node_runtime_events import (
+    NodeRuntimeEvent,
+    NodeRuntimeEventType,
 )
 from control_okua.core.registry.node_status_policy import (
     NodeStatusInputs,
@@ -80,7 +85,7 @@ class NodeRegistry:
             return None
         resolved_now = self._resolve_ts(now)
         self._refresh_node(node, resolved_now)
-        return self._to_snapshot(node)
+        return self._to_snapshot(node, now=resolved_now)
 
     def get_all_node_snapshots(self, now: float | None = None) -> list[NodeSnapshot]:
         resolved_now = self._resolve_ts(now)
@@ -88,7 +93,7 @@ class NodeRegistry:
         for node_id in sorted(self._nodes):
             node = self._nodes[node_id]
             self._refresh_node(node, resolved_now)
-            snapshots.append(self._to_snapshot(node))
+            snapshots.append(self._to_snapshot(node, now=resolved_now))
         return snapshots
 
     def get_summary(self, now: float | None = None) -> NodeRegistrySummary:
@@ -141,6 +146,7 @@ class NodeRegistry:
         node = self._nodes.get(resolved_node_id)
         if node is None:
             node = NodeState(node_id=resolved_node_id)
+            node._recent_events = deque(maxlen=self._config.max_runtime_events_per_node)
             self._nodes[resolved_node_id] = node
         return node
 
@@ -160,15 +166,27 @@ class NodeRegistry:
         return float(len(queue)) / self._config.pps_window_s
 
     def _apply_status_evaluation(self, node: NodeState, now: float) -> None:
+        previous_status = node.status
         evaluation = evaluate_node_status(
             self._build_status_inputs(node),
             self._config,
             now=now,
         )
-        if node.last_status_change_pc_ts is None or node.status is not evaluation.status:
+        previous_change_ts = node.last_status_change_pc_ts
+        status_changed = previous_change_ts is None or node.status is not evaluation.status
+        if status_changed:
             node.last_status_change_pc_ts = now
         node.status = evaluation.status
         node.status_reason = evaluation.reason
+        node.health_summary = evaluation.health_summary
+        node.recovering = evaluation.is_recovering
+        if status_changed:
+            self._append_status_transition_event(
+                node,
+                occurred_at=now,
+                previous_status=previous_status,
+                is_initial=previous_change_ts is None,
+            )
 
     def _build_status_inputs(self, node: NodeState) -> NodeStatusInputs:
         return NodeStatusInputs(
@@ -218,6 +236,23 @@ class NodeRegistry:
 
         if reboot_detected:
             node.last_reboot_detected_pc_ts = observed_at
+            self._append_event(
+                node,
+                NodeRuntimeEvent(
+                    occurred_at_pc_ts=observed_at,
+                    event_type=NodeRuntimeEventType.REBOOT_DETECTED,
+                    status_key="",
+                    reason="",
+                    details=self._reboot_detection_details(
+                        previous_uptime=previous_uptime,
+                        current_uptime=current_uptime,
+                        previous_reset_reason=previous_reset_reason,
+                        current_reset_reason=current_reset_reason,
+                        previous_boot_marker=previous_boot_marker,
+                        current_boot_marker=current_boot_marker,
+                    ),
+                ),
+            )
         node.last_boot_marker = current_boot_marker
 
     def _update_seq_loss(self, *, node: NodeState, seq: int, stream: str) -> None:
@@ -277,7 +312,79 @@ class NodeRegistry:
             return None
         return (int(state_flags) >> 4) & 0x0F
 
-    def _to_snapshot(self, node: NodeState) -> NodeSnapshot:
+    def _append_status_transition_event(
+        self,
+        node: NodeState,
+        *,
+        occurred_at: float,
+        previous_status: NodeStatus,
+        is_initial: bool,
+    ) -> None:
+        current_status = node.status
+        if current_status is NodeStatus.CALIBRATING:
+            event_type = NodeRuntimeEventType.CALIBRATING_ENTERED
+        elif current_status is NodeStatus.DEGRADED:
+            event_type = NodeRuntimeEventType.MOVED_DEGRADED
+        elif current_status is NodeStatus.OFFLINE:
+            event_type = NodeRuntimeEventType.MOVED_OFFLINE
+        elif is_initial:
+            event_type = NodeRuntimeEventType.STATUS_CHANGED
+        elif previous_status is not NodeStatus.ONLINE and current_status is NodeStatus.ONLINE:
+            event_type = NodeRuntimeEventType.RECOVERED_ONLINE
+        else:
+            event_type = NodeRuntimeEventType.STATUS_CHANGED
+
+        self._append_event(
+            node,
+            NodeRuntimeEvent(
+                occurred_at_pc_ts=occurred_at,
+                event_type=event_type,
+                status_key=current_status.value,
+                reason=node.status_reason,
+                details=node.health_summary,
+            ),
+        )
+
+    def _append_event(self, node: NodeState, event: NodeRuntimeEvent) -> None:
+        node._recent_events.append(event)
+
+    @staticmethod
+    def _reboot_detection_details(
+        *,
+        previous_uptime: int | None,
+        current_uptime: int,
+        previous_reset_reason: int | None,
+        current_reset_reason: int,
+        previous_boot_marker: int | None,
+        current_boot_marker: int | None,
+    ) -> str:
+        if previous_uptime is None:
+            return "startup low uptime"
+        if current_uptime + 1 < int(previous_uptime):
+            return "uptime reset"
+        if previous_reset_reason is not None and current_reset_reason != int(previous_reset_reason):
+            return "reset reason changed"
+        if (
+            previous_boot_marker is not None
+            and current_boot_marker is not None
+            and current_boot_marker != previous_boot_marker
+        ):
+            return "boot marker changed"
+        return "reboot detected"
+
+    def _to_snapshot(self, node: NodeState, *, now: float) -> NodeSnapshot:
+        last_seen_age_s = _age_since(node.last_seen_pc_ts, now=now)
+        last_stat_age_s = _age_since(node.last_stat_pc_ts, now=now)
+        status_age_s = _age_since(node.last_status_change_pc_ts, now=now)
+        reboot_age_s = _age_since(node.last_reboot_detected_pc_ts, now=now)
+        reboot_recent = (
+            reboot_age_s is not None
+            and reboot_age_s <= self._config.calibrating_hold_s
+        )
+        recent_events = tuple(reversed(node._recent_events))
+        last_transition_summary = (
+            _event_summary_text(recent_events[0]) if recent_events else ""
+        )
         return NodeSnapshot(
             node_id=node.node_id,
             label=node.label,
@@ -304,4 +411,31 @@ class NodeRegistry:
             fw_minor=node.fw_minor,
             reset_reason=node.reset_reason,
             status_reason=node.status_reason,
+            health_summary=node.health_summary,
+            last_status_change_pc_ts=node.last_status_change_pc_ts,
+            last_reboot_detected_pc_ts=node.last_reboot_detected_pc_ts,
+            last_seen_age_s=last_seen_age_s,
+            last_stat_age_s=last_stat_age_s,
+            status_age_s=status_age_s,
+            reboot_age_s=reboot_age_s,
+            reboot_recent=reboot_recent,
+            recovering=node.recovering,
+            last_transition_summary=last_transition_summary,
+            recent_events=recent_events,
         )
+
+
+def _age_since(timestamp: float | None, *, now: float) -> float | None:
+    if timestamp is None:
+        return None
+    return max(0.0, float(now) - float(timestamp))
+
+
+def _event_summary_text(event: NodeRuntimeEvent) -> str:
+    if event.details and event.reason:
+        return f"{event.event_type.value}: {event.reason} ({event.details})"
+    if event.reason:
+        return f"{event.event_type.value}: {event.reason}"
+    if event.details:
+        return f"{event.event_type.value}: {event.details}"
+    return event.event_type.value

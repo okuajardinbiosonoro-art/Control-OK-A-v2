@@ -6,6 +6,10 @@ from control_okua.core.registry.node_models import (
     NodeStatus,
 )
 from control_okua.core.registry.node_registry import NodeRegistry
+from control_okua.core.registry.node_runtime_events import (
+    NodeRuntimeEvent,
+    NodeRuntimeEventType,
+)
 from control_okua.core.registry.node_status_policy import (
     NodeStatusEvaluation,
     NodeStatusInputs,
@@ -22,4 +26,6 @@ __all__ = [
     "NodeStatusInputs",
     "NodeStatusEvaluation",
     "evaluate_node_status",
+    "NodeRuntimeEvent",
+    "NodeRuntimeEventType",
 ]

@@ -25,6 +25,7 @@ class NodeStatusInputs:
 class NodeStatusEvaluation:
     status: NodeStatus
     reason: str
+    health_summary: str
     age_s: float | None
     last_stat_age_s: float | None
     is_recent_reboot: bool
@@ -42,6 +43,7 @@ def evaluate_node_status(
         return NodeStatusEvaluation(
             status=NodeStatus.OFFLINE,
             reason="no recent packets",
+            health_summary="no recent packets",
             age_s=None,
             last_stat_age_s=None,
             is_recent_reboot=False,
@@ -55,6 +57,7 @@ def evaluate_node_status(
         return NodeStatusEvaluation(
             status=NodeStatus.OFFLINE,
             reason="no recent packets",
+            health_summary="no recent packets",
             age_s=age_s,
             last_stat_age_s=last_stat_age_s,
             is_recent_reboot=is_recent_reboot,
@@ -65,6 +68,7 @@ def evaluate_node_status(
         return NodeStatusEvaluation(
             status=NodeStatus.CALIBRATING,
             reason="calibrating",
+            health_summary="reboot recent",
             age_s=age_s,
             last_stat_age_s=last_stat_age_s,
             is_recent_reboot=True,
@@ -75,6 +79,7 @@ def evaluate_node_status(
         return NodeStatusEvaluation(
             status=NodeStatus.DEGRADED,
             reason="partial traffic",
+            health_summary="activity partial",
             age_s=age_s,
             last_stat_age_s=last_stat_age_s,
             is_recent_reboot=False,
@@ -94,6 +99,7 @@ def evaluate_node_status(
             return NodeStatusEvaluation(
                 status=NodeStatus.ONLINE,
                 reason="healthy traffic",
+                health_summary="healthy traffic",
                 age_s=age_s,
                 last_stat_age_s=last_stat_age_s,
                 is_recent_reboot=False,
@@ -102,6 +108,7 @@ def evaluate_node_status(
         return NodeStatusEvaluation(
             status=NodeStatus.DEGRADED,
             reason="recovering" if inputs.stat_recovery_streak > 0 else "elevated loss",
+            health_summary="recovering" if inputs.stat_recovery_streak > 0 else "elevated loss",
             age_s=age_s,
             last_stat_age_s=last_stat_age_s,
             is_recent_reboot=False,
@@ -112,6 +119,7 @@ def evaluate_node_status(
         return NodeStatusEvaluation(
             status=NodeStatus.ONLINE,
             reason="healthy traffic",
+            health_summary="healthy traffic",
             age_s=age_s,
             last_stat_age_s=last_stat_age_s,
             is_recent_reboot=False,
@@ -128,6 +136,7 @@ def evaluate_node_status(
             return NodeStatusEvaluation(
                 status=NodeStatus.ONLINE,
                 reason="healthy traffic",
+                health_summary="healthy traffic",
                 age_s=age_s,
                 last_stat_age_s=last_stat_age_s,
                 is_recent_reboot=False,
@@ -136,6 +145,7 @@ def evaluate_node_status(
         return NodeStatusEvaluation(
             status=NodeStatus.DEGRADED,
             reason="recovering" if inputs.evt_recovery_streak > 0 else "partial traffic",
+            health_summary="recovering" if inputs.evt_recovery_streak > 0 else "activity partial",
             age_s=age_s,
             last_stat_age_s=last_stat_age_s,
             is_recent_reboot=False,
@@ -145,6 +155,7 @@ def evaluate_node_status(
     return NodeStatusEvaluation(
         status=NodeStatus.ONLINE,
         reason="healthy traffic",
+        health_summary="healthy traffic",
         age_s=age_s,
         last_stat_age_s=last_stat_age_s,
         is_recent_reboot=False,

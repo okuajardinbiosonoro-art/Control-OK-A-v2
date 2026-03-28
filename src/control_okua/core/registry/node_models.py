@@ -4,6 +4,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
 
+from control_okua.core.registry.node_runtime_events import NodeRuntimeEvent
+
 
 class NodeStatus(str, Enum):
     ONLINE = "online"
@@ -24,6 +26,7 @@ class NodeRegistryConfig:
     calibrating_uptime_s: int = 20
     stat_recovery_packets_online: int = 3
     evt_recovery_packets_online: int = 4
+    max_runtime_events_per_node: int = 10
 
     def __post_init__(self) -> None:
         if self.t_green_s <= 0:
@@ -48,6 +51,8 @@ class NodeRegistryConfig:
             raise ValueError("stat_recovery_packets_online must be >= 1")
         if self.evt_recovery_packets_online < 1:
             raise ValueError("evt_recovery_packets_online must be >= 1")
+        if self.max_runtime_events_per_node < 1:
+            raise ValueError("max_runtime_events_per_node must be >= 1")
 
 
 @dataclass
@@ -78,9 +83,11 @@ class NodeState:
     reset_reason: int | None = None
     last_stat_pc_ts: float | None = None
     status_reason: str = "no recent packets"
+    health_summary: str = "no recent packets"
     last_status_change_pc_ts: float | None = None
     last_reboot_detected_pc_ts: float | None = None
     last_boot_marker: int | None = None
+    recovering: bool = False
     _evt_seen_forward: int = 0
     _evt_missing_packets: int = 0
     _stat_seen_forward: int = 0
@@ -89,6 +96,7 @@ class NodeState:
     _stat_recovery_streak: int = 0
     _evt_timestamps: deque[float] = field(default_factory=deque, repr=False)
     _stat_timestamps: deque[float] = field(default_factory=deque, repr=False)
+    _recent_events: deque[NodeRuntimeEvent] = field(default_factory=deque, repr=False)
 
 
 @dataclass(frozen=True)
@@ -118,6 +126,17 @@ class NodeSnapshot:
     fw_minor: int | None = None
     reset_reason: int | None = None
     status_reason: str = ""
+    health_summary: str = ""
+    last_status_change_pc_ts: float | None = None
+    last_reboot_detected_pc_ts: float | None = None
+    last_seen_age_s: float | None = None
+    last_stat_age_s: float | None = None
+    status_age_s: float | None = None
+    reboot_age_s: float | None = None
+    reboot_recent: bool = False
+    recovering: bool = False
+    last_transition_summary: str = ""
+    recent_events: tuple[NodeRuntimeEvent, ...] = ()
 
 
 @dataclass(frozen=True)

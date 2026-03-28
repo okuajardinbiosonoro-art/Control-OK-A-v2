@@ -14,7 +14,7 @@ from control_okua.core.node_identity_policy import (
     resolve_node_identity,
     resolve_node_label,
 )
-from control_okua.core.registry import NodeStatus
+from control_okua.core.registry import NodeRuntimeEvent, NodeRuntimeEventType, NodeStatus
 from control_okua.core.session import SessionSnapshot, SessionState
 
 
@@ -847,6 +847,16 @@ def node_status_reason_key(snapshot: object) -> str:
     return str(raw_reason).strip().lower()
 
 
+def node_health_summary_key(snapshot: object) -> str:
+    raw_summary = _node_attr(snapshot, "health_summary")
+    if raw_summary is None:
+        return node_status_reason_key(snapshot)
+    text = str(raw_summary).strip().lower()
+    if not text:
+        return node_status_reason_key(snapshot)
+    return text
+
+
 def format_node_status(snapshot: object) -> str:
     status_key = node_status_key(snapshot)
     if status_key == NodeStatus.ONLINE.value:
@@ -877,12 +887,102 @@ def format_node_status_reason(snapshot: object) -> str:
     return reason_key
 
 
+def format_node_health_summary(snapshot: object) -> str:
+    summary_key = node_health_summary_key(snapshot)
+    if not summary_key:
+        return format_node_status_reason(snapshot)
+    if summary_key == "healthy traffic":
+        return "tráfico saludable"
+    if summary_key == "reboot recent":
+        return "reboot reciente"
+    if summary_key == "recovering":
+        return "recuperándose"
+    if summary_key == "elevated loss":
+        return "pérdida elevada"
+    if summary_key == "activity partial":
+        return "actividad parcial"
+    if summary_key == "no recent packets":
+        return "sin tráfico reciente"
+    return summary_key
+
+
 def format_node_status_detail(snapshot: object) -> str:
     status_text = format_node_status(snapshot)
-    reason_text = format_node_status_reason(snapshot)
+    reason_text = format_node_health_summary(snapshot)
     if reason_text == "—":
         return status_text
     return f"{status_text} | motivo: {reason_text}"
+
+
+def format_node_status_since(snapshot: object) -> str:
+    status_age_s = _safe_float(_node_attr(snapshot, "status_age_s"))
+    return _format_age_value(status_age_s)
+
+
+def format_node_last_stat_seen(snapshot: object) -> str:
+    last_stat_age_s = _safe_float(_node_attr(snapshot, "last_stat_age_s"))
+    return _format_age_value(last_stat_age_s)
+
+
+def format_node_reboot_recency(snapshot: object) -> str:
+    reboot_recent = bool(_node_attr(snapshot, "reboot_recent"))
+    reboot_age_s = _safe_float(_node_attr(snapshot, "reboot_age_s"))
+    if not reboot_recent or reboot_age_s is None:
+        return "No"
+    return f"Sí, hace {reboot_age_s:.1f} s"
+
+
+def format_node_recent_events(
+    snapshot: object,
+    *,
+    now_monotonic: float | None = None,
+    limit: int = 3,
+) -> tuple[str, ...]:
+    raw_events = _node_attr(snapshot, "recent_events")
+    if not isinstance(raw_events, tuple):
+        return ()
+    now_value = now_monotonic if now_monotonic is not None else time.monotonic()
+    lines: list[str] = []
+    for event in raw_events[: max(0, int(limit))]:
+        if not isinstance(event, NodeRuntimeEvent):
+            continue
+        lines.append(_format_runtime_event(event, now_monotonic=now_value))
+    return tuple(lines)
+
+
+def build_node_runtime_tooltip(
+    snapshot: object,
+    *,
+    now_monotonic: float | None = None,
+    event_limit: int = 3,
+) -> str:
+    lines = [
+        f"Estado: {format_node_status(snapshot)}",
+        f"Resumen: {format_node_health_summary(snapshot)}",
+        f"Motivo: {format_node_status_reason(snapshot)}",
+        f"Último paquete: {format_node_last_seen(snapshot, now_monotonic=now_monotonic)}",
+        f"Último STAT: {format_node_last_stat_seen(snapshot)}",
+        f"Tiempo en estado: {format_node_status_since(snapshot)}",
+        f"Reboot reciente: {format_node_reboot_recency(snapshot)}",
+        f"PPS: {format_node_pps(snapshot)}",
+        f"Pérdida: {format_node_loss(snapshot)}",
+    ]
+    uptime = _node_attr(snapshot, "last_uptime_s")
+    if uptime is not None:
+        lines.append(f"Uptime conocido: {uptime} s")
+    reset_reason = _node_attr(snapshot, "reset_reason")
+    if reset_reason is not None:
+        lines.append(f"Reset reason: {reset_reason}")
+
+    recent_events = format_node_recent_events(
+        snapshot,
+        now_monotonic=now_monotonic,
+        limit=event_limit,
+    )
+    if recent_events:
+        lines.append("Eventos recientes:")
+        lines.extend(f"- {item}" for item in recent_events)
+    return "\n".join(lines)
 
 
 def format_node_last_seen(
@@ -984,6 +1084,107 @@ def build_nodes_summary_text(summary: object | None) -> str:
         f"Degradado: {degraded_count} | "
         f"Fuera de línea: {offline_count} | PPS EVT: {evt_text} | PPS STAT: {stat_text}"
     )
+
+
+def _format_age_value(age_s: float | None) -> str:
+    if age_s is None:
+        return "—"
+    return f"hace {age_s:.1f} s"
+
+
+def _format_runtime_event(
+    event: NodeRuntimeEvent,
+    *,
+    now_monotonic: float,
+) -> str:
+    age_s = max(0.0, float(now_monotonic) - float(event.occurred_at_pc_ts))
+    base = _event_type_label(event.event_type)
+    detail_parts: list[str] = []
+    status_text = _status_key_to_text(event.status_key)
+    if status_text:
+        detail_parts.append(status_text)
+    reason_text = _reason_key_to_text(event.reason)
+    if reason_text:
+        detail_parts.append(reason_text)
+    details_text = _details_key_to_text(event.details)
+    if details_text and details_text not in detail_parts:
+        detail_parts.append(details_text)
+    if detail_parts:
+        return f"{base}: {' | '.join(detail_parts)} | hace {age_s:.1f} s"
+    return f"{base} | hace {age_s:.1f} s"
+
+
+def _event_type_label(event_type: NodeRuntimeEventType) -> str:
+    if event_type is NodeRuntimeEventType.REBOOT_DETECTED:
+        return "reboot detectado"
+    if event_type is NodeRuntimeEventType.CALIBRATING_ENTERED:
+        return "entró en calibración"
+    if event_type is NodeRuntimeEventType.RECOVERED_ONLINE:
+        return "volvió a en línea"
+    if event_type is NodeRuntimeEventType.MOVED_DEGRADED:
+        return "pasó a degradado"
+    if event_type is NodeRuntimeEventType.MOVED_OFFLINE:
+        return "pasó a fuera de línea"
+    return "estado actualizado"
+
+
+def _status_key_to_text(status_key: str) -> str:
+    raw = str(status_key or "").strip().lower()
+    if raw == NodeStatus.ONLINE.value:
+        return "En línea"
+    if raw == NodeStatus.CALIBRATING.value:
+        return "En calibración"
+    if raw == NodeStatus.DEGRADED.value:
+        return "Degradado"
+    if raw == NodeStatus.OFFLINE.value:
+        return "Fuera de línea"
+    return ""
+
+
+def _reason_key_to_text(reason_key: str) -> str:
+    raw = str(reason_key or "").strip().lower()
+    if not raw:
+        return ""
+    if raw == "healthy traffic":
+        return "tráfico saludable"
+    if raw == "partial traffic":
+        return "tráfico parcial"
+    if raw == "elevated loss":
+        return "pérdida elevada"
+    if raw == "recovering":
+        return "recuperándose"
+    if raw == "calibrating":
+        return "en calibración"
+    if raw == "no recent packets":
+        return "sin tráfico reciente"
+    return raw
+
+
+def _details_key_to_text(details_key: str) -> str:
+    raw = str(details_key or "").strip().lower()
+    if not raw:
+        return ""
+    if raw == "healthy traffic":
+        return "tráfico saludable"
+    if raw == "reboot recent":
+        return "reboot reciente"
+    if raw == "recovering":
+        return "recuperándose"
+    if raw == "elevated loss":
+        return "pérdida elevada"
+    if raw == "activity partial":
+        return "actividad parcial"
+    if raw == "no recent packets":
+        return "sin tráfico reciente"
+    if raw == "startup low uptime":
+        return "arranque con uptime bajo"
+    if raw == "uptime reset":
+        return "reset de uptime"
+    if raw == "reset reason changed":
+        return "cambio de reset reason"
+    if raw == "boot marker changed":
+        return "cambio de boot marker"
+    return raw
 
 
 def build_nodes_tab_view_state(
