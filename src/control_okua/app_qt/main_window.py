@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 
 from control_okua.app_qt.advanced_tools_dialog import AdvancedToolsDialog
 from control_okua.app_qt.control_plane_panel import ControlPlanePanel
+from control_okua.app_qt.firmware_manager_dialog import FirmwareManagerDialog
 from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
 from control_okua.app_qt.widgets import ConfigViewDialog
 from control_okua.app_qt.viewmodels import (
@@ -115,6 +116,7 @@ class MainWindow(QMainWindow):
         self._details_scroll_area: QScrollArea | None = None
         self._details_columns = 0
         self._advanced_dialog: AdvancedToolsDialog | None = None
+        self._firmware_manager_dialog: FirmwareManagerDialog | None = None
         self._details_dialog: QDialog | None = None
         self._node_box_expanded: dict[int, bool] = {}
         self._preflight_panel_visible = False
@@ -783,6 +785,7 @@ class MainWindow(QMainWindow):
                 on_open_folder=self.open_config_folder,
                 on_view_config=self.view_config,
                 on_reload_config=self.reload_config,
+                on_open_firmware_manager=self.open_firmware_manager,
                 state_provider=self._advanced_state,
                 parent=self,
             )
@@ -792,6 +795,15 @@ class MainWindow(QMainWindow):
             build_session_action_state(self._session_snapshot).can_edit_configuration
         )
         self._advanced_dialog.exec()
+
+    def open_firmware_manager(self) -> None:
+        if self._firmware_manager_dialog is None:
+            self._firmware_manager_dialog = FirmwareManagerDialog(parent=self)
+
+        self._firmware_manager_dialog.refresh_catalog()
+        self._firmware_manager_dialog.show()
+        self._firmware_manager_dialog.raise_()
+        self._firmware_manager_dialog.activateWindow()
 
     def _advanced_state(self) -> tuple[dict[str, Any], Path, list[str]]:
         return self.cfg, self.config_path, self.warnings

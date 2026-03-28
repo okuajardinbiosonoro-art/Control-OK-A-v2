@@ -22,6 +22,7 @@ class AdvancedToolsDialog(QDialog):
         on_open_folder: Callable[[], None],
         on_view_config: Callable[[], None],
         on_reload_config: Callable[[], None],
+        on_open_firmware_manager: Callable[[], None],
         state_provider: Callable[[], tuple[dict[str, Any], Path, list[str]]],
         parent=None,
     ) -> None:
@@ -32,6 +33,7 @@ class AdvancedToolsDialog(QDialog):
         self._on_open_folder = on_open_folder
         self._on_view_config = on_view_config
         self._on_reload_config = on_reload_config
+        self._on_open_firmware_manager = on_open_firmware_manager
         self._state_provider = state_provider
 
         self._build_ui()
@@ -77,6 +79,26 @@ class AdvancedToolsDialog(QDialog):
 
         root_layout.addWidget(config_group)
 
+        firmware_group = QGroupBox("Firmware")
+        firmware_layout = QVBoxLayout(firmware_group)
+        firmware_hint = QLabel(
+            "Abra el Firmware Manager para revisar el catálogo técnico, "
+            "importar bins y marcar current por target."
+        )
+        firmware_hint.setWordWrap(True)
+        firmware_layout.addWidget(firmware_hint)
+
+        firmware_actions_layout = QHBoxLayout()
+        self.open_firmware_manager_button = QPushButton("Firmware Manager")
+        self.open_firmware_manager_button.clicked.connect(
+            self._handle_open_firmware_manager_clicked
+        )
+        firmware_actions_layout.addWidget(self.open_firmware_manager_button)
+        firmware_actions_layout.addStretch(1)
+        firmware_layout.addLayout(firmware_actions_layout)
+
+        root_layout.addWidget(firmware_group)
+
         midi_group = QGroupBox("Salidas MIDI")
         midi_layout = QVBoxLayout(midi_group)
         self.midi_outputs_widget = MidiOutputsWidget(self)
@@ -98,3 +120,7 @@ class AdvancedToolsDialog(QDialog):
         self._on_reload_config()
         cfg, config_path, warnings = self._state_provider()
         self.set_state(cfg, config_path, warnings)
+
+    def _handle_open_firmware_manager_clicked(self) -> None:
+        self.accept()
+        self._on_open_firmware_manager()
