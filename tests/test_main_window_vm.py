@@ -35,6 +35,8 @@ from control_okua.app_qt.viewmodels.main_window_vm import (  # noqa: E402
     format_node_loss,
     format_node_pps,
     format_node_rssi,
+    format_node_status_detail,
+    format_node_status_reason,
     format_node_status,
     format_node_type,
     sort_node_snapshots_by_id,
@@ -203,6 +205,7 @@ def _node_snapshot(
     vel: int | None = None,
     label: str | None = None,
     node_type: str | None = None,
+    status_reason: str = "healthy traffic",
 ) -> NodeSnapshot:
     return NodeSnapshot(
         node_id=node_id,
@@ -224,6 +227,7 @@ def _node_snapshot(
         last_uptime_s=100,
         reported_pps_x10=20,
         status=status,
+        status_reason=status_reason,
     )
 
 
@@ -631,11 +635,23 @@ def test_operation_udp_block_supports_lab_profile_with_udp_runtime() -> None:
 
 def test_node_status_format_is_coherent() -> None:
     online = format_node_status(_node_snapshot(node_id=1, status=NodeStatus.ONLINE))
+    calibrating = format_node_status(_node_snapshot(node_id=4, status=NodeStatus.CALIBRATING))
     degraded = format_node_status(_node_snapshot(node_id=2, status=NodeStatus.DEGRADED))
     offline = format_node_status(_node_snapshot(node_id=3, status=NodeStatus.OFFLINE))
     assert online == "En línea"
+    assert calibrating == "En calibración"
     assert degraded == "Degradado"
     assert offline == "Fuera de línea"
+
+
+def test_node_status_reason_and_detail_are_coherent() -> None:
+    snapshot = _node_snapshot(
+        node_id=9,
+        status=NodeStatus.DEGRADED,
+        status_reason="recovering",
+    )
+    assert format_node_status_reason(snapshot) == "recuperándose"
+    assert "motivo: recuperándose" in format_node_status_detail(snapshot).lower()
 
 
 def test_node_last_seen_format_is_coherent() -> None:

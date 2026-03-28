@@ -12,6 +12,7 @@ from control_okua.app_qt.viewmodels import (
     format_node_loss,
     format_node_pps,
     format_node_rssi,
+    format_node_status_detail,
     format_node_status,
     format_node_type,
     node_status_key,
@@ -76,10 +77,15 @@ class NodeTableModel(QAbstractTableModel):
         if role == Qt.DisplayRole:
             return self._display_value(snapshot, col)
 
+        if role == Qt.ToolTipRole and col == 3:
+            return format_node_status_detail(snapshot)
+
         if role == Qt.ForegroundRole and col == 3:
             status = node_status_key(snapshot)
             if status == "online":
                 return QColor("#2F9E44")
+            if status == "calibrating":
+                return QColor("#1C7ED6")
             if status == "degraded":
                 return QColor("#E67700")
             return QColor("#C92A2A")

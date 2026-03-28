@@ -840,13 +840,49 @@ def node_status_key(snapshot: object) -> str:
     return str(raw_status).strip().lower()
 
 
+def node_status_reason_key(snapshot: object) -> str:
+    raw_reason = _node_attr(snapshot, "status_reason")
+    if raw_reason is None:
+        return ""
+    return str(raw_reason).strip().lower()
+
+
 def format_node_status(snapshot: object) -> str:
     status_key = node_status_key(snapshot)
     if status_key == NodeStatus.ONLINE.value:
         return "En línea"
+    if status_key == NodeStatus.CALIBRATING.value:
+        return "En calibración"
     if status_key == NodeStatus.DEGRADED.value:
         return "Degradado"
     return "Fuera de línea"
+
+
+def format_node_status_reason(snapshot: object) -> str:
+    reason_key = node_status_reason_key(snapshot)
+    if not reason_key:
+        return "—"
+    if reason_key == "healthy traffic":
+        return "tráfico saludable"
+    if reason_key == "partial traffic":
+        return "tráfico parcial"
+    if reason_key == "elevated loss":
+        return "pérdida elevada"
+    if reason_key == "recovering":
+        return "recuperándose"
+    if reason_key == "calibrating":
+        return "en calibración"
+    if reason_key == "no recent packets":
+        return "sin tráfico reciente"
+    return reason_key
+
+
+def format_node_status_detail(snapshot: object) -> str:
+    status_text = format_node_status(snapshot)
+    reason_text = format_node_status_reason(snapshot)
+    if reason_text == "—":
+        return status_text
+    return f"{status_text} | motivo: {reason_text}"
 
 
 def format_node_last_seen(
@@ -935,6 +971,7 @@ def build_nodes_summary_text(summary: object | None) -> str:
 
     total_nodes = _safe_int(_node_attr(summary, "total_nodes"), default=0)
     online_count = _safe_int(_node_attr(summary, "online_count"), default=0)
+    calibrating_count = _safe_int(_node_attr(summary, "calibrating_count"), default=0)
     degraded_count = _safe_int(_node_attr(summary, "degraded_count"), default=0)
     offline_count = _safe_int(_node_attr(summary, "offline_count"), default=0)
     total_pps_evt = _safe_float(_node_attr(summary, "total_pps_evt"))
@@ -943,7 +980,8 @@ def build_nodes_summary_text(summary: object | None) -> str:
     evt_text = "0.0" if total_pps_evt is None else f"{total_pps_evt:.1f}"
     stat_text = "0.0" if total_pps_stat is None else f"{total_pps_stat:.1f}"
     return (
-        f"Nodos: {total_nodes} | En línea: {online_count} | Degradado: {degraded_count} | "
+        f"Nodos: {total_nodes} | En línea: {online_count} | En calibración: {calibrating_count} | "
+        f"Degradado: {degraded_count} | "
         f"Fuera de línea: {offline_count} | PPS EVT: {evt_text} | PPS STAT: {stat_text}"
     )
 

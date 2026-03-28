@@ -6,6 +6,11 @@ from control_okua.core.registry.node_models import (
     NodeStatus,
 )
 from control_okua.core.registry.node_registry import NodeRegistry
+from control_okua.core.registry.node_status_policy import (
+    NodeStatusEvaluation,
+    NodeStatusInputs,
+    evaluate_node_status,
+)
 
 __all__ = [
     "NodeStatus",
@@ -14,4 +19,7 @@ __all__ = [
     "NodeSnapshot",
     "NodeRegistrySummary",
     "NodeRegistry",
+    "NodeStatusInputs",
+    "NodeStatusEvaluation",
+    "evaluate_node_status",
 ]

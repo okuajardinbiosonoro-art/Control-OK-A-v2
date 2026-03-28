@@ -72,6 +72,7 @@ from control_okua.app_qt.viewmodels import (
     build_session_capabilities_summary,
     build_session_message_summary,
     build_session_status_summary,
+    format_node_status_detail,
     build_transport_summary,
 )
 from control_okua.core.preflight import PreflightReport
@@ -1253,9 +1254,12 @@ class MainWindow(QMainWindow):
                             f"bus MIDI={identity.midi_bus}"
                         ),
                     )
+                child_item.setToolTip(1, format_node_status_detail(snapshot))
                 status_key = str(getattr(getattr(snapshot, "status", None), "value", "")).lower()
                 if status_key == "online":
                     child_item.setForeground(1, QBrush(QColor("#2F9E44")))
+                elif status_key == "calibrating":
+                    child_item.setForeground(1, QBrush(QColor("#1C7ED6")))
                 elif status_key == "degraded":
                     child_item.setForeground(1, QBrush(QColor("#E67700")))
                 else:

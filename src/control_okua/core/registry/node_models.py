@@ -7,6 +7,7 @@ from enum import Enum
 
 class NodeStatus(str, Enum):
     ONLINE = "online"
+    CALIBRATING = "calibrating"
     DEGRADED = "degraded"
     OFFLINE = "offline"
 
@@ -18,6 +19,11 @@ class NodeRegistryConfig:
     pps_min_yellow: float = 0.0
     pps_window_s: float = 5.0
     stat_loss_yellow_pct: float = 25.0
+    t_recover_s: float = 1.5
+    calibrating_hold_s: float = 6.0
+    calibrating_uptime_s: int = 20
+    stat_recovery_packets_online: int = 3
+    evt_recovery_packets_online: int = 4
 
     def __post_init__(self) -> None:
         if self.t_green_s <= 0:
@@ -30,6 +36,18 @@ class NodeRegistryConfig:
             raise ValueError("pps_min_yellow must be >= 0")
         if self.stat_loss_yellow_pct < 0:
             raise ValueError("stat_loss_yellow_pct must be >= 0")
+        if self.t_recover_s <= 0:
+            raise ValueError("t_recover_s must be > 0")
+        if self.t_recover_s > self.t_green_s:
+            raise ValueError("t_recover_s must be <= t_green_s")
+        if self.calibrating_hold_s <= 0:
+            raise ValueError("calibrating_hold_s must be > 0")
+        if self.calibrating_uptime_s < 0:
+            raise ValueError("calibrating_uptime_s must be >= 0")
+        if self.stat_recovery_packets_online < 1:
+            raise ValueError("stat_recovery_packets_online must be >= 1")
+        if self.evt_recovery_packets_online < 1:
+            raise ValueError("evt_recovery_packets_online must be >= 1")
 
 
 @dataclass
@@ -59,10 +77,16 @@ class NodeState:
     fw_minor: int | None = None
     reset_reason: int | None = None
     last_stat_pc_ts: float | None = None
+    status_reason: str = "no recent packets"
+    last_status_change_pc_ts: float | None = None
+    last_reboot_detected_pc_ts: float | None = None
+    last_boot_marker: int | None = None
     _evt_seen_forward: int = 0
     _evt_missing_packets: int = 0
     _stat_seen_forward: int = 0
     _stat_missing_packets: int = 0
+    _evt_recovery_streak: int = 0
+    _stat_recovery_streak: int = 0
     _evt_timestamps: deque[float] = field(default_factory=deque, repr=False)
     _stat_timestamps: deque[float] = field(default_factory=deque, repr=False)
 
@@ -93,6 +117,7 @@ class NodeSnapshot:
     fw_major: int | None = None
     fw_minor: int | None = None
     reset_reason: int | None = None
+    status_reason: str = ""
 
 
 @dataclass(frozen=True)
@@ -103,3 +128,4 @@ class NodeRegistrySummary:
     offline_count: int
     total_pps_evt: float
     total_pps_stat: float
+    calibrating_count: int = 0

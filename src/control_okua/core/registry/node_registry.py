@@ -10,6 +10,10 @@ from control_okua.core.registry.node_models import (
     NodeState,
     NodeStatus,
 )
+from control_okua.core.registry.node_status_policy import (
+    NodeStatusInputs,
+    evaluate_node_status,
+)
 from control_okua.core.udp import OkuaEvtPacket, OkuaStatPacket
 
 
@@ -40,11 +44,18 @@ class NodeRegistry:
         self._update_seq_loss(node=node, seq=packet.header.seq, stream="evt")
         node.pps_evt = self._record_pps_sample(node._evt_timestamps, now)
         node.pps_stat = self._compute_pps(node._stat_timestamps, now)
-        node.status = self._compute_status(node, now)
+        self._apply_status_evaluation(node, now)
 
     def observe_stat(self, packet: OkuaStatPacket, received_at: float | None = None) -> None:
         now = self._resolve_ts(received_at)
         node = self._get_or_create_node(packet.header.node_id)
+        self._update_reboot_tracking(
+            node,
+            uptime_s=packet.uptime_s,
+            reset_reason=packet.reset_reason,
+            state_flags=packet.state_flags,
+            observed_at=now,
+        )
 
         node.last_seen_pc_ts = now
         node.last_stat_pc_ts = now
@@ -61,7 +72,7 @@ class NodeRegistry:
         self._update_seq_loss(node=node, seq=packet.header.seq, stream="stat")
         node.pps_stat = self._record_pps_sample(node._stat_timestamps, now)
         node.pps_evt = self._compute_pps(node._evt_timestamps, now)
-        node.status = self._compute_status(node, now)
+        self._apply_status_evaluation(node, now)
 
     def get_node_snapshot(self, node_id: int, now: float | None = None) -> NodeSnapshot | None:
         node = self._nodes.get(int(node_id))
@@ -83,6 +94,7 @@ class NodeRegistry:
     def get_summary(self, now: float | None = None) -> NodeRegistrySummary:
         resolved_now = self._resolve_ts(now)
         online_count = 0
+        calibrating_count = 0
         degraded_count = 0
         offline_count = 0
         total_pps_evt = 0.0
@@ -94,6 +106,8 @@ class NodeRegistry:
             total_pps_stat += node.pps_stat
             if node.status is NodeStatus.ONLINE:
                 online_count += 1
+            elif node.status is NodeStatus.CALIBRATING:
+                calibrating_count += 1
             elif node.status is NodeStatus.DEGRADED:
                 degraded_count += 1
             else:
@@ -106,6 +120,7 @@ class NodeRegistry:
             offline_count=offline_count,
             total_pps_evt=total_pps_evt,
             total_pps_stat=total_pps_stat,
+            calibrating_count=calibrating_count,
         )
 
     def recompute_statuses(self, now: float | None = None) -> None:
@@ -132,7 +147,7 @@ class NodeRegistry:
     def _refresh_node(self, node: NodeState, now: float) -> None:
         node.pps_evt = self._compute_pps(node._evt_timestamps, now)
         node.pps_stat = self._compute_pps(node._stat_timestamps, now)
-        node.status = self._compute_status(node, now)
+        self._apply_status_evaluation(node, now)
 
     def _record_pps_sample(self, queue: "deque[float]", sample_ts: float) -> float:
         queue.append(float(sample_ts))
@@ -144,36 +159,66 @@ class NodeRegistry:
             queue.popleft()
         return float(len(queue)) / self._config.pps_window_s
 
-    def _compute_status(self, node: NodeState, now: float) -> NodeStatus:
-        last_seen = node.last_seen_pc_ts
-        if last_seen is None:
-            return NodeStatus.OFFLINE
+    def _apply_status_evaluation(self, node: NodeState, now: float) -> None:
+        evaluation = evaluate_node_status(
+            self._build_status_inputs(node),
+            self._config,
+            now=now,
+        )
+        if node.last_status_change_pc_ts is None or node.status is not evaluation.status:
+            node.last_status_change_pc_ts = now
+        node.status = evaluation.status
+        node.status_reason = evaluation.reason
 
-        age_s = max(0.0, float(now) - float(last_seen))
-        if age_s >= self._config.t_red_s:
-            return NodeStatus.OFFLINE
-        if age_s >= self._config.t_green_s:
-            return NodeStatus.DEGRADED
-        if self._has_metric_degradation(node, now):
-            return NodeStatus.DEGRADED
-        return NodeStatus.ONLINE
+    def _build_status_inputs(self, node: NodeState) -> NodeStatusInputs:
+        return NodeStatusInputs(
+            last_seen_pc_ts=node.last_seen_pc_ts,
+            last_stat_pc_ts=node.last_stat_pc_ts,
+            pps_evt=node.pps_evt,
+            pps_stat=node.pps_stat,
+            loss_evt_pct=node.loss_evt_pct,
+            loss_stat_pct=node.loss_stat_pct,
+            last_seq_evt=node.last_seq_evt,
+            last_seq_stat=node.last_seq_stat,
+            last_uptime_s=node.last_uptime_s,
+            last_reboot_detected_pc_ts=node.last_reboot_detected_pc_ts,
+            evt_recovery_streak=node._evt_recovery_streak,
+            stat_recovery_streak=node._stat_recovery_streak,
+        )
 
-    def _has_metric_degradation(self, node: NodeState, now: float) -> bool:
-        if node.last_seq_stat is not None and node.loss_stat_pct >= self._config.stat_loss_yellow_pct:
-            return True
+    def _update_reboot_tracking(
+        self,
+        node: NodeState,
+        *,
+        uptime_s: int,
+        reset_reason: int,
+        state_flags: int,
+        observed_at: float,
+    ) -> None:
+        current_uptime = int(uptime_s)
+        current_reset_reason = int(reset_reason)
+        current_boot_marker = self._resolve_boot_marker(state_flags)
+        previous_uptime = node.last_uptime_s
+        previous_reset_reason = node.reset_reason
+        previous_boot_marker = node.last_boot_marker
+        reboot_detected = False
 
-        # If STAT is recent, do not degrade solely by sparse EVT traffic.
-        if node.last_stat_pc_ts is not None:
-            if max(0.0, float(now) - float(node.last_stat_pc_ts)) < self._config.t_green_s:
-                return False
+        if previous_uptime is None:
+            reboot_detected = current_uptime <= self._config.calibrating_uptime_s
+        elif current_uptime + 1 < int(previous_uptime):
+            reboot_detected = True
+        elif previous_reset_reason is not None and current_reset_reason != int(previous_reset_reason):
+            reboot_detected = True
+        elif (
+            previous_boot_marker is not None
+            and current_boot_marker is not None
+            and current_boot_marker != previous_boot_marker
+        ):
+            reboot_detected = True
 
-        if self._config.pps_min_yellow <= 0:
-            return False
-
-        # EVT-only nodes can be marked degraded only when both pps and seq loss suggest trouble.
-        if node.last_seq_evt is None:
-            return False
-        return node.pps_evt < self._config.pps_min_yellow and node.loss_evt_pct >= 50.0
+        if reboot_detected:
+            node.last_reboot_detected_pc_ts = observed_at
+        node.last_boot_marker = current_boot_marker
 
     def _update_seq_loss(self, *, node: NodeState, seq: int, stream: str) -> None:
         resolved_seq = int(seq) & 0xFFFF
@@ -181,14 +226,17 @@ class NodeRegistry:
             last_seq = node.last_seq_evt
             seen_forward = node._evt_seen_forward
             missing_packets = node._evt_missing_packets
+            recovery_streak = node._evt_recovery_streak
         else:
             last_seq = node.last_seq_stat
             seen_forward = node._stat_seen_forward
             missing_packets = node._stat_missing_packets
+            recovery_streak = node._stat_recovery_streak
 
         if last_seq is None:
             last_seq = resolved_seq
             seen_forward += 1
+            recovery_streak = 1
         else:
             delta = (resolved_seq - last_seq) & 0xFFFF
             if delta == 0:
@@ -196,6 +244,9 @@ class NodeRegistry:
             elif delta < 0x8000:
                 if delta > 1:
                     missing_packets += delta - 1
+                    recovery_streak = 1
+                else:
+                    recovery_streak += 1
                 seen_forward += 1
                 last_seq = resolved_seq
             else:
@@ -209,12 +260,22 @@ class NodeRegistry:
             node.last_seq_evt = last_seq
             node._evt_seen_forward = seen_forward
             node._evt_missing_packets = missing_packets
+            node._evt_recovery_streak = recovery_streak
             node.loss_evt_pct = loss_pct
         else:
             node.last_seq_stat = last_seq
             node._stat_seen_forward = seen_forward
             node._stat_missing_packets = missing_packets
+            node._stat_recovery_streak = recovery_streak
             node.loss_stat_pct = loss_pct
+
+    @staticmethod
+    def _resolve_boot_marker(state_flags: int | None) -> int | None:
+        if state_flags is None:
+            return None
+        if state_flags < 0 or state_flags > 0xFF:
+            return None
+        return (int(state_flags) >> 4) & 0x0F
 
     def _to_snapshot(self, node: NodeState) -> NodeSnapshot:
         return NodeSnapshot(
@@ -242,4 +303,5 @@ class NodeRegistry:
             fw_major=node.fw_major,
             fw_minor=node.fw_minor,
             reset_reason=node.reset_reason,
+            status_reason=node.status_reason,
         )

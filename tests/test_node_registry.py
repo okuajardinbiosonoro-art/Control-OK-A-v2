@@ -97,6 +97,7 @@ def test_empty_registry_snapshot_and_summary_are_coherent() -> None:
     summary = registry.get_summary(now=0.0)
     assert summary.total_nodes == 0
     assert summary.online_count == 0
+    assert summary.calibrating_count == 0
     assert summary.degraded_count == 0
     assert summary.offline_count == 0
     assert summary.total_pps_evt == 0.0
@@ -227,6 +228,54 @@ def test_node_returns_to_online_after_new_traffic() -> None:
     assert recovered_snapshot is not None and recovered_snapshot.status is NodeStatus.ONLINE
 
 
+def test_recent_reboot_prefers_calibrating_over_degraded() -> None:
+    registry = NodeRegistry(
+        NodeRegistryConfig(
+            t_green_s=4.0,
+            t_red_s=10.0,
+            calibrating_hold_s=6.0,
+            calibrating_uptime_s=20,
+        )
+    )
+    registry.observe_stat(_stat(node_id=63, seq=1, uptime_s=5, reset_reason=2), received_at=0.0)
+
+    snapshot = registry.get_node_snapshot(63, now=0.5)
+    assert snapshot is not None
+    assert snapshot.status is NodeStatus.CALIBRATING
+    assert snapshot.status_reason == "calibrating"
+
+
+def test_node_recovers_from_degraded_after_stable_stat_streak() -> None:
+    registry = NodeRegistry(
+        NodeRegistryConfig(
+            t_green_s=5.0,
+            t_red_s=10.0,
+            pps_window_s=5.0,
+            stat_loss_yellow_pct=25.0,
+            stat_recovery_packets_online=3,
+        )
+    )
+    registry.observe_stat(_stat(node_id=64, seq=1), received_at=0.0)
+    registry.observe_stat(_stat(node_id=64, seq=2), received_at=1.0)
+    registry.observe_stat(_stat(node_id=64, seq=5), received_at=2.0)
+
+    degraded = registry.get_node_snapshot(64, now=2.1)
+    assert degraded is not None
+    assert degraded.status is NodeStatus.DEGRADED
+    assert degraded.status_reason == "recovering"
+
+    registry.observe_stat(_stat(node_id=64, seq=6), received_at=3.0)
+    still_degraded = registry.get_node_snapshot(64, now=3.1)
+    assert still_degraded is not None
+    assert still_degraded.status is NodeStatus.DEGRADED
+
+    registry.observe_stat(_stat(node_id=64, seq=7), received_at=4.0)
+    recovered = registry.get_node_snapshot(64, now=4.1)
+    assert recovered is not None
+    assert recovered.status is NodeStatus.ONLINE
+    assert recovered.status_reason == "healthy traffic"
+
+
 def test_pps_evt_and_pps_stat_use_moving_window() -> None:
     registry = NodeRegistry(NodeRegistryConfig(pps_window_s=2.0, t_green_s=5.0, t_red_s=10.0))
     registry.observe_evt(_evt(node_id=70, seq=1), received_at=0.0)
@@ -271,19 +320,29 @@ def test_clear_removes_all_nodes_and_metrics() -> None:
     summary = registry.get_summary(now=0.0)
     assert summary.total_nodes == 0
     assert summary.online_count == 0
+    assert summary.calibrating_count == 0
     assert summary.degraded_count == 0
     assert summary.offline_count == 0
 
 
 def test_summary_counts_reflect_statuses_for_all_nodes() -> None:
-    registry = NodeRegistry(NodeRegistryConfig(t_green_s=5.0, t_red_s=10.0, pps_window_s=5.0))
+    registry = NodeRegistry(
+        NodeRegistryConfig(
+            t_green_s=5.0,
+            t_red_s=10.0,
+            pps_window_s=5.0,
+            calibrating_uptime_s=20,
+        )
+    )
     registry.observe_stat(_stat(node_id=100, seq=1), received_at=18.0)  # online at now=20
     registry.observe_stat(_stat(node_id=101, seq=1), received_at=15.0)  # degraded at now=20
     registry.observe_stat(_stat(node_id=102, seq=1), received_at=8.0)  # offline at now=20
+    registry.observe_stat(_stat(node_id=103, seq=1, uptime_s=10, reset_reason=1), received_at=19.0)  # calibrating at now=20
 
     summary = registry.get_summary(now=20.0)
-    assert summary.total_nodes == 3
+    assert summary.total_nodes == 4
     assert summary.online_count == 1
+    assert summary.calibrating_count == 1
     assert summary.degraded_count == 1
     assert summary.offline_count == 1
     assert summary.total_pps_evt >= 0.0

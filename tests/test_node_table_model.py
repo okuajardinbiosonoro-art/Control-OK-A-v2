@@ -23,6 +23,7 @@ def _node_snapshot(
     last_seen_pc_ts: float,
     note: int | None = None,
     vel: int | None = None,
+    status_reason: str = "healthy traffic",
 ) -> NodeSnapshot:
     return NodeSnapshot(
         node_id=node_id,
@@ -44,6 +45,7 @@ def _node_snapshot(
         last_uptime_s=10,
         reported_pps_x10=10,
         status=status,
+        status_reason=status_reason,
     )
 
 
@@ -65,3 +67,21 @@ def test_node_table_model_renders_expected_columns_and_values() -> None:
     assert model.data(model.index(0, 8), Qt.DisplayRole) == "64 / 100"
     assert model.data(model.index(1, 0), Qt.DisplayRole) == "20"
     assert model.data(model.index(1, 3), Qt.DisplayRole) == "Degradado"
+
+
+def test_node_table_model_exposes_status_reason_as_tooltip() -> None:
+    model = NodeTableModel()
+    snapshots = [
+        _node_snapshot(
+            node_id=10,
+            status=NodeStatus.CALIBRATING,
+            last_seen_pc_ts=100.0,
+            status_reason="calibrating",
+        ),
+    ]
+    model.set_snapshots(snapshots, now_monotonic=100.5)
+
+    assert model.data(model.index(0, 3), Qt.DisplayRole) == "En calibración"
+    assert "motivo: en calibración" in str(
+        model.data(model.index(0, 3), Qt.ToolTipRole)
+    ).lower()
