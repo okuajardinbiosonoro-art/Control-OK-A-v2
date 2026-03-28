@@ -219,6 +219,24 @@ class FirmwareCatalogStore:
         )
         return artifact
 
+    def replace_artifact(self, artifact: FirmwareArtifact) -> FirmwareArtifact:
+        existing = self.get_by_id(artifact.artifact_id)
+        if existing is None:
+            raise FirmwareArtifactNotFoundError(
+                f"Firmware no encontrado para reemplazar: {artifact.artifact_id}"
+            )
+
+        updated_artifacts = tuple(
+            artifact if item.artifact_id == artifact.artifact_id else item
+            for item in self._catalog.artifacts
+        )
+        self._catalog = replace(
+            self._catalog,
+            artifacts=updated_artifacts,
+            updated_at_utc=utc_now_iso(),
+        )
+        return artifact
+
     def set_current(self, artifact_id: str) -> FirmwareArtifact:
         target_artifact = self.get_by_id(artifact_id)
         if target_artifact is None:

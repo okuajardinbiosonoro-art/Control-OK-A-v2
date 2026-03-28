@@ -26,9 +26,19 @@ from control_okua.core.firmware.catalog_store import (
     FirmwareCatalogStoreError,
     resolve_firmware_catalog_path,
 )
+from control_okua.core.firmware.ingest_models import (
+    FirmwareImportRequest,
+    FirmwareImportResult,
+    FirmwareImportValidationError,
+)
+from control_okua.core.firmware.ingest_service import (
+    DEFAULT_MANAGED_FIRMWARE_STORE_DIRNAME,
+    FirmwareIngestService,
+)
 
 __all__ = [
     "DEFAULT_FIRMWARE_CATALOG_FILENAME",
+    "DEFAULT_MANAGED_FIRMWARE_STORE_DIRNAME",
     "FirmwareArtifact",
     "FirmwareArtifactNotFoundError",
     "FirmwareCatalog",
@@ -36,6 +46,10 @@ __all__ = [
     "FirmwareCatalogSchemaError",
     "FirmwareCatalogStore",
     "FirmwareCatalogStoreError",
+    "FirmwareImportRequest",
+    "FirmwareImportResult",
+    "FirmwareImportValidationError",
+    "FirmwareIngestService",
     "FirmwareCatalogValidationError",
     "FirmwareStatus",
     "FirmwareTargetKind",
