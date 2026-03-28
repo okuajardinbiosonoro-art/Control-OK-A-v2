@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from control_okua.app_qt.firmware_import_dialog import FirmwareImportDialog
+from control_okua.app_qt.ota_campaign_dialog import OtaCampaignDialog
 from control_okua.app_qt.ota_deploy_dialog import OtaDeployDialog
 from control_okua.app_qt.models.firmware_catalog_table_model import FirmwareCatalogTableModel
 from control_okua.app_qt.viewmodels.firmware_manager_vm import (
@@ -108,6 +109,11 @@ class FirmwareManagerDialog(QDialog):
         self.ota_deploy_button.clicked.connect(self._on_ota_deploy_clicked)
         self.ota_deploy_button.setEnabled(self._session_controller is not None)
         actions_layout.addWidget(self.ota_deploy_button)
+
+        self.ota_campaign_button = QPushButton("OTA Campaign…", self)
+        self.ota_campaign_button.clicked.connect(self._on_ota_campaign_clicked)
+        self.ota_campaign_button.setEnabled(self._session_controller is not None)
+        actions_layout.addWidget(self.ota_campaign_button)
 
         self.open_store_button = QPushButton("Abrir carpeta firmware", self)
         self.open_store_button.clicked.connect(self._open_managed_store_folder)
@@ -408,6 +414,23 @@ class FirmwareManagerDialog(QDialog):
             return
 
         dialog = OtaDeployDialog(
+            session_controller=self._session_controller,
+            catalog_store=self._catalog_store,
+            preselected_artifact_id=self._current_selection_artifact_id,
+            parent=self,
+        )
+        dialog.exec()
+
+    def _on_ota_campaign_clicked(self) -> None:
+        if self._session_controller is None:
+            QMessageBox.warning(
+                self,
+                "OTA Campaign no disponible",
+                "Esta instancia de Firmware Manager no tiene SessionController asociado.",
+            )
+            return
+
+        dialog = OtaCampaignDialog(
             session_controller=self._session_controller,
             catalog_store=self._catalog_store,
             preselected_artifact_id=self._current_selection_artifact_id,

@@ -98,6 +98,19 @@ from control_okua.app_qt.viewmodels.ota_deploy_vm import (
     evaluate_ota_artifact_eligibility,
     format_ota_deploy_phase,
 )
+from control_okua.app_qt.viewmodels.ota_campaign_vm import (
+    OtaCampaignNodeRow,
+    build_ota_campaign_artifact_options,
+    build_ota_campaign_continue_hint,
+    build_ota_campaign_node_options,
+    build_ota_campaign_node_rows,
+    build_ota_campaign_result_details,
+    build_ota_campaign_result_summary,
+    build_ota_campaign_wave_preview,
+    format_ota_campaign_health_gate,
+    format_ota_campaign_node_outcome,
+    format_ota_campaign_status,
+)
 
 __all__ = [
     "build_profile_summary",
@@ -192,4 +205,15 @@ __all__ = [
     "build_recommended_rollout_channel",
     "evaluate_ota_artifact_eligibility",
     "format_ota_deploy_phase",
+    "OtaCampaignNodeRow",
+    "build_ota_campaign_artifact_options",
+    "build_ota_campaign_continue_hint",
+    "build_ota_campaign_node_options",
+    "build_ota_campaign_node_rows",
+    "build_ota_campaign_result_details",
+    "build_ota_campaign_result_summary",
+    "build_ota_campaign_wave_preview",
+    "format_ota_campaign_health_gate",
+    "format_ota_campaign_node_outcome",
+    "format_ota_campaign_status",
 ]
