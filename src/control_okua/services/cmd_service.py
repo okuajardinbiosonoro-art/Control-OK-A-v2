@@ -15,6 +15,7 @@ from control_okua.core.control_plane.protocol import (
     CmdSequenceManager,
     OkuaCmdId,
     build_ping_command,
+    build_ota_check_now_command,
     build_reboot_soft_command,
     build_request_stat_now_command,
     build_set_stat_rate_command,
@@ -191,6 +192,29 @@ class CmdService:
                 cmd_seq=cmd_seq,
                 nonce=nonce,
                 throttle_percent=throttle_percent,
+            ),
+        )
+
+    def send_ota_check_now(
+        self,
+        node_ip: str,
+        node_id: int,
+        *,
+        rollout_token: int,
+        source: str = "manual",
+    ) -> SentOkuaCommand:
+        return self._send_new_command(
+            node_ip=node_ip,
+            node_id=node_id,
+            source=source,
+            command_name="OTA_CHECK_NOW",
+            cmd_id=int(OkuaCmdId.OTA_CHECK_NOW),
+            packet_builder=lambda resolved_node_id, cmd_seq, nonce: build_ota_check_now_command(
+                secret=self._secret,
+                node_id_target=resolved_node_id,
+                cmd_seq=cmd_seq,
+                nonce=nonce,
+                rollout_token=rollout_token,
             ),
         )
 

@@ -14,6 +14,7 @@ from control_okua.core.udp.packet_models import (
     OkuaPacketType,
     OkuaStatPacket,
 )
+from control_okua.core.udp.ota_runtime import decode_okua_ota_runtime
 
 
 _HEADER_STRUCT = struct.Struct("<HBBHH")
@@ -146,6 +147,7 @@ def parse_okua_packet(
         reset_reason,
         rsv_raw,
     ) = _STAT_PAYLOAD_STRUCT.unpack(body)
+    ota_runtime = decode_okua_ota_runtime(tuple(rsv_raw))
     return OkuaStatPacket(
         header=header,
         uptime_s=uptime_s,
@@ -158,4 +160,7 @@ def parse_okua_packet(
         fw_minor=fw_minor,
         reset_reason=reset_reason,
         rsv=tuple(rsv_raw),
+        ota_state_code=ota_runtime.state_code,
+        ota_error_code=ota_runtime.error_code,
+        ota_flags=ota_runtime.flags,
     )

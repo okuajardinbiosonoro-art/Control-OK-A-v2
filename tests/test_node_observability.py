@@ -72,6 +72,7 @@ def _stat(
     fw_major: int = 1,
     fw_minor: int = 2,
     reset_reason: int = 0,
+    rsv: tuple[int, int, int] = (0, 0, 0),
 ) -> OkuaStatPacket:
     return OkuaStatPacket(
         header=OkuaHeader(
@@ -90,7 +91,7 @@ def _stat(
         fw_major=fw_major,
         fw_minor=fw_minor,
         reset_reason=reset_reason,
-        rsv=(0, 0, 0),
+        rsv=rsv,
     )
 
 
@@ -216,3 +217,22 @@ def test_runtime_tooltip_and_recent_events_are_actionable() -> None:
     assert "Eventos recientes:" in tooltip
     assert recent_events
     assert any("degradado" in item.lower() for item in recent_events)
+
+
+def test_runtime_tooltip_surfaces_ota_runtime_when_present() -> None:
+    registry = NodeRegistry()
+    registry.observe_stat(
+        _stat(
+            node_id=79,
+            seq=1,
+            rsv=(4, 0, 0x01),
+        ),
+        received_at=0.0,
+    )
+
+    snapshot = registry.get_node_snapshot(79, now=0.1)
+    assert snapshot is not None
+    tooltip = build_node_runtime_tooltip(snapshot, now_monotonic=0.1)
+
+    assert "OTA: descargando firmware" in tooltip
+    assert "OTA flags: check pendiente" in tooltip

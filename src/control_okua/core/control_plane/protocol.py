@@ -30,6 +30,7 @@ class OkuaCmdId(IntEnum):
     SET_THROTTLE = 0x04
     SET_STAT_RATE = 0x05
     REQUEST_STAT_NOW = 0x07
+    OTA_CHECK_NOW = 0x08
 
 
 SET_THROTTLE_ALLOWED_PERCENT: Final[tuple[int, ...]] = (25, 50, 100)
@@ -272,6 +273,34 @@ def build_set_throttle_command(
     )
 
 
+def build_ota_check_now_command(
+    *,
+    secret: bytes,
+    node_id_target: int,
+    cmd_seq: int,
+    nonce: int,
+    rollout_token: int,
+    is_retry: bool = False,
+) -> bytes:
+    resolved_node_id = _validate_u16("node_id_target", node_id_target)
+    if resolved_node_id == 0:
+        raise ValueError("OTA_CHECK_NOW solo permite unicast (node_id_target > 0).")
+    resolved_rollout_token = _validate_rollout_token(rollout_token)
+    arg0 = resolved_rollout_token & 0xFFFF
+    arg1 = (resolved_rollout_token >> 16) & 0xFFFF
+    return build_okua_cmd_bytes(
+        secret=secret,
+        node_id_target=resolved_node_id,
+        cmd_seq=cmd_seq,
+        cmd_id=int(OkuaCmdId.OTA_CHECK_NOW),
+        nonce=nonce,
+        arg0=arg0,
+        arg1=arg1,
+        is_retry=is_retry,
+        broadcast_intent=False,
+    )
+
+
 def build_cmd_flags(*, is_retry: bool, broadcast_intent: bool) -> int:
     flags = CMD_FLAG_ACK_REQUIRED
     if is_retry:
@@ -376,6 +405,16 @@ def _validate_set_throttle_percent(throttle_percent: int) -> int:
         f"throttle_percent invalido para SET_THROTTLE: {throttle_percent}. "
         f"Permitidos: {allowed}."
     )
+
+
+def _validate_rollout_token(rollout_token: int) -> int:
+    resolved = _validate_u64("rollout_token", rollout_token)
+    if resolved < 1 or resolved > 0xFFFFFFFF:
+        raise ValueError(
+            f"rollout_token invalido para OTA_CHECK_NOW: {rollout_token}. "
+            "Debe estar en 1..0xFFFFFFFF."
+        )
+    return resolved
 
 
 def _validate_u8(field_name: str, value: int) -> int:

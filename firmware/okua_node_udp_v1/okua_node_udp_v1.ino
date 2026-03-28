@@ -112,12 +112,27 @@
 #define PC_IP_D 254
 #endif
 
+#define OKUA_STR_INNER(x) #x
+#define OKUA_STR(x) OKUA_STR_INNER(x)
+
 // PC destino para EVT/STAT en la LAN OKUA
 IPAddress PC_IP(PC_IP_A, PC_IP_B, PC_IP_C, PC_IP_D);
 
 // Firmware version
 #define FW_MAJOR 1
 #define FW_MINOR 0
+#ifndef FW_PATCH
+#define FW_PATCH 0
+#endif
+#ifndef OKUA_FW_VERSION_STR
+#define OKUA_FW_VERSION_STR "1.0.0-dev"
+#endif
+#ifndef OKUA_FW_VERSION_CODE
+#define OKUA_FW_VERSION_CODE ((uint32_t)(FW_MAJOR) * 10000UL + (uint32_t)(FW_MINOR) * 100UL + (uint32_t)(FW_PATCH))
+#endif
+#ifndef OKUA_OTA_BASE_URL
+#define OKUA_OTA_BASE_URL "http://" OKUA_STR(PC_IP_A) "." OKUA_STR(PC_IP_B) "." OKUA_STR(PC_IP_C) "." OKUA_STR(PC_IP_D) ":8080"
+#endif
 
 
 /*============================================================================================
@@ -240,6 +255,8 @@ static const uint8_t FRUIT_ROUTE_COUNT = sizeof(FRUIT_ROUTES) / sizeof(FRUIT_ROU
 #include <mbedtls/md.h>
 
 #include "okua_control_plane.h"
+#include "okua_build_info.h"
+#include "okua_ota.h"
 
 
 /*============================================================================================
@@ -364,6 +381,27 @@ uint8_t g_bootMarker4 = 0;
 static const uint32_t CONTROL_REBOOT_DELAY_MS = 150UL;
 bool g_rebootPending = false;
 uint32_t g_rebootAtMs = 0;
+bool g_loopInitialized = false;
+
+static const OkuaBuildInfoConfig kOkuaBuildInfoConfig = {
+  (uint8_t)FW_MAJOR,
+  (uint8_t)FW_MINOR,
+  (uint8_t)FW_PATCH,
+  OKUA_FW_VERSION_STR,
+  (uint32_t)OKUA_FW_VERSION_CODE,
+  (ACTIVE_SENSOR == SENSOR_PLANT) ? "plant" : "fruit",
+  NODE_LABEL,
+  (ACTIVE_MODE == MODE_FIELD) ? "field" : "test",
+  "okua_v1",
+  "okua_node_udp_v1",
+  "esp32dev",
+};
+
+static const OkuaOtaConfig kOkuaOtaConfig = {
+  OKUA_OTA_BASE_URL,
+  45000UL,
+  8000UL,
+};
 
 enum CmdParseResult : uint8_t {
   CMD_PARSE_NONE = 0,
@@ -736,6 +774,7 @@ static inline bool okuaIsKnownCmdId(uint8_t cmd_id) {
     case OKUA_CMD_SET_STAT_RATE:
     case OKUA_CMD_SET_DEBUG:
     case OKUA_CMD_REQUEST_STAT_NOW:
+    case OKUA_CMD_OTA_CHECK_NOW:
       return true;
     default:
       return false;
@@ -751,6 +790,7 @@ static inline bool okuaIsImplementedCmdId(uint8_t cmd_id) {
     case OKUA_CMD_REBOOT_SOFT:
     case OKUA_CMD_SET_THROTTLE:
     case OKUA_CMD_SET_STAT_RATE:
+    case OKUA_CMD_OTA_CHECK_NOW:
       return true;
     default:
       return false;
@@ -816,6 +856,28 @@ void applyCommandSpecificAckPolicy(const ParsedCmdFrame& frame, OkuaAckPacket* a
         break;
       }
       // Valid SET_STAT_RATE remains ACCEPTED + OK (no EXECUTED stage in this flow).
+      ack->ack_stage = OKUA_ACK_STAGE_ACCEPTED;
+      ack->status_code = OKUA_STATUS_OK;
+      ack->err_detail = OKUA_ERR_NONE;
+      break;
+    }
+
+    case OKUA_CMD_OTA_CHECK_NOW: {
+      if (frame.packet.arg0 == 0 && frame.packet.arg1 == 0) {
+        ack->ack_stage = OKUA_ACK_STAGE_REJECTED;
+        ack->status_code = OKUA_STATUS_INVALID_ARG;
+        ack->err_detail = OKUA_ERR_ARG0_OUT_OF_RANGE;
+        break;
+      }
+      const OkuaOtaTelemetry ota = okuaOtaGetTelemetry();
+      if ((ota.flags & OKUA_OTA_FLAG_CHECK_PENDING) != 0 ||
+          (ota.flags & OKUA_OTA_FLAG_PENDING_VERIFY) != 0 ||
+          ota.state_code == OKUA_OTA_STATE_DOWNLOADING) {
+        ack->ack_stage = OKUA_ACK_STAGE_REJECTED;
+        ack->status_code = OKUA_STATUS_BUSY;
+        ack->err_detail = OKUA_ERR_CMD_IN_PROGRESS;
+        break;
+      }
       ack->ack_stage = OKUA_ACK_STAGE_ACCEPTED;
       ack->status_code = OKUA_STATUS_OK;
       ack->err_detail = OKUA_ERR_NONE;
@@ -1135,6 +1197,10 @@ void connectWiFiBlocking() {
   uint32_t t0 = millis();
   while (WiFi.status() != WL_CONNECTED) {
     delay(250);
+    if (okuaOtaShouldAbortWiFiConnect(millis())) {
+      okuaOtaHandleWiFiConnectTimeout();
+      return;
+    }
     if (millis() - t0 >= WIFI_CONNECT_TIMEOUT_MS) {
       WiFi.disconnect(true, true);
       delay(WIFI_RETRY_DELAY_MS);
@@ -1193,6 +1259,10 @@ void scheduleSoftReboot() {
 }
 
 void servicePendingControlActions() {
+  if (okuaOtaConsumePendingReboot()) {
+    sendOkuaStat(g_lastStateFlags);
+    scheduleSoftReboot();
+  }
   if (!g_rebootPending) return;
   if (!millisReached(millis(), g_rebootAtMs)) return;
   g_rebootPending = false;
@@ -1240,6 +1310,16 @@ void dispatchAcceptedCommandMinimal(const ParsedCmdFrame& frame) {
       // naturally resets to compile-time default after reboot.
       g_statIntervalMs = frame.packet.arg0;
       return;
+
+    case OKUA_CMD_OTA_CHECK_NOW: {
+      const uint32_t rollout_token =
+          ((uint32_t)frame.packet.arg1 << 16) | (uint32_t)frame.packet.arg0;
+      if (okuaOtaQueueCheck(rollout_token)) {
+        Serial.printf("[F3] OTA_CHECK_NOW accepted: rollout_token=0x%08lx\r\n", (unsigned long)rollout_token);
+        sendOkuaStat(g_lastStateFlags);
+      }
+      return;
+    }
 
     default:
       return;
@@ -1325,13 +1405,17 @@ bool sendOkuaStat(uint8_t state_flags) {
   p.fw_major       = FW_MAJOR;
   p.fw_minor       = FW_MINOR;
   p.reset_reason   = (uint8_t)esp_reset_reason();
-  p.rsv[0] = p.rsv[1] = p.rsv[2] = 0;
+  const OkuaOtaTelemetry ota = okuaOtaGetTelemetry();
+  p.rsv[0] = ota.state_code;
+  p.rsv[1] = ota.error_code;
+  p.rsv[2] = ota.flags;
 
   bool ok = sendUdpRaw((const uint8_t*)&p, sizeof(p), OKUA_STAT_PORT);
   if (ok) {
     g_lastStatMs = nowMs;
     g_lastEvtCounterResetMs = nowMs;
     g_evtCountSinceLastStat = 0;
+    okuaOtaNotifyStatSent();
   }
   return ok;
 }
@@ -1804,6 +1888,9 @@ void setup() {
   g_fruitPrevV = g_fruitFilteredV;
   g_plantSmoothV = readVmed3();
   g_plantLastRawV = g_plantSmoothV;
+  okuaConfigureBuildInfo(kOkuaBuildInfoConfig);
+  okuaOtaConfigure(kOkuaOtaConfig);
+  okuaOtaBegin();
 
   connectWiFiBlocking();
 
@@ -1822,6 +1909,14 @@ void setup() {
   Serial.print("MODE          : "); Serial.println((ACTIVE_MODE == MODE_TEST) ? "TEST" : "FIELD");
   Serial.print("SENSOR        : "); Serial.println((ACTIVE_SENSOR == SENSOR_PLANT) ? "PLANT" : "FRUIT");
   Serial.print("BOOT_MARKER4  : "); Serial.println(g_bootMarker4);
+  Serial.print("FW_VERSION    : "); Serial.println(okuaBuildVersionStr());
+  Serial.print("FW_VERSION_CD : "); Serial.println((unsigned long)okuaBuildVersionCode());
+  Serial.print("FW_TARGET     : "); Serial.print(okuaBuildTargetKind()); Serial.print("/"); Serial.println(okuaBuildTargetVariant());
+  Serial.print("FW_PROFILE    : "); Serial.println(okuaBuildProfile());
+  Serial.print("FW_PROTOCOL   : "); Serial.println(okuaBuildProtocolVersion());
+  Serial.print("FW_ARTIFACT   : "); Serial.println(okuaBuildArtifactId());
+  Serial.print("FW_SHA256     : "); Serial.println(okuaBuildArtifactSha256());
+  Serial.print("OTA_BASE_URL  : "); Serial.println(OKUA_OTA_BASE_URL);
   Serial.println("==========================================");
 
   // Emit a startup STAT so runtime can observe fresh uptime/reset metadata quickly.
@@ -1834,11 +1929,13 @@ void setup() {
 ============================================================================================*/
 
 void loop() {
+  g_loopInitialized = true;
   ensureLink();
 
   // Parser CMD + ACK + seguridad minima + dispatch minimo (Ticket 13.6).
   serviceControlPlaneIngress();
   servicePendingControlActions();
+  okuaOtaService(millis(), WiFi.status() == WL_CONNECTED, g_loopInitialized);
 
   // Limpiar flags transitorios de reconnect una vez enlazado
   if (WiFi.status() == WL_CONNECTED) {

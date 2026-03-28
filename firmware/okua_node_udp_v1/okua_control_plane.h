@@ -52,6 +52,7 @@ enum OkuaCmdId : uint8_t {
   OKUA_CMD_SET_STAT_RATE = 0x05,
   OKUA_CMD_SET_DEBUG = 0x06,
   OKUA_CMD_REQUEST_STAT_NOW = 0x07,
+  OKUA_CMD_OTA_CHECK_NOW = 0x08,
 };
 
 enum OkuaAckStage : uint8_t {

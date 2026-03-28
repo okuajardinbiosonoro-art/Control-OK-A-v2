@@ -53,6 +53,9 @@ class OkuaStatPacket:
     fw_minor: int
     reset_reason: int
     rsv: tuple[int, int, int]
+    ota_state_code: int | None = None
+    ota_error_code: int | None = None
+    ota_flags: int | None = None
 
 
 OkuaPacket = OkuaEvtPacket | OkuaStatPacket

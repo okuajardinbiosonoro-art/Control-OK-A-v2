@@ -113,6 +113,9 @@ def test_parse_valid_okua_stat_packet() -> None:
     assert packet.fw_minor == 7
     assert packet.reset_reason == 4
     assert packet.rsv == (0x99, 0x88, 0x77)
+    assert packet.ota_state_code == 0x99
+    assert packet.ota_error_code == 0x88
+    assert packet.ota_flags == 0x77
 
 
 def test_invalid_magic_raises_controlled_error() -> None:

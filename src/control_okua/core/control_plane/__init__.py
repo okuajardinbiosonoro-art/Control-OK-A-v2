@@ -67,6 +67,7 @@ from control_okua.core.control_plane.protocol import (
     build_cmd_flags,
     build_okua_cmd_bytes,
     build_ping_command,
+    build_ota_check_now_command,
     parse_okua_ack_bytes,
     build_reboot_soft_command,
     build_request_stat_now_command,
@@ -130,6 +131,7 @@ __all__ = [
     "build_okua_cmd_bytes",
     "parse_okua_ack_bytes",
     "build_ping_command",
+    "build_ota_check_now_command",
     "build_reboot_soft_command",
     "build_request_stat_now_command",
 ]

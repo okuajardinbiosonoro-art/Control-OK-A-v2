@@ -16,6 +16,7 @@ Current minimal functional commands in firmware:
 - `PING`
 - `REQUEST_STAT_NOW`
 - `REBOOT_SOFT`
+- `OTA_CHECK_NOW`
 
 Known but still not implemented (`UNSUPPORTED_CMD`):
 
@@ -50,6 +51,7 @@ Build and validation entrypoints:
 - PlatformIO build config: `platformio.ini` (env: `okua_node_esp32dev`)
 - CI workflow: `.github/workflows/firmware-build.yml`
 - Host-side F3 validator: `tools/firmware_f3_validator.py`
+- OTA runtime notes: `docs/firmware/ota_firmware_runtime.md`
 
 Local Wi-Fi secrets override:
 

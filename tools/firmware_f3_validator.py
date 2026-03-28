@@ -26,6 +26,7 @@ OKUA_STAT_PORT = 5006
 OKUA_CMD_PING = 0x01
 OKUA_CMD_REBOOT_SOFT = 0x02
 OKUA_CMD_REQUEST_STAT_NOW = 0x07
+OKUA_CMD_OTA_CHECK_NOW = 0x08
 
 OKUA_ACK_STAGE_ACCEPTED = 1
 OKUA_STATUS_OK = 0x00
@@ -41,6 +42,7 @@ CMD_NAME_TO_ID = {
     "ping": OKUA_CMD_PING,
     "request_stat_now": OKUA_CMD_REQUEST_STAT_NOW,
     "reboot_soft": OKUA_CMD_REBOOT_SOFT,
+    "ota_check_now": OKUA_CMD_OTA_CHECK_NOW,
 }
 
 ACK_STAGE_NAME = {
@@ -185,6 +187,11 @@ def resolve_args_for_command(args: argparse.Namespace, cmd_id: int) -> tuple[int
         if delay != 0 and not (50 <= delay <= 5000):
             raise ValueError("--reboot-delay-ms debe ser 0 o estar en 50..5000.")
         return delay & 0xFFFF, 0
+    if cmd_id == OKUA_CMD_OTA_CHECK_NOW:
+        rollout_token = parse_u32(args.rollout_token)
+        if rollout_token == 0:
+            raise ValueError("--rollout-token debe ser > 0 para ota_check_now.")
+        return rollout_token & 0xFFFF, (rollout_token >> 16) & 0xFFFF
     return 0, 0
 
 
@@ -458,6 +465,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=parse_u16,
         default=200,
         help="arg0 for reboot_soft (0 or 50..5000).",
+    )
+    parser.add_argument(
+        "--rollout-token",
+        default="0x1",
+        help="Token uint32 para OTA_CHECK_NOW (ej. 0x20260328).",
     )
 
     parser.add_argument("--ack-timeout-ms", type=int, default=1200, help="ACK wait timeout.")

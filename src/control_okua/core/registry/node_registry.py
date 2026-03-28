@@ -19,6 +19,7 @@ from control_okua.core.registry.node_status_policy import (
     NodeStatusInputs,
     evaluate_node_status,
 )
+from control_okua.core.udp import decode_okua_ota_runtime
 from control_okua.core.udp import OkuaEvtPacket, OkuaStatPacket
 
 
@@ -73,6 +74,16 @@ class NodeRegistry:
         node.fw_major = packet.fw_major
         node.fw_minor = packet.fw_minor
         node.reset_reason = packet.reset_reason
+        ota_runtime = decode_okua_ota_runtime(packet.rsv)
+        node.ota_state_code = ota_runtime.state_code
+        node.ota_error_code = ota_runtime.error_code
+        node.ota_flags = ota_runtime.flags
+        node.ota_state_key = ota_runtime.state_key
+        node.ota_error_key = ota_runtime.error_key
+        node.ota_check_pending = ota_runtime.check_pending
+        node.ota_pending_reboot = ota_runtime.pending_reboot
+        node.ota_pending_verify = ota_runtime.pending_verify
+        node.ota_health_confirmed = ota_runtime.health_confirmed
 
         self._update_seq_loss(node=node, seq=packet.header.seq, stream="stat")
         node.pps_stat = self._record_pps_sample(node._stat_timestamps, now)
@@ -412,6 +423,15 @@ class NodeRegistry:
             reset_reason=node.reset_reason,
             status_reason=node.status_reason,
             health_summary=node.health_summary,
+            ota_state_code=node.ota_state_code,
+            ota_error_code=node.ota_error_code,
+            ota_flags=node.ota_flags,
+            ota_state_key=node.ota_state_key,
+            ota_error_key=node.ota_error_key,
+            ota_check_pending=node.ota_check_pending,
+            ota_pending_reboot=node.ota_pending_reboot,
+            ota_pending_verify=node.ota_pending_verify,
+            ota_health_confirmed=node.ota_health_confirmed,
             last_status_change_pc_ts=node.last_status_change_pc_ts,
             last_reboot_detected_pc_ts=node.last_reboot_detected_pc_ts,
             last_seen_age_s=last_seen_age_s,

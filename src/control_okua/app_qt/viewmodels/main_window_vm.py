@@ -857,6 +857,22 @@ def node_health_summary_key(snapshot: object) -> str:
     return text
 
 
+def node_ota_state_key(snapshot: object) -> str:
+    raw_state = _node_attr(snapshot, "ota_state_key")
+    if raw_state is None:
+        return "idle"
+    text = str(raw_state).strip().lower()
+    return text or "idle"
+
+
+def node_ota_error_key(snapshot: object) -> str:
+    raw_error = _node_attr(snapshot, "ota_error_key")
+    if raw_error is None:
+        return "none"
+    text = str(raw_error).strip().lower()
+    return text or "none"
+
+
 def format_node_status(snapshot: object) -> str:
     status_key = node_status_key(snapshot)
     if status_key == NodeStatus.ONLINE.value:
@@ -904,6 +920,83 @@ def format_node_health_summary(snapshot: object) -> str:
     if summary_key == "no recent packets":
         return "sin tráfico reciente"
     return summary_key
+
+
+def format_node_ota_state(snapshot: object) -> str:
+    state_key = node_ota_state_key(snapshot)
+    if state_key == "idle":
+        return "inactiva"
+    if state_key == "triggered":
+        return "trigger OTA recibido"
+    if state_key == "fetching_manifest":
+        return "consultando manifest"
+    if state_key == "validating_manifest":
+        return "validando manifest"
+    if state_key == "downloading":
+        return "descargando firmware"
+    if state_key == "ready_reboot":
+        return "instalado, reinicio pendiente"
+    if state_key == "boot_validating":
+        return "validando arranque nuevo"
+    if state_key == "boot_confirmed":
+        return "arranque OTA confirmado"
+    if state_key == "error":
+        return "error OTA"
+    return state_key
+
+
+def format_node_ota_error(snapshot: object) -> str:
+    error_key = node_ota_error_key(snapshot)
+    if error_key == "none":
+        return "sin error"
+    if error_key == "invalid_trigger":
+        return "trigger inválido"
+    if error_key == "manifest_http":
+        return "error HTTP de manifest"
+    if error_key == "manifest_parse":
+        return "manifest inválido"
+    if error_key == "manifest_incompatible":
+        return "manifest incompatible"
+    if error_key == "version_rejected":
+        return "versión rechazada"
+    if error_key == "already_current":
+        return "artifact ya instalado"
+    if error_key == "download_http":
+        return "error HTTP de descarga"
+    if error_key == "download_size":
+        return "tamaño OTA inválido"
+    if error_key == "download_hash":
+        return "hash OTA inválido"
+    if error_key == "ota_begin":
+        return "falló inicio OTA"
+    if error_key == "ota_write":
+        return "falló escritura OTA"
+    if error_key == "ota_finalize":
+        return "falló cierre OTA"
+    if error_key == "boot_wifi_timeout":
+        return "timeout Wi-Fi tras OTA"
+    if error_key == "boot_stat_timeout":
+        return "STAT no emitido tras OTA"
+    if error_key == "boot_identity_mismatch":
+        return "identidad OTA inconsistente"
+    if error_key == "boot_validate":
+        return "falló validación de arranque"
+    if error_key == "nvs_error":
+        return "persistencia OTA falló"
+    return error_key
+
+
+def format_node_ota_flags(snapshot: object) -> str:
+    flags: list[str] = []
+    if bool(_node_attr(snapshot, "ota_check_pending")):
+        flags.append("check pendiente")
+    if bool(_node_attr(snapshot, "ota_pending_reboot")):
+        flags.append("reinicio pendiente")
+    if bool(_node_attr(snapshot, "ota_pending_verify")):
+        flags.append("boot pendiente verify")
+    if bool(_node_attr(snapshot, "ota_health_confirmed")):
+        flags.append("boot confirmado")
+    return ", ".join(flags) if flags else "sin flags"
 
 
 def format_node_status_detail(snapshot: object) -> str:
@@ -973,6 +1066,14 @@ def build_node_runtime_tooltip(
     reset_reason = _node_attr(snapshot, "reset_reason")
     if reset_reason is not None:
         lines.append(f"Reset reason: {reset_reason}")
+    ota_state = node_ota_state_key(snapshot)
+    ota_error = node_ota_error_key(snapshot)
+    ota_flags = format_node_ota_flags(snapshot)
+    if ota_state != "idle" or ota_error != "none" or ota_flags != "sin flags":
+        lines.append(f"OTA: {format_node_ota_state(snapshot)}")
+        if ota_error != "none":
+            lines.append(f"OTA error: {format_node_ota_error(snapshot)}")
+        lines.append(f"OTA flags: {ota_flags}")
 
     recent_events = format_node_recent_events(
         snapshot,

@@ -15,6 +15,14 @@ from control_okua.core.udp.packet_parser import (
     parse_okua_header,
     parse_okua_packet,
 )
+from control_okua.core.udp.ota_runtime import (
+    OTA_FLAG_CHECK_PENDING,
+    OTA_FLAG_HEALTH_CONFIRMED,
+    OTA_FLAG_PENDING_REBOOT,
+    OTA_FLAG_PENDING_VERIFY,
+    OkuaOtaRuntimeInfo,
+    decode_okua_ota_runtime,
+)
 
 __all__ = [
     "OKUA_MAGIC",
@@ -30,4 +38,10 @@ __all__ = [
     "OkuaPacketParseError",
     "parse_okua_header",
     "parse_okua_packet",
+    "OTA_FLAG_CHECK_PENDING",
+    "OTA_FLAG_PENDING_REBOOT",
+    "OTA_FLAG_PENDING_VERIFY",
+    "OTA_FLAG_HEALTH_CONFIRMED",
+    "OkuaOtaRuntimeInfo",
+    "decode_okua_ota_runtime",
 ]

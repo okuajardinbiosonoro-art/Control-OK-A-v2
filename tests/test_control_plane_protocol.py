@@ -11,6 +11,7 @@ from control_okua.core.control_plane.protocol import (
     SET_THROTTLE_ALLOWED_PERCENT,
     SET_STAT_RATE_ALLOWED_MS,
     OkuaCmdId,
+    build_ota_check_now_command,
     build_ping_command,
     build_request_stat_now_command,
     build_set_throttle_command,
@@ -181,3 +182,21 @@ def test_set_throttle_command_rejects_values_outside_allowlist() -> None:
         assert "throttle_percent invalido" in str(exc)
     else:
         raise AssertionError("Se esperaba ValueError para throttle_percent fuera de allowlist.")
+
+
+def test_ota_check_now_command_serializes_rollout_token_across_arg0_arg1() -> None:
+    secret = b"ticket-25-secret"
+    packet = build_ota_check_now_command(
+        secret=secret,
+        node_id_target=22,
+        cmd_seq=77,
+        nonce=0x0102030405060708,
+        rollout_token=0x20260328,
+    )
+    unpacked = _CMD_STRUCT.unpack(packet)
+
+    assert len(packet) == OKUA_CMD_PACKET_SIZE
+    assert unpacked[5] == int(OkuaCmdId.OTA_CHECK_NOW)
+    assert unpacked[7] == 0x0328
+    assert unpacked[8] == 0x2026
+    assert unpacked[6] == CMD_FLAG_ACK_REQUIRED

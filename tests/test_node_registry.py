@@ -68,6 +68,7 @@ def _stat(
     fw_major: int = 1,
     fw_minor: int = 2,
     reset_reason: int = 0,
+    rsv: tuple[int, int, int] = (0, 0, 0),
 ) -> OkuaStatPacket:
     return OkuaStatPacket(
         header=OkuaHeader(
@@ -86,7 +87,7 @@ def _stat(
         fw_major=fw_major,
         fw_minor=fw_minor,
         reset_reason=reset_reason,
-        rsv=(0, 0, 0),
+        rsv=rsv,
     )
 
 
@@ -151,6 +152,26 @@ def test_observe_stat_updates_node_telemetry() -> None:
     assert snapshot.fw_major == 2
     assert snapshot.fw_minor == 9
     assert snapshot.reset_reason == 3
+
+
+def test_observe_stat_decodes_ota_runtime_from_reserved_bytes() -> None:
+    registry = NodeRegistry()
+    registry.observe_stat(
+        _stat(
+            node_id=22,
+            seq=5,
+            rsv=(5, 0, 0x02),
+        ),
+        received_at=1.0,
+    )
+
+    snapshot = registry.get_node_snapshot(22, now=1.0)
+    assert snapshot is not None
+    assert snapshot.ota_state_code == 5
+    assert snapshot.ota_error_code == 0
+    assert snapshot.ota_state_key == "ready_reboot"
+    assert snapshot.ota_error_key == "none"
+    assert snapshot.ota_pending_reboot is True
 
 
 def test_evt_sequence_gap_generates_expected_loss_pct() -> None:

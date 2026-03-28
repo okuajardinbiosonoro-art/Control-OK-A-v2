@@ -168,3 +168,36 @@ def test_cmd_service_send_set_throttle_uses_curated_value(tmp_path) -> None:
     # cmd_id is byte 8, arg0 little-endian at bytes 10..11
     assert payload[8] == int(OkuaCmdId.SET_THROTTLE)
     assert payload[10:12] == (50).to_bytes(2, byteorder="little")
+
+
+def test_cmd_service_send_ota_check_now_uses_rollout_token(tmp_path) -> None:
+    created_sockets: list[_FakeSendOnlySocket] = []
+
+    def socket_factory() -> _FakeSendOnlySocket:
+        sock = _FakeSendOnlySocket()
+        created_sockets.append(sock)
+        return sock
+
+    service = CmdService(
+        secret=b"ticket-25-secret",
+        nonce_manager=NonceManager(
+            state_path=tmp_path / "control_plane_state.json",
+            time_provider=lambda: 1_930_000_000,
+        ),
+        seq_manager=CmdSequenceManager(start_seq=105),
+        socket_factory=socket_factory,
+    )
+    sent = service.send_ota_check_now(
+        "192.168.88.250",
+        19,
+        rollout_token=0x20260328,
+        source="ota_manual",
+    )
+
+    assert sent.command_name == "OTA_CHECK_NOW"
+    assert sent.cmd_id == int(OkuaCmdId.OTA_CHECK_NOW)
+    payload, target = created_sockets[0].sent[0]
+    assert target == ("192.168.88.250", OKUA_CMD_PORT)
+    assert payload[8] == int(OkuaCmdId.OTA_CHECK_NOW)
+    assert payload[10:12] == (0x0328).to_bytes(2, byteorder="little")
+    assert payload[12:14] == (0x2026).to_bytes(2, byteorder="little")
