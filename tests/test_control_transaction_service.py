@@ -1,6 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
+import sys
+
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+SRC_DIR = ROOT_DIR / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 from control_okua.core.control_plane.audit import ControlAuditEventType
 from control_okua.core.control_plane.pending import (
@@ -113,6 +121,23 @@ class _FakeCmdService:
         return self._send(
             command_name="SET_THROTTLE",
             cmd_id=0x04,
+            node_ip=node_ip,
+            node_id=node_id,
+            source=source,
+        )
+
+    def send_ota_check_now(
+        self,
+        node_ip: str,
+        node_id: int,
+        *,
+        rollout_token: int,
+        source: str = "manual",
+    ) -> SentOkuaCommand:
+        _ = rollout_token
+        return self._send(
+            command_name="OTA_CHECK_NOW",
+            cmd_id=0x08,
             node_ip=node_ip,
             node_id=node_id,
             source=source,
@@ -690,6 +715,48 @@ def test_set_throttle_transaction_uses_same_ack_pipeline() -> None:
 
     assert result.command_name == "SET_THROTTLE"
     assert result.cmd_id == 0x04
+    assert result.final_status is ControlTransactionFinalStatus.ACK_MATCHED
+    assert result.attempt_count == 1
+    assert _event_types(result) == [
+        ControlAuditEventType.COMMAND_SENT.value,
+        ControlAuditEventType.COMMAND_ACK.value,
+    ]
+
+
+def test_ota_check_now_transaction_uses_same_ack_pipeline() -> None:
+    clock = _FakeClock()
+    store = PendingCommandStore(clock=clock)
+    cmd = _FakeCmdService(cmd_seq=932, nonce=0xBBBB000000000003)
+    expected_sent = _make_sent(
+        command_name="OTA_CHECK_NOW",
+        cmd_id=0x08,
+        node_ip="192.168.88.251",
+        node_id=20,
+        cmd_seq=932,
+        nonce=0xBBBB000000000003,
+    )
+    listener = _FakeAckListener(
+        pending_store=store,
+        scripted_results=[_matched_for(expected_sent)],
+        running=True,
+    )
+    service = ControlTransactionService(
+        cmd_service=cmd,
+        ack_listener=listener,
+        clock=clock,
+        sleep_fn=clock.sleep,
+    )
+
+    result = service.send_ota_check_now_and_wait_ack(
+        "192.168.88.251",
+        20,
+        rollout_token=0x20260328,
+        ack_timeout_ms=120,
+        max_retries=0,
+    )
+
+    assert result.command_name == "OTA_CHECK_NOW"
+    assert result.cmd_id == 0x08
     assert result.final_status is ControlTransactionFinalStatus.ACK_MATCHED
     assert result.attempt_count == 1
     assert _event_types(result) == [

@@ -799,7 +799,10 @@ class MainWindow(QMainWindow):
 
     def open_firmware_manager(self) -> None:
         if self._firmware_manager_dialog is None:
-            self._firmware_manager_dialog = FirmwareManagerDialog(parent=self)
+            self._firmware_manager_dialog = FirmwareManagerDialog(
+                session_controller=self.session_controller,
+                parent=self,
+            )
 
         self._firmware_manager_dialog.refresh_catalog()
         self._firmware_manager_dialog.show()

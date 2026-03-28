@@ -82,6 +82,22 @@ from control_okua.app_qt.viewmodels.node_presentation import (
     resolve_node_label,
     resolve_node_sort_key,
 )
+from control_okua.app_qt.viewmodels.ota_deploy_vm import (
+    OtaDeployArtifactOption,
+    OtaDeployNodeOption,
+    OtaDeployNodeRow,
+    build_ota_ack_label,
+    build_ota_artifact_option,
+    build_ota_artifact_options,
+    build_ota_deploy_result_details,
+    build_ota_deploy_result_summary,
+    build_ota_node_options,
+    build_ota_node_result_rows,
+    build_recommended_rollout_channel,
+    build_ota_runtime_label,
+    evaluate_ota_artifact_eligibility,
+    format_ota_deploy_phase,
+)
 
 __all__ = [
     "build_profile_summary",
@@ -162,4 +178,18 @@ __all__ = [
     "build_version_sort_key",
     "filter_firmware_catalog_rows",
     "summarize_warnings",
+    "OtaDeployArtifactOption",
+    "OtaDeployNodeOption",
+    "OtaDeployNodeRow",
+    "build_ota_ack_label",
+    "build_ota_artifact_option",
+    "build_ota_artifact_options",
+    "build_ota_deploy_result_details",
+    "build_ota_deploy_result_summary",
+    "build_ota_node_options",
+    "build_ota_node_result_rows",
+    "build_ota_runtime_label",
+    "build_recommended_rollout_channel",
+    "evaluate_ota_artifact_eligibility",
+    "format_ota_deploy_phase",
 ]

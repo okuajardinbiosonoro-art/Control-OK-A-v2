@@ -406,6 +406,26 @@ class SessionController(QObject):
         self._record_control_plane_transaction_result(result=result, runtime=runtime)
         return result
 
+    def send_control_ota_check_now(
+        self,
+        *,
+        node_id: int,
+        rollout_token: int,
+        ack_timeout_ms: int = 350,
+        max_retries: int = 1,
+        source: str = "ota_manual_ui",
+    ) -> ControlTransactionResult:
+        runtime = self._ensure_control_plane_runtime()
+        result = runtime.send_ota_check_now(
+            node_id=node_id,
+            rollout_token=rollout_token,
+            ack_timeout_ms=ack_timeout_ms,
+            max_retries=max_retries,
+            source=source,
+        )
+        self._record_control_plane_transaction_result(result=result, runtime=runtime)
+        return result
+
     def start_session(self) -> bool:
         transition = self._apply_transition(
             SessionEvent.REQUEST_START,

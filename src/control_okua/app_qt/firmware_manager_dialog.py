@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
@@ -27,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from control_okua.app_qt.firmware_import_dialog import FirmwareImportDialog
+from control_okua.app_qt.ota_deploy_dialog import OtaDeployDialog
 from control_okua.app_qt.models.firmware_catalog_table_model import FirmwareCatalogTableModel
 from control_okua.app_qt.viewmodels.firmware_manager_vm import (
     FirmwareCatalogRow,
@@ -45,6 +47,9 @@ from control_okua.core.firmware import (
     FirmwareIngestService,
 )
 
+if TYPE_CHECKING:
+    from control_okua.services.session_controller import SessionController
+
 
 class FirmwareManagerDialog(QDialog):
     def __init__(
@@ -52,6 +57,7 @@ class FirmwareManagerDialog(QDialog):
         *,
         catalog_store: FirmwareCatalogStore | None = None,
         ingest_service: FirmwareIngestService | None = None,
+        session_controller: "SessionController" | None = None,
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -60,6 +66,7 @@ class FirmwareManagerDialog(QDialog):
 
         self._catalog_store = catalog_store or FirmwareCatalogStore()
         self._ingest_service = ingest_service or FirmwareIngestService(self._catalog_store)
+        self._session_controller = session_controller
         self._all_rows: list[FirmwareCatalogRow] = []
         self._current_selection_artifact_id: str | None = None
         self._detail_labels: dict[str, QLabel] = {}
@@ -77,7 +84,8 @@ class FirmwareManagerDialog(QDialog):
 
         intro = QLabel(
             "Gestione el catálogo técnico de firmware importado. "
-            "Esta herramienta no despliega OTA ni altera nodos en vivo."
+            "Desde aquí puede revisar artifacts, importarlos y abrir el deploy OTA técnico "
+            "para nodos seleccionados manualmente."
         )
         intro.setWordWrap(True)
         root_layout.addWidget(intro)
@@ -95,6 +103,11 @@ class FirmwareManagerDialog(QDialog):
         self.refresh_button = QPushButton("Recargar catálogo", self)
         self.refresh_button.clicked.connect(self.refresh_catalog)
         actions_layout.addWidget(self.refresh_button)
+
+        self.ota_deploy_button = QPushButton("OTA Deploy…", self)
+        self.ota_deploy_button.clicked.connect(self._on_ota_deploy_clicked)
+        self.ota_deploy_button.setEnabled(self._session_controller is not None)
+        actions_layout.addWidget(self.ota_deploy_button)
 
         self.open_store_button = QPushButton("Abrir carpeta firmware", self)
         self.open_store_button.clicked.connect(self._open_managed_store_folder)
@@ -384,6 +397,23 @@ class FirmwareManagerDialog(QDialog):
         if not self._current_selection_artifact_id:
             return None
         return self._catalog_store.get_by_id(self._current_selection_artifact_id)
+
+    def _on_ota_deploy_clicked(self) -> None:
+        if self._session_controller is None:
+            QMessageBox.warning(
+                self,
+                "OTA Deploy no disponible",
+                "Esta instancia de Firmware Manager no tiene SessionController asociado.",
+            )
+            return
+
+        dialog = OtaDeployDialog(
+            session_controller=self._session_controller,
+            catalog_store=self._catalog_store,
+            preselected_artifact_id=self._current_selection_artifact_id,
+            parent=self,
+        )
+        dialog.exec()
 
     def _open_managed_store_folder(self) -> None:
         managed_dir = self._ingest_service.managed_store_dir

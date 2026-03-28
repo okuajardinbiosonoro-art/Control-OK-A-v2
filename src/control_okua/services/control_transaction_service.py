@@ -90,6 +90,16 @@ class CmdTransactionClient(Protocol):
     ) -> SentOkuaCommand:
         ...
 
+    def send_ota_check_now(
+        self,
+        node_ip: str,
+        node_id: int,
+        *,
+        rollout_token: int,
+        source: str = "manual",
+    ) -> SentOkuaCommand:
+        ...
+
     def resend_sent_command(
         self,
         sent_command: SentOkuaCommand,
@@ -267,6 +277,33 @@ class ControlTransactionService:
                 node_ip,
                 node_id,
                 throttle_percent=throttle_percent,
+                source=source,
+            ),
+        )
+
+    def send_ota_check_now_and_wait_ack(
+        self,
+        node_ip: str,
+        node_id: int,
+        *,
+        rollout_token: int,
+        source: str = "manual",
+        ack_timeout_ms: int = 350,
+        max_retries: int = 1,
+        poll_interval_ms: int = 20,
+    ) -> ControlTransactionResult:
+        return self._execute_transaction(
+            command_name="OTA_CHECK_NOW",
+            cmd_id=0x08,
+            node_ip=node_ip,
+            node_id=node_id,
+            ack_timeout_ms=ack_timeout_ms,
+            max_retries=max_retries,
+            poll_interval_ms=poll_interval_ms,
+            initial_send=lambda: self._cmd_service.send_ota_check_now(
+                node_ip,
+                node_id,
+                rollout_token=rollout_token,
                 source=source,
             ),
         )
