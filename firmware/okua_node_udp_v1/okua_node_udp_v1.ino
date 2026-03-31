@@ -35,22 +35,30 @@
 //-------------------- Modo de operacion -----------------------------------------------------
 #define MODE_TEST   1
 #define MODE_FIELD  2
+#ifndef ACTIVE_MODE
 #define ACTIVE_MODE MODE_TEST
+#endif
 
 //-------------------- Tipo de nodo ----------------------------------------------------------
 #define SENSOR_PLANT 1
 #define SENSOR_FRUIT 2
+#ifndef ACTIVE_SENSOR
 #define ACTIVE_SENSOR SENSOR_PLANT
+#endif
 
 //-------------------- LEDs ------------------------------------------------------------------
 #define LED_DISABLED 0
 #define LED_SIMPLE   1
+#ifndef LED_PROFILE
 #define LED_PROFILE  LED_DISABLED
+#endif
 
 //-------------------- Variante de fruta -----------------------------------------------------
 #define FRUIT_VARIANT_V1 1
 #define FRUIT_VARIANT_V2 2
+#ifndef ACTIVE_FRUIT_VARIANT
 #define ACTIVE_FRUIT_VARIANT FRUIT_VARIANT_V2
+#endif
 
 
 /*============================================================================================
@@ -63,6 +71,20 @@
 #if __has_include("okua_node_secrets.h")
 #include "okua_node_secrets.h"
 #endif
+#endif
+
+#ifdef OKUA_BUILD_NODE_LABEL
+#ifdef NODE_LABEL
+#undef NODE_LABEL
+#endif
+#define NODE_LABEL OKUA_BUILD_NODE_LABEL
+#endif
+
+#ifdef OKUA_BUILD_NODE_ID
+#ifdef NODE_ID
+#undef NODE_ID
+#endif
+#define NODE_ID OKUA_BUILD_NODE_ID
 #endif
 
 // Etiqueta visible para debug
@@ -119,8 +141,12 @@
 IPAddress PC_IP(PC_IP_A, PC_IP_B, PC_IP_C, PC_IP_D);
 
 // Firmware version
+#ifndef FW_MAJOR
 #define FW_MAJOR 1
+#endif
+#ifndef FW_MINOR
 #define FW_MINOR 0
+#endif
 #ifndef FW_PATCH
 #define FW_PATCH 0
 #endif
