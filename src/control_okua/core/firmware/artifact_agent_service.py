@@ -46,6 +46,7 @@ DEFAULT_PLANT_TEST_NODES = (
     ("EC1", 2),
     ("ED1", 3),
 )
+DEFAULT_FIRST_PHYSICAL_TEST_NODE = ("ED1", 3)
 DEFAULT_COMPARATIVE_FRUIT_NODE = ("ED1", 3)
 _SEMVER_PATTERN = re.compile(
     r"^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?P<suffix>(?:[-+][0-9A-Za-z._-]+)?)$"
@@ -338,9 +339,14 @@ class ArtifactAgentService:
             request.build_profile,
             fallback=resolved_audit.default_build_profile,
         )
+        ota_compatible_comparative = (
+            intent is ArtifactIntent.COMPARATIVE
+            and target_kind is resolved_audit.default_target_kind
+        )
         display_name = self._resolve_display_name(
             intent=intent,
             target_kind=target_kind,
+            baseline_target_kind=resolved_audit.default_target_kind,
             node_label=request.node_label,
             version=version,
             explicit_value=request.display_name,
@@ -351,15 +357,30 @@ class ArtifactAgentService:
         )
         changelog_short = normalize_text(
             request.changelog_short,
-            fallback=self._default_changelog(intent, target_kind),
+            fallback=self._default_changelog(
+                intent,
+                target_kind,
+                ota_compatible=ota_compatible_comparative,
+            ),
         )
         notes = normalize_text(
             request.notes,
-            fallback=self._default_notes(intent, target_kind, request.node_label),
+            fallback=self._default_notes(
+                intent,
+                target_kind,
+                request.node_label,
+                build_profile=build_profile,
+                ota_compatible=ota_compatible_comparative,
+                baseline_target_kind=resolved_audit.default_target_kind,
+            ),
         )
         source_notes = normalize_text(
             request.source_notes,
-            fallback=self._default_source_notes(intent, request.node_label),
+            fallback=self._default_source_notes(
+                intent,
+                request.node_label,
+                ota_compatible=ota_compatible_comparative,
+            ),
         )
 
         warnings: list[str] = []
@@ -367,6 +388,11 @@ class ArtifactAgentService:
             warnings.append(
                 "El artifact comparativo de fruta no será OTA-compatible sobre un baseline actual de planta; "
                 "target_kind difiere y el firmware rechazará ese manifest."
+            )
+        if ota_compatible_comparative:
+            warnings.append(
+                "El artifact comparativo mantiene target_kind, target_variant y build_profile del baseline; "
+                "el cambio observable esperado es la nueva version/artifact_id para validar OTA física real."
             )
         if build_profile != resolved_audit.default_build_profile:
             warnings.append(
@@ -377,6 +403,8 @@ class ArtifactAgentService:
             intent=intent,
             target_kind=target_kind,
             target_variant=target_variant,
+            build_profile=build_profile,
+            ota_compatible=ota_compatible_comparative,
             explicit_tags=request.tags,
         )
         output_slug = self._build_output_slug(
@@ -457,6 +485,113 @@ class ArtifactAgentService:
             )
         )
         return tuple(plans)
+
+    def build_first_physical_test_plans(
+        self,
+        *,
+        audit: ArtifactSourceAudit | None = None,
+        catalog_store: FirmwareCatalogStore | None = None,
+        node_label: str = DEFAULT_FIRST_PHYSICAL_TEST_NODE[0],
+        node_id: int = DEFAULT_FIRST_PHYSICAL_TEST_NODE[1],
+        comparative_version: str | None = None,
+    ) -> tuple[ArtifactBuildPlan, ArtifactBuildPlan]:
+        resolved_audit = audit or self.audit_current_firmware()
+        baseline_plan = self.build_plan(
+            ArtifactPlanRequest(
+                intent=ArtifactIntent.CURRENT_CLONE,
+                node_label=node_label,
+                node_id=node_id,
+            ),
+            audit=resolved_audit,
+        )
+        compatible_version = comparative_version or self.suggest_next_version_for_variant(
+            node_label=node_label,
+            catalog_store=catalog_store,
+            audit=resolved_audit,
+        )
+        comparative_plan = self.build_plan(
+            ArtifactPlanRequest(
+                intent=ArtifactIntent.COMPARATIVE,
+                node_label=node_label,
+                node_id=node_id,
+                target_kind=resolved_audit.default_target_kind,
+                version=compatible_version,
+                version_label=f"v{compatible_version} comparativo OTA situational",
+                changelog_short=(
+                    "Build comparativo situational de planta para validar la primera OTA física "
+                    "compatible sobre el baseline actual."
+                ),
+                notes=(
+                    "Artifact comparativo OTA-B para la primera prueba física. Mantiene "
+                    "target_kind=plant, target_variant del nodo y build_profile del baseline; "
+                    "el cambio observable esperado es version/artifact_id/sha256 nuevos."
+                ),
+                source_notes=(
+                    f"Generado por artifact agent OTA-B como comparativo OTA-compatible para {normalize_text(node_label).upper()}."
+                ),
+                tags=("ota_b", "first_physical_test", "ota_compatible"),
+            ),
+            audit=resolved_audit,
+        )
+        return baseline_plan, comparative_plan
+
+    def resolve_catalog_artifact(
+        self,
+        *,
+        node_label: str,
+        target_kind: FirmwareTargetKind | str,
+        catalog_store: FirmwareCatalogStore | None = None,
+        version: str | None = None,
+    ) -> FirmwareArtifact | None:
+        store = catalog_store or FirmwareCatalogStore(resolve_firmware_catalog_path())
+        store.load()
+        normalized_variant = normalize_target_variant(node_label)
+        candidates = store.filter_by_target(target_kind, normalized_variant)
+        if version:
+            candidates = [item for item in candidates if item.version == normalize_text(version)]
+        if not candidates:
+            return None
+        preferred = sorted(
+            candidates,
+            key=lambda item: (
+                0 if item.source_kind == "artifact_agent" else 1,
+                0 if "current_clone" in item.tags else 1,
+                item.imported_at_utc,
+            ),
+            reverse=False,
+        )
+        return preferred[0]
+
+    def suggest_next_version_for_variant(
+        self,
+        *,
+        node_label: str,
+        catalog_store: FirmwareCatalogStore | None = None,
+        audit: ArtifactSourceAudit | None = None,
+    ) -> str:
+        resolved_audit = audit or self.audit_current_firmware()
+        major, minor, patch, suffix = self._parse_semver_with_suffix(resolved_audit.default_version)
+        max_components = (major, minor, patch)
+        suffix_candidate = suffix
+        store = catalog_store or FirmwareCatalogStore(resolve_firmware_catalog_path())
+        store.load()
+        normalized_variant = normalize_target_variant(node_label)
+        for artifact in store.list_all():
+            if artifact.target_variant != normalized_variant:
+                continue
+            try:
+                artifact_major, artifact_minor, artifact_patch, artifact_suffix = (
+                    self._parse_semver_with_suffix(artifact.version)
+                )
+            except ArtifactAgentValidationError:
+                continue
+            candidate_components = (artifact_major, artifact_minor, artifact_patch)
+            if candidate_components >= max_components:
+                max_components = candidate_components
+                suffix_candidate = artifact_suffix
+        next_patch = max_components[2] + 1
+        resolved_suffix = suffix_candidate or suffix
+        return f"{max_components[0]}.{max_components[1]}.{next_patch}{resolved_suffix}"
 
     def build_artifact(
         self,
@@ -709,8 +844,18 @@ class ArtifactAgentService:
         return audit.default_version
 
     @staticmethod
-    def _default_changelog(intent: ArtifactIntent, target_kind: FirmwareTargetKind) -> str:
+    def _default_changelog(
+        intent: ArtifactIntent,
+        target_kind: FirmwareTargetKind,
+        *,
+        ota_compatible: bool,
+    ) -> str:
         if intent is ArtifactIntent.COMPARATIVE:
+            if ota_compatible:
+                return (
+                    f"Build comparativo situational de {target_kind.value} para validar una OTA física "
+                    "compatible sin cambiar target_kind."
+                )
             return (
                 f"Build comparativo situational de {target_kind.value} para validar un cambio visible frente al baseline actual."
             )
@@ -721,11 +866,21 @@ class ArtifactAgentService:
         intent: ArtifactIntent,
         target_kind: FirmwareTargetKind,
         node_label: str,
+        *,
+        build_profile: str,
+        ota_compatible: bool,
+        baseline_target_kind: FirmwareTargetKind,
     ) -> str:
         if intent is ArtifactIntent.COMPARATIVE:
+            if ota_compatible:
+                return (
+                    f"Artifact comparativo OTA-compatible para {node_label}. Mantiene target_kind={target_kind.value}, "
+                    f"target_variant={normalize_target_variant(node_label)} y build_profile={build_profile}; "
+                    "el cambio observable esperado es version/artifact_id/sha256 distintos tras la OTA."
+                )
             return (
                 f"Artifact comparativo OTA-A para {node_label}. Es útil para observar un cambio real en banco; "
-                "si el baseline actual es plant, este build fruit no será OTA-compatible por target_kind."
+                f"si el baseline actual es {baseline_target_kind.value}, este build {target_kind.value} no será OTA-compatible por target_kind."
             )
         return (
             f"Representa el firmware actualmente implementado en {node_label} para {target_kind.value} prueba. "
@@ -733,8 +888,17 @@ class ArtifactAgentService:
         )
 
     @staticmethod
-    def _default_source_notes(intent: ArtifactIntent, node_label: str) -> str:
+    def _default_source_notes(
+        intent: ArtifactIntent,
+        node_label: str,
+        *,
+        ota_compatible: bool,
+    ) -> str:
         if intent is ArtifactIntent.COMPARATIVE:
+            if ota_compatible:
+                return (
+                    f"Generado por artifact agent OTA-B como comparativo OTA-compatible para {node_label}."
+                )
             return f"Generado por artifact agent OTA-A como comparativo controlado para {node_label}."
         return f"Generado por artifact agent OTA-A como clon del baseline actual de {node_label}."
 
@@ -744,18 +908,23 @@ class ArtifactAgentService:
         intent: ArtifactIntent,
         target_kind: FirmwareTargetKind,
         target_variant: str,
+        build_profile: str,
+        ota_compatible: bool,
         explicit_tags: Iterable[str],
     ) -> tuple[str, ...]:
         ordered: list[str] = []
         seen: set[str] = set()
-        for tag in (
+        derived_tags = [
             "ota_a",
             "situational",
             intent.value,
             target_kind.value,
             target_variant,
-            *explicit_tags,
-        ):
+            f"build_profile_{build_profile}",
+        ]
+        if intent is ArtifactIntent.COMPARATIVE:
+            derived_tags.append("ota_compatible" if ota_compatible else "cross_kind_comparison")
+        for tag in (*derived_tags, *explicit_tags):
             normalized = normalize_key(tag)
             if not normalized or normalized in seen:
                 continue
@@ -768,13 +937,21 @@ class ArtifactAgentService:
         *,
         intent: ArtifactIntent,
         target_kind: FirmwareTargetKind,
+        baseline_target_kind: FirmwareTargetKind,
         node_label: str,
         version: str,
         explicit_value: str,
     ) -> str:
         if explicit_value:
             return explicit_value
-        kind_text = "planta prueba actual" if intent is ArtifactIntent.CURRENT_CLONE else "fruta prueba comparativa"
+        if intent is ArtifactIntent.CURRENT_CLONE:
+            kind_text = "planta prueba actual"
+        elif target_kind is baseline_target_kind:
+            kind_text = "planta prueba comparativa OTA-compatible"
+        elif target_kind is FirmwareTargetKind.FRUIT:
+            kind_text = "fruta prueba comparativa"
+        else:
+            kind_text = f"{target_kind.value} prueba comparativa"
         return f"OKUA Node UDP v1 - {node_label} {kind_text} ({version})"
 
     @staticmethod
@@ -851,6 +1028,21 @@ class ArtifactAgentService:
             int(match.group("major")),
             int(match.group("minor")),
             int(match.group("patch")),
+        )
+
+    @staticmethod
+    def _parse_semver_with_suffix(version: str) -> tuple[int, int, int, str]:
+        text = normalize_text(version)
+        match = _SEMVER_PATTERN.fullmatch(text)
+        if match is None:
+            raise ArtifactAgentValidationError(
+                f"version invalida para artifact agent; se esperaba semver MAJOR.MINOR.PATCH: {version!r}"
+            )
+        return (
+            int(match.group("major")),
+            int(match.group("minor")),
+            int(match.group("patch")),
+            match.group("suffix") or "",
         )
 
     @staticmethod

@@ -94,6 +94,45 @@ def test_build_manifest_from_valid_artifact_produces_expected_fields(tmp_path: P
     assert manifest.compatible_hw == ("esp32dev",)
 
 
+def test_build_manifest_infers_build_profile_from_artifact_tags_when_request_omits_it(
+    tmp_path: Path,
+) -> None:
+    store, ingest_service, manifest_service = _build_services(tmp_path)
+    source_path = tmp_path / "plant_ed1_test.bin"
+    source_path.write_bytes(b"ota-profile-test")
+
+    import_result = ingest_service.import_artifact(
+        FirmwareImportRequest(
+            source_file_path=source_path,
+            target_kind="plant",
+            target_variant="ed1",
+            version="1.0.2-dev",
+            status="situational",
+            display_name="plant-ed1-test",
+            changelog="Comparativo OTA test",
+            source_kind="artifact_agent",
+            tags=("ota_b", "situational", "comparative", "build_profile_test"),
+        )
+    )
+    assert import_result.success is True
+    artifact = import_result.imported_artifact
+    assert artifact is not None
+    store.save()
+
+    manifest = manifest_service.build_manifest(
+        OtaRolloutPublishRequest(
+            rollout_token="0x20260331",
+            artifact_id=artifact.artifact_id,
+            host="192.168.1.70",
+            port=8080,
+        )
+    )
+
+    assert manifest.target_kind == "plant"
+    assert manifest.target_variant == "ed1"
+    assert manifest.build_profile == "test"
+
+
 def test_publish_rollout_creates_manifest_and_self_contained_bin(tmp_path: Path) -> None:
     artifact = _import_artifact(tmp_path, version="2.0.0", status="beta", content=b"payload-ota")
     _store, _ingest_service, manifest_service = _build_services(tmp_path)
@@ -234,4 +273,3 @@ def test_publish_rollout_rejects_unparseable_version_for_version_code(tmp_path: 
         assert False, "La generación OTA debió exigir semver para version_code"
     except OtaManifestValidationError as exc:
         assert "semver" in str(exc).lower()
-

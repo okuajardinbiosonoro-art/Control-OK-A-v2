@@ -212,7 +212,7 @@ class OtaRolloutPublishRequest:
     port: int = DEFAULT_OTA_HTTP_PORT
     firmware_family: str = DEFAULT_OTA_FIRMWARE_FAMILY
     compatible_hw: tuple[str, ...] | list[str] = DEFAULT_OTA_COMPATIBLE_HW
-    build_profile: str = DEFAULT_OTA_BUILD_PROFILE
+    build_profile: str = ""
     protocol_version: str = DEFAULT_OTA_PROTOCOL_VERSION
     publish_root_dir: Path | str | None = None
     reboot_required: bool = True
@@ -261,4 +261,3 @@ class OtaRolloutPublishResult:
     warnings: tuple[str, ...] = ()
     manifest: OtaManifest | None = None
     message: str = ""
-

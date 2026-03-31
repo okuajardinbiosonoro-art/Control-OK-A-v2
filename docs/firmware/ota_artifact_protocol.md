@@ -235,6 +235,24 @@ Esto:
 - escribe sidecars `artifact_plan.json`,
 - e importa localmente los artifacts al catálogo/managed store.
 
+### 7.4 Preparar el primer ensayo OTA físico compatible
+
+Para el primer ensayo OTA físico real no usar el comparativo `fruit` directo sobre un baseline actual `plant`.
+
+Usar en cambio el flujo específico:
+
+```powershell
+python tools/firmware_artifact_agent.py build-first-physical-test --import-generated --pretty
+```
+
+Ese flujo:
+
+- selecciona por defecto `ED1` como nodo físico de prueba,
+- identifica el baseline `plant/ed1` ya catalogado,
+- genera un comparativo `plant/ed1` OTA-compatible,
+- conserva `build_profile=test`,
+- y deja explícito que el artifact `fruit` previo sigue siendo solo comparativo de comportamiento.
+
 ## 8. Layout de salida esperado
 
 Por defecto los outputs quedan en:
@@ -252,6 +270,7 @@ Cada artifact exportado deja:
 - No etiquetar como `current` un build de prueba.
 - No usar `generic` si el build es por nodo.
 - No publicar un artifact `fruit` como si fuera compatible OTA con baseline `plant`.
+- No intentar la primera OTA física con un manifest `build_profile=field` si el baseline en banco corre `FW_PROFILE=test`.
 - No reutilizar el mismo `display_name` para bins distintos.
 - No usar `version` no semver.
 - No depender de `.pio/build/.../firmware.bin` como biblioteca histórica; ese archivo se sobreescribe.

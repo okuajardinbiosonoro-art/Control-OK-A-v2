@@ -15,6 +15,7 @@ from control_okua.core.firmware import (
     ArtifactIntent,
     ArtifactPlanRequest,
     FirmwareCatalogStore,
+    FirmwareImportRequest,
     FirmwareIngestService,
     FirmwareStatus,
     FirmwareTargetKind,
@@ -113,6 +114,110 @@ def test_build_default_situational_plans_returns_three_plant_and_one_fruit() -> 
     assert plans[3].target_variant == "ed1"
 
 
+def test_first_physical_test_plan_builds_ota_compatible_plant_candidate(tmp_path: Path) -> None:
+    service = ArtifactAgentService()
+    catalog_store = FirmwareCatalogStore(tmp_path / "firmware_catalog.json")
+    ingest = FirmwareIngestService(catalog_store, managed_store_dir=tmp_path / "firmware_store")
+
+    baseline_path = tmp_path / "baseline.bin"
+    baseline_path.write_bytes(b"plant-ed1-baseline")
+    baseline_import = ingest.import_artifact(
+        FirmwareImportRequest(
+            source_file_path=baseline_path,
+            display_name="plant-ed1-baseline",
+            version="1.0.0-dev",
+            version_label="v1.0.0-dev baseline situational",
+            target_kind="plant",
+            target_variant="ed1",
+            status="situational",
+            source_kind="artifact_agent",
+            source_notes="baseline",
+            changelog="baseline",
+            notes="baseline",
+            compatibility=("esp32dev",),
+            tags=("ota_a", "current_clone", "plant", "ed1"),
+        )
+    )
+    assert baseline_import.success is True
+
+    fruit_path = tmp_path / "fruit.bin"
+    fruit_path.write_bytes(b"fruit-ed1-comparative")
+    fruit_import = ingest.import_artifact(
+        FirmwareImportRequest(
+            source_file_path=fruit_path,
+            display_name="fruit-ed1-comparative",
+            version="1.0.1-dev",
+            version_label="v1.0.1-dev comparativo situational",
+            target_kind="fruit",
+            target_variant="ed1",
+            status="situational",
+            source_kind="artifact_agent",
+            source_notes="fruit",
+            changelog="fruit",
+            notes="fruit",
+            compatibility=("esp32dev",),
+            tags=("ota_a", "comparative", "fruit", "ed1"),
+        )
+    )
+    assert fruit_import.success is True
+
+    baseline_plan, comparative_plan = service.build_first_physical_test_plans(
+        catalog_store=catalog_store,
+        node_label="ED1",
+        node_id=3,
+    )
+
+    assert baseline_plan.target_kind is FirmwareTargetKind.PLANT
+    assert baseline_plan.target_variant == "ed1"
+    assert comparative_plan.target_kind is FirmwareTargetKind.PLANT
+    assert comparative_plan.target_variant == "ed1"
+    assert comparative_plan.version == "1.0.2-dev"
+    assert comparative_plan.status is FirmwareStatus.SITUATIONAL
+    assert comparative_plan.build_profile == "test"
+    assert "ota_compatible" in comparative_plan.tags
+    assert "build_profile_test" in comparative_plan.tags
+    assert "ota-compatible" in comparative_plan.display_name.lower()
+
+
+def test_resolve_catalog_artifact_finds_existing_baseline_for_node(tmp_path: Path) -> None:
+    service = ArtifactAgentService()
+    catalog_store = FirmwareCatalogStore(tmp_path / "firmware_catalog.json")
+    ingest = FirmwareIngestService(catalog_store, managed_store_dir=tmp_path / "firmware_store")
+    source_path = tmp_path / "ed1.bin"
+    source_path.write_bytes(b"ed1-baseline")
+
+    import_result = ingest.import_artifact(
+        FirmwareImportRequest(
+            source_file_path=source_path,
+            display_name="ED1 baseline",
+            version="1.0.0-dev",
+            version_label="v1.0.0-dev baseline situational",
+            target_kind="plant",
+            target_variant="ed1",
+            status="situational",
+            source_kind="artifact_agent",
+            source_notes="baseline",
+            changelog="baseline",
+            notes="baseline",
+            compatibility=("esp32dev",),
+            tags=("ota_a", "current_clone", "plant", "ed1"),
+        )
+    )
+    assert import_result.success is True
+
+    artifact = service.resolve_catalog_artifact(
+        node_label="ED1",
+        target_kind="plant",
+        catalog_store=catalog_store,
+        version="1.0.0-dev",
+    )
+
+    assert artifact is not None
+    assert artifact.target_kind is FirmwareTargetKind.PLANT
+    assert artifact.target_variant == "ed1"
+    assert artifact.version == "1.0.0-dev"
+
+
 def test_generated_plan_can_be_turned_into_import_request() -> None:
     service = ArtifactAgentService()
     plan = service.build_plan(
@@ -144,6 +249,7 @@ def test_generated_plan_can_be_turned_into_import_request() -> None:
     assert request.target_kind is FirmwareTargetKind.PLANT
     assert request.target_variant == "ec1"
     assert request.display_name == plan.display_name
+    assert "build_profile_test" in request.tags
 
 
 def test_import_artifact_is_compatible_with_catalog_and_ingest(tmp_path: Path) -> None:

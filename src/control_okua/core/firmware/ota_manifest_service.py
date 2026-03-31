@@ -20,6 +20,7 @@ from control_okua.core.firmware.catalog_store import (
 )
 from control_okua.core.firmware.ingest_service import DEFAULT_MANAGED_FIRMWARE_STORE_DIRNAME
 from control_okua.core.firmware.ota_manifest_models import (
+    DEFAULT_OTA_BUILD_PROFILE,
     DEFAULT_OTA_PUBLISH_DIRNAME,
     OTA_MANIFEST_SCHEMA_VERSION,
     OtaManifest,
@@ -97,6 +98,7 @@ class OtaManifestService:
         rollout_channel = self._resolve_rollout_channel(resolved_request, artifact)
         rollout_id = self._resolve_rollout_id(resolved_request, artifact)
         changelog_short = self._resolve_changelog_short(resolved_request, artifact)
+        build_profile = self._resolve_build_profile(resolved_request, artifact)
         download_url = self.resolve_download_url(
             host=resolved_request.host,
             port=resolved_request.port,
@@ -110,7 +112,7 @@ class OtaManifestService:
             target_kind=artifact.target_kind.value,
             target_variant=artifact.target_variant,
             compatible_hw=tuple(resolved_request.compatible_hw),
-            build_profile=resolved_request.build_profile,
+            build_profile=build_profile,
             protocol_version=resolved_request.protocol_version,
             version=artifact.version,
             version_code=derive_version_code(artifact.version),
@@ -176,6 +178,12 @@ class OtaManifestService:
             warnings.append("Se publicó un artefacto beta para OTA.")
         if artifact.status is FirmwareStatus.SITUATIONAL:
             warnings.append("Se publicó un artefacto situacional para OTA.")
+        if not normalize_text(resolved_request.build_profile):
+            inferred_profile = self._infer_build_profile_from_artifact(artifact)
+            if inferred_profile:
+                warnings.append(
+                    f"build_profile inferido desde metadata del artifact: {inferred_profile}"
+                )
 
         return OtaRolloutPublishResult(
             success=True,
@@ -304,6 +312,33 @@ class OtaManifestService:
                 return first_line
         version_label = artifact.version_label or artifact.version
         return f"{artifact.display_name} {version_label}"
+
+    def _resolve_build_profile(
+        self,
+        request: OtaRolloutPublishRequest,
+        artifact: FirmwareArtifact,
+    ) -> str:
+        explicit_profile = normalize_text(request.build_profile)
+        if explicit_profile:
+            return explicit_profile
+        inferred_profile = self._infer_build_profile_from_artifact(artifact)
+        if inferred_profile:
+            return inferred_profile
+        return DEFAULT_OTA_BUILD_PROFILE
+
+    @staticmethod
+    def _infer_build_profile_from_artifact(artifact: FirmwareArtifact) -> str:
+        for tag in artifact.tags:
+            normalized = normalize_text(tag).lower()
+            if normalized.startswith("build_profile_"):
+                candidate = normalize_text(normalized[len("build_profile_") :])
+                if candidate:
+                    return candidate
+            if normalized.startswith("profile_"):
+                candidate = normalize_text(normalized[len("profile_") :])
+                if candidate:
+                    return candidate
+        return ""
 
     def _reuse_existing_rollout_if_identical(
         self,
