@@ -25,6 +25,7 @@ static const char* kPrefVariant = "variant";
 static const char* kPrefProfile = "profile";
 static const char* kDefaultBaseUrl = "http://192.168.88.254:8080";
 static const uint32_t kDefaultHealthConfirmMs = 45000UL;
+static const uint32_t kDefaultBootWifiConnectTimeoutMs = 120000UL;
 static const uint32_t kDefaultHttpTimeoutMs = 8000UL;
 
 struct OkuaExpectedArtifact {
@@ -69,6 +70,7 @@ bool g_statSentSinceBoot = false;
 bool g_loopReady = false;
 bool g_pendingRebootRequest = false;
 uint32_t g_bootValidationStartMs = 0;
+uint32_t g_bootValidationWifiConnectedMs = 0;
 char g_lastDetail[160] = "";
 OkuaExpectedArtifact g_expectedArtifact = {};
 
@@ -581,6 +583,8 @@ void startBootValidationIfNeeded() {
   loadExpectedArtifact(&g_expectedArtifact);
   const bool pending_verify = pendingVerifyOnRunningPartition();
   if (!pending_verify) {
+    g_bootValidationStartMs = 0;
+    g_bootValidationWifiConnectedMs = 0;
     if (g_expectedArtifact.valid) {
       clearExpectedArtifact();
       setState(OKUA_OTA_STATE_IDLE, OKUA_OTA_ERROR_NONE, "stale ota expectation cleared");
@@ -591,6 +595,7 @@ void startBootValidationIfNeeded() {
     return;
   }
   g_bootValidationStartMs = millis();
+  g_bootValidationWifiConnectedMs = 0;
   g_statSentSinceBoot = false;
   g_flags |= OKUA_OTA_FLAG_PENDING_VERIFY;
   setState(OKUA_OTA_STATE_BOOT_VALIDATING, OKUA_OTA_ERROR_NONE, "boot validation pending");
@@ -632,10 +637,18 @@ void rollbackAndReboot(uint8_t error_code, const char* detail) {
 void maybeFinalizeBootValidation(uint32_t now_ms, bool wifi_connected, bool loop_ready) {
   if ((g_flags & OKUA_OTA_FLAG_PENDING_VERIFY) == 0) return;
   if (g_bootValidationStartMs == 0) g_bootValidationStartMs = now_ms;
-  if ((now_ms - g_bootValidationStartMs) < g_config.health_confirm_ms) return;
-
   if (!wifi_connected) {
-    rollbackAndReboot(OKUA_OTA_ERROR_BOOT_WIFI_TIMEOUT, "wifi not healthy after ota boot");
+    if ((now_ms - g_bootValidationStartMs) >= kDefaultBootWifiConnectTimeoutMs) {
+      rollbackAndReboot(OKUA_OTA_ERROR_BOOT_WIFI_TIMEOUT, "wifi not healthy after ota boot");
+    }
+    return;
+  }
+  if (g_bootValidationWifiConnectedMs == 0) {
+    g_bootValidationWifiConnectedMs = now_ms;
+    setState(OKUA_OTA_STATE_BOOT_VALIDATING, OKUA_OTA_ERROR_NONE, "wifi connected, awaiting ota health");
+    return;
+  }
+  if ((now_ms - g_bootValidationWifiConnectedMs) < g_config.health_confirm_ms) {
     return;
   }
   if (!loop_ready) {
@@ -654,6 +667,8 @@ void maybeFinalizeBootValidation(uint32_t now_ms, bool wifi_connected, bool loop
   if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) {
     g_flags &= (uint8_t)~OKUA_OTA_FLAG_PENDING_VERIFY;
     g_flags |= OKUA_OTA_FLAG_HEALTH_CONFIRMED;
+    g_bootValidationStartMs = 0;
+    g_bootValidationWifiConnectedMs = 0;
     clearExpectedArtifact();
     setState(OKUA_OTA_STATE_BOOT_CONFIRMED, OKUA_OTA_ERROR_NONE, "ota boot confirmed");
   } else {
@@ -685,6 +700,8 @@ void okuaOtaBegin() {
   g_pendingRebootRequest = false;
   g_loopReady = false;
   g_statSentSinceBoot = false;
+  g_bootValidationStartMs = 0;
+  g_bootValidationWifiConnectedMs = 0;
   g_flags &= (uint8_t)~OKUA_OTA_FLAG_PENDING_REBOOT;
   startBootValidationIfNeeded();
 }
@@ -722,6 +739,16 @@ void okuaOtaService(uint32_t now_ms, bool wifi_connected, bool loop_ready) {
   g_pendingRolloutToken = 0;
 }
 
+void okuaOtaNotifyWiFiConnected(uint32_t now_ms) {
+  if ((g_flags & OKUA_OTA_FLAG_PENDING_VERIFY) == 0) return;
+  const uint32_t resolved_now = (now_ms != 0) ? now_ms : millis();
+  if (g_bootValidationStartMs == 0) g_bootValidationStartMs = resolved_now;
+  if (g_bootValidationWifiConnectedMs == 0) {
+    g_bootValidationWifiConnectedMs = resolved_now;
+    setState(OKUA_OTA_STATE_BOOT_VALIDATING, OKUA_OTA_ERROR_NONE, "wifi connected, awaiting ota health");
+  }
+}
+
 void okuaOtaNotifyStatSent() {
   g_statSentSinceBoot = true;
 }
@@ -729,7 +756,7 @@ void okuaOtaNotifyStatSent() {
 bool okuaOtaShouldAbortWiFiConnect(uint32_t now_ms) {
   if ((g_flags & OKUA_OTA_FLAG_PENDING_VERIFY) == 0) return false;
   if (g_bootValidationStartMs == 0) g_bootValidationStartMs = now_ms;
-  return (now_ms - g_bootValidationStartMs) >= g_config.health_confirm_ms;
+  return (now_ms - g_bootValidationStartMs) >= kDefaultBootWifiConnectTimeoutMs;
 }
 
 void okuaOtaHandleWiFiConnectTimeout() {

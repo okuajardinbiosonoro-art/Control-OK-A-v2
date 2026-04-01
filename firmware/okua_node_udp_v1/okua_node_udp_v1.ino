@@ -1235,6 +1235,7 @@ void connectWiFiBlocking() {
     }
   }
 
+  okuaOtaNotifyWiFiConnected(millis());
   g_udpBegun = false;
   openUdpSocket();
   g_wifiWasConnected = true;

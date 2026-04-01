@@ -60,6 +60,7 @@ void okuaOtaConfigure(const OkuaOtaConfig& config);
 void okuaOtaBegin();
 bool okuaOtaQueueCheck(uint32_t rollout_token);
 void okuaOtaService(uint32_t now_ms, bool wifi_connected, bool loop_ready);
+void okuaOtaNotifyWiFiConnected(uint32_t now_ms);
 void okuaOtaNotifyStatSent();
 bool okuaOtaShouldAbortWiFiConnect(uint32_t now_ms);
 void okuaOtaHandleWiFiConnectTimeout();
@@ -68,4 +69,3 @@ OkuaOtaTelemetry okuaOtaGetTelemetry();
 const char* okuaOtaStateKey();
 const char* okuaOtaErrorKey();
 const char* okuaOtaLastDetail();
-
