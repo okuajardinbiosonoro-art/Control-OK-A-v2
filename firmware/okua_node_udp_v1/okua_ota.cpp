@@ -20,6 +20,9 @@ static const char* kPrefRollout = "rollout";
 static const char* kPrefArtifact = "artifact";
 static const char* kPrefSha256 = "sha256";
 static const char* kPrefVerCode = "vercode";
+static const char* kPrefTarget = "target";
+static const char* kPrefVariant = "variant";
+static const char* kPrefProfile = "profile";
 static const char* kDefaultBaseUrl = "http://192.168.88.254:8080";
 static const uint32_t kDefaultHealthConfirmMs = 45000UL;
 static const uint32_t kDefaultHttpTimeoutMs = 8000UL;
@@ -29,6 +32,9 @@ struct OkuaExpectedArtifact {
   char artifact_id[72];
   char sha256[65];
   uint32_t version_code;
+  char target_kind[24];
+  char target_variant[32];
+  char build_profile[24];
   bool valid;
 };
 
@@ -197,11 +203,11 @@ bool loadExpectedArtifact(OkuaExpectedArtifact* out_expected) {
   copyString(out_expected->artifact_id, sizeof(out_expected->artifact_id), prefs.getString(kPrefArtifact, "").c_str());
   copyString(out_expected->sha256, sizeof(out_expected->sha256), prefs.getString(kPrefSha256, "").c_str());
   out_expected->version_code = prefs.getUInt(kPrefVerCode, 0);
+  copyString(out_expected->target_kind, sizeof(out_expected->target_kind), prefs.getString(kPrefTarget, "").c_str());
+  copyString(out_expected->target_variant, sizeof(out_expected->target_variant), prefs.getString(kPrefVariant, "").c_str());
+  copyString(out_expected->build_profile, sizeof(out_expected->build_profile), prefs.getString(kPrefProfile, "").c_str());
   prefs.end();
-  out_expected->valid =
-      out_expected->artifact_id[0] != '\0' &&
-      out_expected->sha256[0] != '\0' &&
-      out_expected->version_code > 0;
+  out_expected->valid = out_expected->version_code > 0;
   return out_expected->valid;
 }
 
@@ -212,7 +218,10 @@ bool storeExpectedArtifact(const OkuaOtaManifest& manifest) {
       prefs.putString(kPrefRollout, manifest.rollout_id) > 0 &&
       prefs.putString(kPrefArtifact, manifest.artifact_id) > 0 &&
       prefs.putString(kPrefSha256, manifest.sha256) > 0 &&
-      prefs.putUInt(kPrefVerCode, manifest.version_code) > 0;
+      prefs.putUInt(kPrefVerCode, manifest.version_code) > 0 &&
+      prefs.putString(kPrefTarget, manifest.target_kind) > 0 &&
+      prefs.putString(kPrefVariant, manifest.target_variant) > 0 &&
+      prefs.putString(kPrefProfile, manifest.build_profile) > 0;
   prefs.end();
   return ok;
 }
@@ -224,6 +233,9 @@ void clearExpectedArtifact() {
   prefs.remove(kPrefArtifact);
   prefs.remove(kPrefSha256);
   prefs.remove(kPrefVerCode);
+  prefs.remove(kPrefTarget);
+  prefs.remove(kPrefVariant);
+  prefs.remove(kPrefProfile);
   prefs.end();
   g_expectedArtifact = {};
 }
@@ -581,9 +593,25 @@ bool bootIdentityMatchesExpectation() {
   if (!g_expectedArtifact.valid) {
     return okuaBuildArtifactSha256()[0] != '\0';
   }
-  if (!strEqIgnoreCase(okuaBuildArtifactSha256(), g_expectedArtifact.sha256)) return false;
-  if (!strEqIgnoreCase(okuaBuildArtifactId(), g_expectedArtifact.artifact_id)) return false;
+
+  // Download/install already validated the raw firmware bytes against the
+  // manifest's file sha256. On boot we should confirm the runtime identity of
+  // the newly running image, not re-compare the running partition hash against
+  // the original .bin file hash from the catalog/store, because those hashes
+  // are not guaranteed to be the same representation.
   if (okuaBuildVersionCode() != g_expectedArtifact.version_code) return false;
+  if (g_expectedArtifact.target_kind[0] != '\0' &&
+      !strEqIgnoreCase(okuaBuildTargetKind(), g_expectedArtifact.target_kind)) {
+    return false;
+  }
+  if (g_expectedArtifact.target_variant[0] != '\0' &&
+      !strEqIgnoreCase(okuaBuildTargetVariant(), g_expectedArtifact.target_variant)) {
+    return false;
+  }
+  if (g_expectedArtifact.build_profile[0] != '\0' &&
+      !strEqIgnoreCase(okuaBuildProfile(), g_expectedArtifact.build_profile)) {
+    return false;
+  }
   return true;
 }
 
