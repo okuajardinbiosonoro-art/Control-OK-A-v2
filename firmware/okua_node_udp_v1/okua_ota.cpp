@@ -579,14 +579,21 @@ bool pendingVerifyOnRunningPartition() {
 void startBootValidationIfNeeded() {
   okuaRefreshRunningArtifactIdentity();
   loadExpectedArtifact(&g_expectedArtifact);
-  if (pendingVerifyOnRunningPartition() || g_expectedArtifact.valid) {
-    g_bootValidationStartMs = millis();
-    g_statSentSinceBoot = false;
-    g_flags |= OKUA_OTA_FLAG_PENDING_VERIFY;
-    setState(OKUA_OTA_STATE_BOOT_VALIDATING, OKUA_OTA_ERROR_NONE, "boot validation pending");
-  } else {
-    g_flags &= (uint8_t)~OKUA_OTA_FLAG_PENDING_VERIFY;
+  const bool pending_verify = pendingVerifyOnRunningPartition();
+  if (!pending_verify) {
+    if (g_expectedArtifact.valid) {
+      clearExpectedArtifact();
+      setState(OKUA_OTA_STATE_IDLE, OKUA_OTA_ERROR_NONE, "stale ota expectation cleared");
+      Serial.println("[OTA] Cleared stale expected artifact without pending verify");
+    } else {
+      g_flags &= (uint8_t)~OKUA_OTA_FLAG_PENDING_VERIFY;
+    }
+    return;
   }
+  g_bootValidationStartMs = millis();
+  g_statSentSinceBoot = false;
+  g_flags |= OKUA_OTA_FLAG_PENDING_VERIFY;
+  setState(OKUA_OTA_STATE_BOOT_VALIDATING, OKUA_OTA_ERROR_NONE, "boot validation pending");
 }
 
 bool bootIdentityMatchesExpectation() {
