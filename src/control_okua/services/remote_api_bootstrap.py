@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import secrets
 import socket
+import subprocess
 from typing import Any, MutableMapping
 
 from control_okua.services.remote_api_auth import build_remote_api_token_entry
@@ -146,6 +147,8 @@ def build_remote_api_access_urls(config: RemoteApiConfig) -> tuple[str, ...]:
         if bind_host not in {"0.0.0.0", "::"}:
             urls.append(f"http://{bind_host}:{port}/remote/")
         else:
+            for hostname in _discover_access_hostnames():
+                urls.append(f"http://{hostname}:{port}/remote/")
             for address in _discover_local_ipv4_addresses():
                 urls.append(f"http://{address}:{port}/remote/")
     deduped: list[str] = []
@@ -156,6 +159,72 @@ def build_remote_api_access_urls(config: RemoteApiConfig) -> tuple[str, ...]:
         seen.add(url)
         deduped.append(url)
     return tuple(deduped)
+
+
+def _discover_access_hostnames() -> tuple[str, ...]:
+    hostnames: list[str] = []
+    seen: set[str] = set()
+
+    def add(hostname: str) -> None:
+        text = str(hostname).strip().rstrip(".")
+        if not text:
+            return
+        normalized = text.lower()
+        if normalized in {"localhost", "0.0.0.0", "::", "::1"}:
+            return
+        if normalized in seen:
+            return
+        seen.add(normalized)
+        hostnames.append(text)
+
+    try:
+        add(socket.gethostname())
+    except OSError:
+        pass
+
+    try:
+        fqdn = socket.getfqdn()
+    except OSError:
+        fqdn = ""
+    if fqdn:
+        add(fqdn)
+
+    tailscale_dns_name = _discover_tailscale_dns_name()
+    if tailscale_dns_name:
+        add(tailscale_dns_name)
+        short_name = tailscale_dns_name.split(".", 1)[0].strip()
+        if short_name:
+            add(short_name)
+
+    return tuple(hostnames)
+
+
+def _discover_tailscale_dns_name() -> str:
+    try:
+        result = subprocess.run(
+            ["tailscale", "status", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if result.returncode != 0 and not result.stdout.strip():
+        return ""
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(payload, dict):
+        return ""
+    self_payload = payload.get("Self")
+    if not isinstance(self_payload, dict):
+        return ""
+    dns_name = self_payload.get("DNSName")
+    if not isinstance(dns_name, str):
+        return ""
+    return dns_name.strip().rstrip(".")
 
 
 def _iter_required_entries(

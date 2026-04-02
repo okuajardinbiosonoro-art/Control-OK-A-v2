@@ -12,6 +12,7 @@ if str(SRC_DIR) not in sys.path:
 
 from control_okua.services.remote_api_auth import build_remote_api_token_entry  # noqa: E402
 from control_okua.services.remote_api_bootstrap import (  # noqa: E402
+    build_remote_api_access_urls,
     ensure_remote_api_local_credentials,
     ensure_remote_api_runtime_config,
 )
@@ -95,3 +96,29 @@ def test_ensure_remote_api_local_credentials_generates_and_reuses_local_token_st
     second_tokens = {item.env_var: item.token for item in second.credentials}
     assert first_tokens == second_tokens
     assert env_map_second["CKV2_REMOTE_API_ADMIN_TOKEN"] == first_tokens["CKV2_REMOTE_API_ADMIN_TOKEN"]
+
+
+def test_build_remote_api_access_urls_includes_hostname_and_tailscale_magicdns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = RemoteApiConfig(
+        enabled=True,
+        bind_host="0.0.0.0",
+        port=8788,
+        auth_mode="bearer_token_inventory",
+    )
+    monkeypatch.setattr(
+        "control_okua.services.remote_api_bootstrap._discover_access_hostnames",
+        lambda: ("turnflow-servidor", "turnflow-servidor.tailnet.ts.net"),
+    )
+    monkeypatch.setattr(
+        "control_okua.services.remote_api_bootstrap._discover_local_ipv4_addresses",
+        lambda: ("192.168.80.14",),
+    )
+
+    urls = build_remote_api_access_urls(config)
+
+    assert "http://127.0.0.1:8788/remote/" in urls
+    assert "http://turnflow-servidor:8788/remote/" in urls
+    assert "http://turnflow-servidor.tailnet.ts.net:8788/remote/" in urls
+    assert "http://192.168.80.14:8788/remote/" in urls
