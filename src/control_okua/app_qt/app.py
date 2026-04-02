@@ -84,12 +84,60 @@ def run_app() -> int:
             active_profile = selected_profile
 
     session_controller = SessionController(cfg)
-    remote_runtime_status = build_remote_api_runtime_status(
-        remote_api_config := resolve_remote_api_config(cfg),
-        service_state="stopped",
-    )
     remote_api_service: RemoteApiService | None = None
-    if remote_api_config.enabled:
+
+    def _stop_remote_api_service() -> None:
+        nonlocal remote_api_service
+        if remote_api_service is None:
+            return
+        remote_api_service.stop()
+        remote_api_service = None
+
+    def _emit_remote_runtime_summary(status: object, *, announce_urls: bool = True) -> None:
+        effective_bind_host = getattr(status, "effective_bind_host", None)
+        port = getattr(status, "port", None)
+        service_state = getattr(status, "service_state", "stopped")
+        if service_state == "running" and effective_bind_host and port:
+            _emit_runtime_message(
+                "[remote_api] servicio remoto activo en "
+                f"http://{effective_bind_host}:{port}"
+            )
+        else:
+            _emit_runtime_message(f"[remote_api] estado={service_state}")
+        _emit_runtime_message(f"[remote_api] exposure_mode={getattr(status, 'exposure_mode', '-')}")
+        user_store_path = getattr(status, "user_store_path", None)
+        if user_store_path:
+            _emit_runtime_message(f"[remote_api] store de usuarios remotos en {user_store_path}")
+        if service_state == "running" and effective_bind_host and port:
+            _emit_runtime_message(
+                "[remote_api] consola remota disponible en "
+                f"http://{effective_bind_host}:{port}/remote/"
+            )
+        if not announce_urls:
+            return
+        local_access_url = getattr(status, "local_access_url", None)
+        remote_access_url = getattr(status, "remote_access_url", None)
+        access_urls = getattr(status, "access_urls", tuple())
+        if local_access_url:
+            _emit_runtime_message(f"[remote_api] local url: {local_access_url}")
+        if remote_access_url:
+            _emit_runtime_message(f"[remote_api] remote url: {remote_access_url}")
+        for access_url in access_urls:
+            _emit_runtime_message(f"[remote_api] access url: {access_url}")
+
+    def _restart_remote_api_runtime() -> tuple[object, str]:
+        nonlocal remote_api_service
+        remote_api_config = resolve_remote_api_config(cfg)
+        _stop_remote_api_service()
+
+        if not remote_api_config.enabled:
+            status = build_remote_api_runtime_status(
+                remote_api_config,
+                service_state="stopped",
+            )
+            _emit_runtime_message("[remote_api] deshabilitado: remote_api.enabled=false en config.")
+            return status, "Servicio remoto deshabilitado. El acceso desde otro dispositivo quedó apagado."
+
         _emit_runtime_message(
             "[remote_api] intentando iniciar servicio remoto en "
             f"mode={remote_api_config.exposure_mode} port={remote_api_config.port}"
@@ -101,34 +149,19 @@ def run_app() -> int:
                 config_path=config_path,
             )
             remote_api_service.start()
-            app.aboutToQuit.connect(remote_api_service.stop)
-            remote_runtime_status = build_remote_api_runtime_status(
+            status = build_remote_api_runtime_status(
                 remote_api_config,
                 service_state="running",
                 effective_bind_host=remote_api_service.effective_bind_host,
                 user_store_path=remote_api_service.user_store_path,
             )
-            _emit_runtime_message(
-                "[remote_api] servicio remoto activo en "
-                f"http://{remote_api_service.effective_bind_host}:{remote_api_service.port}"
+            _emit_remote_runtime_summary(status)
+            return status, (
+                "Servicio remoto actualizado. Revise la URL sugerida en Herramientas avanzadas "
+                "y use la URL remota cuando el modo sea Tailscale."
             )
-            _emit_runtime_message(f"[remote_api] exposure_mode={remote_runtime_status.exposure_mode}")
-            _emit_runtime_message(
-                "[remote_api] store de usuarios remotos en "
-                f"{remote_api_service.user_store_path}"
-            )
-            _emit_runtime_message(
-                "[remote_api] consola remota disponible en "
-                f"http://{remote_api_service.effective_bind_host}:{remote_api_service.port}/remote/"
-            )
-            if remote_runtime_status.local_access_url:
-                _emit_runtime_message(f"[remote_api] local url: {remote_runtime_status.local_access_url}")
-            if remote_runtime_status.remote_access_url:
-                _emit_runtime_message(f"[remote_api] remote url: {remote_runtime_status.remote_access_url}")
-            for access_url in remote_runtime_status.access_urls:
-                _emit_runtime_message(f"[remote_api] access url: {access_url}")
         except Exception as exc:
-            remote_runtime_status = build_remote_api_runtime_status(
+            status = build_remote_api_runtime_status(
                 remote_api_config,
                 service_state="failed",
                 failure_message=str(exc),
@@ -149,14 +182,36 @@ def run_app() -> int:
                     "[remote_api] token requerido en variable de entorno "
                     f"{remote_api_config.token_env_var}"
                 )
-    else:
-        _emit_runtime_message("[remote_api] deshabilitado: remote_api.enabled=false en config.")
+            return status, (
+                "La configuración se guardó, pero el servicio remoto no pudo iniciarse: "
+                f"{exc}"
+            )
+
+    def _apply_remote_api_settings(enabled: bool, exposure_mode: str) -> tuple[object, str]:
+        remote_cfg = cfg.setdefault("remote_api", {})
+        if not isinstance(remote_cfg, dict):
+            remote_cfg = {}
+            cfg["remote_api"] = remote_cfg
+        remote_cfg["enabled"] = enabled
+        remote_cfg["exposure_mode"] = exposure_mode
+        if exposure_mode == "local_only":
+            remote_cfg["bind_host"] = "127.0.0.1"
+        elif exposure_mode == "tailscale_only":
+            current_bind = remote_cfg.get("bind_host")
+            if not isinstance(current_bind, str) or not current_bind.strip():
+                remote_cfg["bind_host"] = "127.0.0.1"
+        save_config(cfg, config_path)
+        return _restart_remote_api_runtime()
+
+    app.aboutToQuit.connect(_stop_remote_api_service)
+    remote_runtime_status, _ = _restart_remote_api_runtime()
 
     window = MainWindow(
         cfg=cfg,
         config_path=config_path,
         warnings=warnings,
         session_controller=session_controller,
+        on_apply_remote_settings=_apply_remote_api_settings,
     )
     window.set_remote_api_status(remote_runtime_status)
     window.show()

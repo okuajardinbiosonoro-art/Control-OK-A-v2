@@ -12,6 +12,7 @@ SRC_DIR = ROOT_DIR / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
+from control_okua.app_qt.advanced_tools_dialog import AdvancedToolsDialog  # noqa: E402
 from control_okua.app_qt.main_window import MainWindow  # noqa: E402
 from control_okua.app_qt.viewmodels import NodesTabViewState  # noqa: E402
 from control_okua.core.registry import NodeSnapshot, NodeStatus  # noqa: E402
@@ -253,3 +254,78 @@ def test_advanced_tools_dialog_surfaces_remote_api_runtime_status(monkeypatch) -
         assert dialog.remote_failure_label.text() == "Ninguno"
     finally:
         window.close()
+
+
+def test_advanced_tools_dialog_applies_remote_settings_from_ui(monkeypatch) -> None:
+    _ensure_qapp()
+    cfg = _build_cfg()
+    cfg["remote_api"] = {
+        "enabled": True,
+        "exposure_mode": "local_only",
+    }
+    status_holder = {
+        "status": RemoteApiRuntimeStatus(
+            enabled=True,
+            service_state="running",
+            exposure_mode="local_only",
+            effective_bind_host="127.0.0.1",
+            port=8788,
+            local_access_url="http://127.0.0.1:8788/remote/",
+            remote_access_url=None,
+            access_urls=("http://127.0.0.1:8788/remote/",),
+            failure_message=None,
+            user_store_path=Path("remote_api_users.json"),
+        )
+    }
+    captured: dict[str, object] = {}
+    info_box: dict[str, str] = {}
+
+    def _apply_remote_settings(enabled: bool, exposure_mode: str) -> tuple[object, str]:
+        captured["enabled"] = enabled
+        captured["exposure_mode"] = exposure_mode
+        cfg["remote_api"]["enabled"] = enabled
+        cfg["remote_api"]["exposure_mode"] = exposure_mode
+        status_holder["status"] = RemoteApiRuntimeStatus(
+            enabled=enabled,
+            service_state="running",
+            exposure_mode=exposure_mode,
+            effective_bind_host="100.88.127.119",
+            port=8788,
+            local_access_url=None,
+            remote_access_url="http://100.88.127.119:8788/remote/",
+            access_urls=("http://100.88.127.119:8788/remote/",),
+            failure_message=None,
+            user_store_path=Path("remote_api_users.json"),
+        )
+        return status_holder["status"], "Servicio remoto actualizado."
+
+    def _fake_info(_parent, title: str, text: str) -> None:
+        info_box["title"] = title
+        info_box["text"] = text
+
+    monkeypatch.setattr(
+        "control_okua.app_qt.advanced_tools_dialog.QMessageBox.information",
+        _fake_info,
+    )
+
+    dialog = AdvancedToolsDialog(
+        on_open_folder=lambda: None,
+        on_view_config=lambda: None,
+        on_reload_config=lambda: None,
+        on_apply_remote_settings=_apply_remote_settings,
+        on_open_firmware_manager=lambda: None,
+        state_provider=lambda: (cfg, Path("config.json"), []),
+        remote_status_provider=lambda: status_holder["status"],
+    )
+    try:
+        dialog.set_state(cfg, Path("config.json"), [])
+        dialog.remote_enabled_checkbox.setChecked(True)
+        dialog.remote_exposure_mode_combo.setCurrentIndex(1)
+        dialog._handle_apply_remote_settings_clicked()
+
+        assert captured == {"enabled": True, "exposure_mode": "tailscale_only"}
+        assert dialog.remote_remote_url_label.text() == "http://100.88.127.119:8788/remote/"
+        assert info_box["title"] == "Servicio remoto"
+        assert "actualizado" in info_box["text"].lower()
+    finally:
+        dialog.close()

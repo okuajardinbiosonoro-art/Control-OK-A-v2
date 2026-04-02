@@ -4,11 +4,14 @@ from pathlib import Path
 from typing import Any, Callable
 
 from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
     QDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QVBoxLayout,
 )
@@ -22,6 +25,7 @@ class AdvancedToolsDialog(QDialog):
         on_open_folder: Callable[[], None],
         on_view_config: Callable[[], None],
         on_reload_config: Callable[[], None],
+        on_apply_remote_settings: Callable[[bool, str], tuple[Any, str]],
         on_open_firmware_manager: Callable[[], None],
         state_provider: Callable[[], tuple[dict[str, Any], Path, list[str]]],
         remote_status_provider: Callable[[], Any | None],
@@ -34,6 +38,7 @@ class AdvancedToolsDialog(QDialog):
         self._on_open_folder = on_open_folder
         self._on_view_config = on_view_config
         self._on_reload_config = on_reload_config
+        self._on_apply_remote_settings = on_apply_remote_settings
         self._on_open_firmware_manager = on_open_firmware_manager
         self._state_provider = state_provider
         self._remote_status_provider = remote_status_provider
@@ -109,6 +114,29 @@ class AdvancedToolsDialog(QDialog):
         self.remote_failure_label.setWordWrap(True)
         remote_form.addRow("Último fallo:", self.remote_failure_label)
         remote_layout.addLayout(remote_form)
+
+        remote_apply_hint = QLabel(
+            "Cambie aquí el modo operativo del gateway remoto sin editar config.json. "
+            "El servicio se guarda y se intenta reaplicar de inmediato."
+        )
+        remote_apply_hint.setWordWrap(True)
+        remote_layout.addWidget(remote_apply_hint)
+
+        remote_apply_form = QFormLayout()
+        self.remote_enabled_checkbox = QCheckBox("Servicio remoto habilitado")
+        remote_apply_form.addRow("Habilitado:", self.remote_enabled_checkbox)
+        self.remote_exposure_mode_combo = QComboBox(self)
+        self.remote_exposure_mode_combo.addItem("Solo este PC (local_only)", "local_only")
+        self.remote_exposure_mode_combo.addItem("Solo Tailscale (tailscale_only)", "tailscale_only")
+        remote_apply_form.addRow("Modo rápido:", self.remote_exposure_mode_combo)
+        remote_layout.addLayout(remote_apply_form)
+
+        remote_actions_layout = QHBoxLayout()
+        self.remote_apply_button = QPushButton("Aplicar servicio remoto")
+        self.remote_apply_button.clicked.connect(self._handle_apply_remote_settings_clicked)
+        remote_actions_layout.addWidget(self.remote_apply_button)
+        remote_actions_layout.addStretch(1)
+        remote_layout.addLayout(remote_actions_layout)
         root_layout.addWidget(remote_group)
 
         firmware_group = QGroupBox("Firmware")
@@ -147,6 +175,18 @@ class AdvancedToolsDialog(QDialog):
         self.config_path_label.setText(str(config_path))
         self.warnings_label.setText(f"Advertencias de config: {warning_count}")
         self.midi_outputs_widget.refresh_from_config(cfg)
+        remote_cfg = cfg.get("remote_api")
+        remote_enabled = False
+        configured_exposure_mode = "local_only"
+        if isinstance(remote_cfg, dict):
+            remote_enabled = remote_cfg.get("enabled") is True
+            raw_exposure_mode = remote_cfg.get("exposure_mode")
+            if raw_exposure_mode in {"local_only", "tailscale_only"}:
+                configured_exposure_mode = str(raw_exposure_mode)
+        self.remote_enabled_checkbox.setChecked(remote_enabled)
+        exposure_index = self.remote_exposure_mode_combo.findData(configured_exposure_mode)
+        if exposure_index >= 0:
+            self.remote_exposure_mode_combo.setCurrentIndex(exposure_index)
         remote_status = self._remote_status_provider()
         if remote_status is None:
             self.remote_status_label.setText("-")
@@ -181,6 +221,25 @@ class AdvancedToolsDialog(QDialog):
         self._on_reload_config()
         cfg, config_path, warnings = self._state_provider()
         self.set_state(cfg, config_path, warnings)
+
+    def _handle_apply_remote_settings_clicked(self) -> None:
+        exposure_mode = str(self.remote_exposure_mode_combo.currentData() or "local_only")
+        enabled = self.remote_enabled_checkbox.isChecked()
+        try:
+            _status, message = self._on_apply_remote_settings(enabled, exposure_mode)
+        except Exception as exc:
+            cfg, config_path, warnings = self._state_provider()
+            self.set_state(cfg, config_path, warnings)
+            QMessageBox.warning(
+                self,
+                "Servicio remoto",
+                f"No se pudo actualizar el servicio remoto: {exc}",
+            )
+            return
+
+        cfg, config_path, warnings = self._state_provider()
+        self.set_state(cfg, config_path, warnings)
+        QMessageBox.information(self, "Servicio remoto", message)
 
     def _handle_open_firmware_manager_clicked(self) -> None:
         self.accept()

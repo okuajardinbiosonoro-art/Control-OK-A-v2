@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QAction, QBrush, QColor, QDesktopServices
@@ -97,6 +97,7 @@ class MainWindow(QMainWindow):
         config_path: Path,
         warnings: list[str] | None = None,
         session_controller: SessionController | None = None,
+        on_apply_remote_settings: Callable[[bool, str], tuple[Any, str]] | None = None,
     ) -> None:
         super().__init__()
         self.cfg = cfg
@@ -122,6 +123,7 @@ class MainWindow(QMainWindow):
         self._node_box_expanded: dict[int, bool] = {}
         self._preflight_panel_visible = False
         self._remote_api_status: Any | None = None
+        self._on_apply_remote_settings = on_apply_remote_settings
         self.session_controller = session_controller or SessionController(
             self._session_cfg_provider,
             parent=self,
@@ -787,6 +789,7 @@ class MainWindow(QMainWindow):
                 on_open_folder=self.open_config_folder,
                 on_view_config=self.view_config,
                 on_reload_config=self.reload_config,
+                on_apply_remote_settings=self.apply_remote_settings,
                 on_open_firmware_manager=self.open_firmware_manager,
                 state_provider=self._advanced_state,
                 remote_status_provider=self._remote_api_status_provider,
@@ -795,6 +798,9 @@ class MainWindow(QMainWindow):
 
         self._advanced_dialog.set_state(self.cfg, self.config_path, self.warnings)
         self._advanced_dialog.reload_button.setEnabled(
+            build_session_action_state(self._session_snapshot).can_edit_configuration
+        )
+        self._advanced_dialog.remote_apply_button.setEnabled(
             build_session_action_state(self._session_snapshot).can_edit_configuration
         )
         self._advanced_dialog.exec()
@@ -821,6 +827,18 @@ class MainWindow(QMainWindow):
         self._remote_api_status = status
         if self._advanced_dialog is not None and self._advanced_dialog.isVisible():
             self._advanced_dialog.set_state(self.cfg, self.config_path, self.warnings)
+
+    def apply_remote_settings(self, enabled: bool, exposure_mode: str) -> tuple[Any, str]:
+        if not self._ensure_configuration_change_allowed():
+            raise RuntimeError(
+                "Detenga la sesión antes de cambiar la exposición del servicio remoto."
+            )
+        if self._on_apply_remote_settings is None:
+            raise RuntimeError("La aplicación no expuso un handler para reconfigurar el servicio remoto.")
+
+        status, message = self._on_apply_remote_settings(enabled, exposure_mode)
+        self.set_remote_api_status(status)
+        return status, message
 
     def open_config_folder(self) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.config_path.parent)))
