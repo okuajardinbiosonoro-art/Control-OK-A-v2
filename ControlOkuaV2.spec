@@ -18,6 +18,7 @@ else:
     ICON_FILE = None
 
 hiddenimports = [
+    "control_okua.app_qt.app",
     "rtmidi",
     "mido.backends.rtmidi",
 ]

@@ -41,6 +41,7 @@ from control_okua.services.remote_api_auth import (
     authorize_remote_api_action,
     resolve_remote_api_token_bindings,
 )
+from control_okua.services.remote_api_bootstrap import resolve_remote_api_bind_host
 from control_okua.services.remote_api_contract import (
     RemoteApiConfig,
     RemoteApiError,
@@ -184,7 +185,7 @@ class _RemoteApiRequestHandler(BaseHTTPRequestHandler):
         self.server.remote_api_service.handle_http_request(self)
 
     def log_message(self, format: str, *args) -> None:
-        self.server.remote_api_service.logger.info(
+        self.server.remote_api_service.logger.debug(
             "Remote API %s - %s",
             self.address_string(),
             format % args,
@@ -205,6 +206,7 @@ class RemoteApiService:
         self._logger = logger or logging.getLogger(__name__)
         self._server: _RemoteApiHttpServer | None = None
         self._thread: Thread | None = None
+        self._effective_bind_host: str | None = None
         self._token_bindings: tuple[RemoteApiTokenBinding, ...] = ()
         self._audit_writer = RemoteApiAuditWriter(
             folder=Path(config.audit_folder),
@@ -230,6 +232,10 @@ class RemoteApiService:
         return int(self._config.port)
 
     @property
+    def effective_bind_host(self) -> str | None:
+        return self._effective_bind_host
+
+    @property
     def is_running(self) -> bool:
         return self._server is not None and self._thread is not None and self._thread.is_alive()
 
@@ -245,16 +251,18 @@ class RemoteApiService:
         if self.is_running:
             return
         self._token_bindings = self._load_token_bindings()
+        effective_bind_host = resolve_remote_api_bind_host(self._config)
         try:
             server = _RemoteApiHttpServer(
-                (self._config.bind_host, int(self._config.port)),
+                (effective_bind_host, int(self._config.port)),
                 self,
             )
         except OSError as exc:
             raise RemoteApiServiceError(
-                f"No se pudo iniciar servicio remoto local en {self._config.bind_host}:{self._config.port}: {exc}"
+                f"No se pudo iniciar servicio remoto local en {effective_bind_host}:{self._config.port}: {exc}"
             ) from exc
         self._server = server
+        self._effective_bind_host = effective_bind_host
         self._thread = Thread(
             target=server.serve_forever,
             name="remote-api-http-server",
@@ -263,14 +271,14 @@ class RemoteApiService:
         self._thread.start()
         self._logger.info(
             "Servicio remoto local activo en http://%s:%s",
-            self._config.bind_host,
+            effective_bind_host,
             self.port,
         )
         if self._config.auth_mode == "bearer_token":
             self._logger.warning(
                 "Servicio remoto con compatibilidad legado bearer_token; si existe token válido se autoriza como admin."
             )
-        if not self._token_bindings:
+        elif self._config.auth_mode == "bearer_token_inventory" and not self._token_bindings:
             self._logger.info(
                 "Servicio remoto sin bearer tokens técnicos cargados; la consola humana por usuario/contraseña sigue disponible."
             )
@@ -280,6 +288,7 @@ class RemoteApiService:
         thread = self._thread
         self._server = None
         self._thread = None
+        self._effective_bind_host = None
         if server is None:
             return
         server.shutdown()
@@ -292,6 +301,14 @@ class RemoteApiService:
         parsed = urlparse(handler.path)
         method = handler.command.upper()
         raw_path = parsed.path or "/"
+        if method == "GET" and raw_path == "/favicon.ico":
+            self._write_bytes_response(
+                handler,
+                status_code=204,
+                raw=b"",
+                content_type="image/x-icon",
+            )
+            return
         if method == "GET" and _is_remote_console_path(raw_path):
             self._serve_remote_console(handler, raw_path)
             return
@@ -1171,7 +1188,7 @@ class RemoteApiService:
                 handler.send_header(str(header_name), str(header_value))
         handler.send_header("Content-Length", str(len(raw)))
         handler.end_headers()
-        handler.wfile.write(raw)
+        _write_handler_bytes(handler, raw)
 
     @staticmethod
     def _write_bytes_response(
@@ -1185,7 +1202,7 @@ class RemoteApiService:
         handler.send_header("Content-Type", str(content_type))
         handler.send_header("Content-Length", str(len(raw)))
         handler.end_headers()
-        handler.wfile.write(raw)
+        _write_handler_bytes(handler, raw)
 
     @classmethod
     def _write_plain_response(
@@ -1296,6 +1313,13 @@ def _coerce_optional_bool(value: object) -> bool | None:
     if value is None:
         return None
     return bool(value)
+
+
+def _write_handler_bytes(handler: BaseHTTPRequestHandler, raw: bytes) -> None:
+    try:
+        handler.wfile.write(raw)
+    except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+        return
 
 
 class _UnsetSentinel:

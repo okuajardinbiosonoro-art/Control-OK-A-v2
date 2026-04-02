@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Sequence
 import re
+import sys
 import threading
 import time
 from typing import Any
@@ -14,6 +15,16 @@ DEFAULT_OUTPUTS: dict[str, str] = {
     "1": "loopMIDI Port 2",
     "2": "loopMIDI Port 3",
 }
+
+
+def _emit_runtime_message(message: str) -> None:
+    stream = getattr(sys, "stdout", None)
+    if stream is None or not hasattr(stream, "write"):
+        return
+    try:
+        print(str(message), file=stream, flush=True)
+    except Exception:
+        return
 
 
 class MidiRouter:
@@ -45,33 +56,33 @@ class MidiRouter:
 
         outputs_raw = midi_cfg.get("outputs")
         if not isinstance(outputs_raw, dict) or not outputs_raw:
-            print("[midi] warning: cfg.midi.outputs vacio; usando defaults")
+            _emit_runtime_message("[midi] warning: cfg.midi.outputs vacio; usando defaults")
             outputs_raw = DEFAULT_OUTPUTS.copy()
 
         outputs: dict[int, str] = {}
         for raw_bus, raw_port_name in outputs_raw.items():
             if isinstance(raw_bus, bool):
-                print(f"[midi] warning: bus invalido '{raw_bus}' ignorado.")
+                _emit_runtime_message(f"[midi] warning: bus invalido '{raw_bus}' ignorado.")
                 continue
 
             try:
                 bus = int(raw_bus)
             except (TypeError, ValueError):
-                print(f"[midi] warning: bus invalido '{raw_bus}' ignorado.")
+                _emit_runtime_message(f"[midi] warning: bus invalido '{raw_bus}' ignorado.")
                 continue
 
             if bus < 0 or bus > 255:
-                print(f"[midi] warning: bus fuera de rango '{bus}' ignorado.")
+                _emit_runtime_message(f"[midi] warning: bus fuera de rango '{bus}' ignorado.")
                 continue
 
             if not isinstance(raw_port_name, str) or not raw_port_name.strip():
-                print(f"[midi] warning: puerto invalido para bus {bus}; ignorado.")
+                _emit_runtime_message(f"[midi] warning: puerto invalido para bus {bus}; ignorado.")
                 continue
 
             outputs[bus] = raw_port_name
 
         if not outputs:
-            print("[midi] warning: cfg.midi.outputs vacio; usando defaults")
+            _emit_runtime_message("[midi] warning: cfg.midi.outputs vacio; usando defaults")
             outputs = {int(bus): name for bus, name in DEFAULT_OUTPUTS.items()}
 
         backend = midi_cfg.get("backend", "rtmidi")
@@ -118,9 +129,9 @@ class MidiRouter:
 
         available_outputs = mido.get_output_names()
         output_mapping = {str(bus): name for bus, name in sorted(self.outputs.items())}
-        print(f"[midi] backend={backend_label}")
-        print(f"[midi] outputs={output_mapping}")
-        print(f"[midi] available_outputs={available_outputs}")
+        _emit_runtime_message(f"[midi] backend={backend_label}")
+        _emit_runtime_message(f"[midi] outputs={output_mapping}")
+        _emit_runtime_message(f"[midi] available_outputs={available_outputs}")
         self._resolved_outputs = {}
 
         for bus, requested_name in sorted(self.outputs.items()):
@@ -135,10 +146,10 @@ class MidiRouter:
                 )
                 if self.strict_ports:
                     raise RuntimeError(msg)
-                print(msg)
+                _emit_runtime_message(msg)
                 continue
 
-            print(
+            _emit_runtime_message(
                 f"[midi] resolve bus {bus}: '{requested_name}' -> "
                 f"'{resolved_name}' ({reason})"
             )
@@ -152,12 +163,12 @@ class MidiRouter:
                 )
                 if self.strict_ports:
                     raise RuntimeError(msg) from exc
-                print(msg)
+                _emit_runtime_message(msg)
                 continue
 
             self._ports[bus] = port
             self._resolved_outputs[bus] = resolved_name
-            print(f"[midi] bus {bus} abierto -> {resolved_name}")
+            _emit_runtime_message(f"[midi] bus {bus} abierto -> {resolved_name}")
 
         if not self._ports:
             raise RuntimeError(
@@ -180,7 +191,7 @@ class MidiRouter:
             try:
                 self.flush()
             except Exception as exc:
-                print(f"[midi] warning: error en flush periodico: {exc}")
+                _emit_runtime_message(f"[midi] warning: error en flush periodico: {exc}")
 
     def close(self) -> None:
         self._stop_event.set()
@@ -191,20 +202,20 @@ class MidiRouter:
         try:
             self.flush()
         except Exception as exc:
-            print(f"[midi] warning: flush final fallo: {exc}")
+            _emit_runtime_message(f"[midi] warning: flush final fallo: {exc}")
 
         for bus, port in list(self._ports.items()):
             try:
                 port.close()
             except Exception as exc:
-                print(f"[midi] warning: no se pudo cerrar bus {bus}: {exc}")
+                _emit_runtime_message(f"[midi] warning: no se pudo cerrar bus {bus}: {exc}")
             finally:
                 self._ports.pop(bus, None)
                 self._resolved_outputs.pop(bus, None)
 
     def enqueue(self, bus: int, msg: mido.Message) -> None:
         if bus not in self._ports:
-            print(f"[midi] warning: bus {bus} no abierto; mensaje descartado.")
+            _emit_runtime_message(f"[midi] warning: bus {bus} no abierto; mensaje descartado.")
             return
 
         with self._lock:
@@ -221,13 +232,13 @@ class MidiRouter:
         for bus, msg in pending:
             port = self._ports.get(bus)
             if port is None:
-                print(f"[midi] warning: bus {bus} no abierto durante flush.")
+                _emit_runtime_message(f"[midi] warning: bus {bus} no abierto durante flush.")
                 continue
             try:
                 port.send(msg)
                 sent += 1
             except Exception as exc:
-                print(f"[midi] warning: error enviando en bus {bus}: {exc}")
+                _emit_runtime_message(f"[midi] warning: error enviando en bus {bus}: {exc}")
         return sent
 
     def send_note_on(self, bus: int, ch: int, note: int, vel: int) -> None:

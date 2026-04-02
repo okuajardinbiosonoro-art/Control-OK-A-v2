@@ -18,11 +18,21 @@ from control_okua.core.profiles.profile_service import (
 )
 from control_okua.services.remote_api_contract import resolve_remote_api_config
 from control_okua.services.remote_api_bootstrap import (
+    build_remote_api_runtime_status,
     ensure_remote_api_runtime_config,
 )
-from control_okua.services.remote_api_bootstrap import build_remote_api_access_urls
 from control_okua.services.remote_api_service import RemoteApiService
 from control_okua.services.session_controller import SessionController
+
+
+def _emit_runtime_message(message: str) -> None:
+    stream = getattr(sys, "stdout", None)
+    if stream is None or not hasattr(stream, "write"):
+        return
+    try:
+        print(str(message), file=stream, flush=True)
+    except Exception:
+        return
 
 
 def _get_active_profile_id(cfg: dict[str, object]) -> str | None:
@@ -38,13 +48,13 @@ def _get_active_profile_id(cfg: dict[str, object]) -> str | None:
 def run_app() -> int:
     cfg, warnings, config_path = load_config()
     for warning in warnings:
-        print(f"[config] {warning}")
+        _emit_runtime_message(f"[config] {warning}")
 
     cfg, remote_runtime_warnings, remote_config_changed = ensure_remote_api_runtime_config(cfg)
     if remote_config_changed:
         save_config(cfg, config_path)
     for warning in remote_runtime_warnings:
-        print(f"[remote_api] {warning}")
+        _emit_runtime_message(f"[remote_api] {warning}")
 
     app = QApplication(sys.argv)
 
@@ -70,22 +80,19 @@ def run_app() -> int:
                 f"profile.active actualizado a '{selected_profile}' desde selector guiado."
             )
             warnings.append(profile_warning)
-            print(f"[config] {profile_warning}")
+            _emit_runtime_message(f"[config] {profile_warning}")
             active_profile = selected_profile
 
     session_controller = SessionController(cfg)
-    window = MainWindow(
-        cfg=cfg,
-        config_path=config_path,
-        warnings=warnings,
-        session_controller=session_controller,
+    remote_runtime_status = build_remote_api_runtime_status(
+        remote_api_config := resolve_remote_api_config(cfg),
+        service_state="stopped",
     )
     remote_api_service: RemoteApiService | None = None
-    remote_api_config = resolve_remote_api_config(cfg)
     if remote_api_config.enabled:
-        print(
+        _emit_runtime_message(
             "[remote_api] intentando iniciar servicio remoto en "
-            f"http://{remote_api_config.bind_host}:{remote_api_config.port}/remote/"
+            f"mode={remote_api_config.exposure_mode} port={remote_api_config.port}"
         )
         try:
             remote_api_service = RemoteApiService(
@@ -95,39 +102,63 @@ def run_app() -> int:
             )
             remote_api_service.start()
             app.aboutToQuit.connect(remote_api_service.stop)
-            print(
-                "[remote_api] servicio remoto activo en "
-                f"http://{remote_api_config.bind_host}:{remote_api_service.port}"
+            remote_runtime_status = build_remote_api_runtime_status(
+                remote_api_config,
+                service_state="running",
+                effective_bind_host=remote_api_service.effective_bind_host,
+                user_store_path=remote_api_service.user_store_path,
             )
-            print(
+            _emit_runtime_message(
+                "[remote_api] servicio remoto activo en "
+                f"http://{remote_api_service.effective_bind_host}:{remote_api_service.port}"
+            )
+            _emit_runtime_message(f"[remote_api] exposure_mode={remote_runtime_status.exposure_mode}")
+            _emit_runtime_message(
                 "[remote_api] store de usuarios remotos en "
                 f"{remote_api_service.user_store_path}"
             )
-            print(
+            _emit_runtime_message(
                 "[remote_api] consola remota disponible en "
-                f"http://{remote_api_config.bind_host}:{remote_api_service.port}/remote/"
+                f"http://{remote_api_service.effective_bind_host}:{remote_api_service.port}/remote/"
             )
-            for access_url in build_remote_api_access_urls(remote_api_config):
-                print(f"[remote_api] access url: {access_url}")
+            if remote_runtime_status.local_access_url:
+                _emit_runtime_message(f"[remote_api] local url: {remote_runtime_status.local_access_url}")
+            if remote_runtime_status.remote_access_url:
+                _emit_runtime_message(f"[remote_api] remote url: {remote_runtime_status.remote_access_url}")
+            for access_url in remote_runtime_status.access_urls:
+                _emit_runtime_message(f"[remote_api] access url: {access_url}")
         except Exception as exc:
-            print(f"[remote_api] no se pudo iniciar servicio remoto: {exc}")
+            remote_runtime_status = build_remote_api_runtime_status(
+                remote_api_config,
+                service_state="failed",
+                failure_message=str(exc),
+            )
+            _emit_runtime_message(f"[remote_api] no se pudo iniciar servicio remoto: {exc}")
             if remote_api_config.auth_mode == "bearer_token_inventory":
-                print("[remote_api] auth_mode=bearer_token_inventory")
+                _emit_runtime_message("[remote_api] auth_mode=bearer_token_inventory")
                 if remote_api_config.tokens:
                     for token_entry in remote_api_config.tokens:
-                        print(
+                        _emit_runtime_message(
                             "[remote_api] token requerido: "
                             f"role={token_entry.role} env_var={token_entry.env_var}"
                         )
                 else:
-                    print("[remote_api] remote_api.tokens esta vacio en config.")
+                    _emit_runtime_message("[remote_api] remote_api.tokens esta vacio en config.")
             elif remote_api_config.auth_mode == "bearer_token":
-                print(
+                _emit_runtime_message(
                     "[remote_api] token requerido en variable de entorno "
                     f"{remote_api_config.token_env_var}"
                 )
     else:
-        print("[remote_api] deshabilitado: remote_api.enabled=false en config.")
+        _emit_runtime_message("[remote_api] deshabilitado: remote_api.enabled=false en config.")
+
+    window = MainWindow(
+        cfg=cfg,
+        config_path=config_path,
+        warnings=warnings,
+        session_controller=session_controller,
+    )
+    window.set_remote_api_status(remote_runtime_status)
     window.show()
 
     # Permite validaciones automáticas sin afectar ejecución normal.

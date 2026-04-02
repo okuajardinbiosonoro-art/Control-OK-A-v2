@@ -193,6 +193,7 @@ def test_remote_api_serves_assets_and_supports_legacy_bearer(tmp_path: Path, rem
         status_html, content_type_html, raw_html = _request_raw(service.port, path="/remote/")
         status_js, content_type_js, _ = _request_raw(service.port, path="/remote/app.js")
         status_css, content_type_css, _ = _request_raw(service.port, path="/remote/styles.css")
+        status_favicon, _, raw_favicon = _request_raw(service.port, path="/favicon.ico")
         status_health, payload_health, _ = _request(service.port, method="GET", path="/api/v1/health", token="observer-test-token")
     finally:
         service.stop()
@@ -202,6 +203,8 @@ def test_remote_api_serves_assets_and_supports_legacy_bearer(tmp_path: Path, rem
     assert "Bootstrap inicial" in raw_html
     assert status_js == 200 and "javascript" in content_type_js
     assert status_css == 200 and "text/css" in content_type_css
+    assert status_favicon == 204
+    assert raw_favicon == ""
     assert status_health == 200
     assert payload_health["ok"] is True
 
@@ -368,3 +371,14 @@ def test_remote_console_asset_path_supports_frozen_bundle(
     resolved = remote_api_service_module._remote_console_asset_path("index.html")
 
     assert resolved == asset_path
+
+
+def test_write_handler_bytes_swallows_benign_disconnects() -> None:
+    class _BrokenStream:
+        def write(self, _raw: bytes) -> None:
+            raise BrokenPipeError("client disconnected")
+
+    class _HandlerStub:
+        wfile = _BrokenStream()
+
+    remote_api_service_module._write_handler_bytes(_HandlerStub(), b"hello")

@@ -115,6 +115,17 @@ def test_resolve_remote_api_token_bindings_accepts_inventory_and_labels() -> Non
     assert all(binding.granted_authorization_result == "granted" for binding in bindings)
 
 
+def test_resolve_remote_api_token_bindings_allows_human_session_only_without_tokens() -> None:
+    bindings = resolve_remote_api_token_bindings(
+        RemoteApiConfig(
+            auth_mode="human_session_only",
+        ),
+        environ={},
+    )
+
+    assert bindings == ()
+
+
 def test_resolve_remote_api_token_bindings_rejects_missing_or_duplicate_tokens() -> None:
     inventory_config = RemoteApiConfig(
         auth_mode="bearer_token_inventory",

@@ -30,6 +30,7 @@ def test_resolve_remote_api_config_reads_expected_defaults_and_overrides() -> No
     cfg = {
         "remote_api": {
             "enabled": True,
+            "exposure_mode": "custom_bind",
             "bind_host": "0.0.0.0",
             "port": 9999,
             "auth_mode": "bearer_token_inventory",
@@ -55,6 +56,7 @@ def test_resolve_remote_api_config_reads_expected_defaults_and_overrides() -> No
     resolved = resolve_remote_api_config(cfg)
 
     assert resolved.enabled is True
+    assert resolved.exposure_mode == "custom_bind"
     assert resolved.bind_host == "0.0.0.0"
     assert resolved.port == 9999
     assert resolved.auth_mode == "bearer_token_inventory"
@@ -66,6 +68,22 @@ def test_resolve_remote_api_config_reads_expected_defaults_and_overrides() -> No
     assert resolved.audit_folder == "logs/custom_remote"
     assert resolved.user_store_filename == "site_users.json"
     assert resolved.session_ttl_s == 7200
+
+
+def test_resolve_remote_api_config_defaults_to_human_session_and_local_only() -> None:
+    resolved = resolve_remote_api_config(
+        {
+            "remote_api": {
+                "enabled": True,
+            }
+        }
+    )
+
+    assert resolved.enabled is True
+    assert resolved.exposure_mode == "local_only"
+    assert resolved.bind_host == "127.0.0.1"
+    assert resolved.auth_mode == "human_session_only"
+    assert resolved.tokens == ()
 
 
 def test_serialize_session_snapshot_and_node_detail_follow_runtime_source_of_truth() -> None:

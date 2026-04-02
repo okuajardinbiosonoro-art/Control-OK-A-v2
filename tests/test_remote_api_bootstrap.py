@@ -4,6 +4,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 SRC_DIR = ROOT_DIR / "src"
@@ -12,18 +14,20 @@ if str(SRC_DIR) not in sys.path:
 
 from control_okua.services.remote_api_auth import build_remote_api_token_entry  # noqa: E402
 from control_okua.services.remote_api_bootstrap import (  # noqa: E402
+    build_remote_api_exposure_status,
     build_remote_api_access_urls,
     ensure_remote_api_local_credentials,
     ensure_remote_api_runtime_config,
+    resolve_remote_api_bind_host,
 )
 from control_okua.services.remote_api_contract import RemoteApiConfig  # noqa: E402
 
 
-def test_ensure_remote_api_runtime_config_autofills_bind_host_and_inventory() -> None:
+def test_ensure_remote_api_runtime_config_infers_exposure_mode_and_inventory() -> None:
     cfg = {
         "remote_api": {
             "enabled": True,
-            "bind_host": "127.0.0.1",
+            "bind_host": "0.0.0.0",
             "port": 8788,
             "auth_mode": "bearer_token_inventory",
             "token_env_var": "CKV2_REMOTE_API_TOKEN",
@@ -36,9 +40,9 @@ def test_ensure_remote_api_runtime_config_autofills_bind_host_and_inventory() ->
     updated_cfg, warnings, changed = ensure_remote_api_runtime_config(cfg)
 
     assert changed is True
-    assert updated_cfg["remote_api"]["bind_host"] == "0.0.0.0"
+    assert updated_cfg["remote_api"]["exposure_mode"] == "custom_bind"
     assert len(updated_cfg["remote_api"]["tokens"]) == 3
-    assert "remote_api.bind_host actualizado a '0.0.0.0' para acceso LAN/Tailscale." in warnings
+    assert "remote_api.exposure_mode ausente o invalido; se infirio desde bind_host." in warnings
 
 
 def test_ensure_remote_api_local_credentials_generates_and_reuses_local_token_store(
@@ -103,9 +107,10 @@ def test_build_remote_api_access_urls_includes_hostname_and_tailscale_magicdns(
 ) -> None:
     config = RemoteApiConfig(
         enabled=True,
+        exposure_mode="custom_bind",
         bind_host="0.0.0.0",
         port=8788,
-        auth_mode="bearer_token_inventory",
+        auth_mode="human_session_only",
     )
     monkeypatch.setattr(
         "control_okua.services.remote_api_bootstrap._discover_access_hostnames",
@@ -122,3 +127,42 @@ def test_build_remote_api_access_urls_includes_hostname_and_tailscale_magicdns(
     assert "http://turnflow-servidor:8788/remote/" in urls
     assert "http://turnflow-servidor.tailnet.ts.net:8788/remote/" in urls
     assert "http://192.168.80.14:8788/remote/" in urls
+
+
+def test_resolve_remote_api_bind_host_for_tailscale_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = RemoteApiConfig(
+        enabled=True,
+        exposure_mode="tailscale_only",
+        port=8788,
+        auth_mode="human_session_only",
+    )
+    monkeypatch.setattr(
+        "control_okua.services.remote_api_bootstrap._discover_tailscale_ipv4_address",
+        lambda: "100.88.127.119",
+    )
+
+    bind_host = resolve_remote_api_bind_host(config)
+    status = build_remote_api_exposure_status(config, effective_bind_host=bind_host)
+
+    assert bind_host == "100.88.127.119"
+    assert status.remote_access_url == "http://100.88.127.119:8788/remote/"
+
+
+def test_resolve_remote_api_bind_host_fails_cleanly_without_tailscale_ip(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = RemoteApiConfig(
+        enabled=True,
+        exposure_mode="tailscale_only",
+        port=8788,
+        auth_mode="human_session_only",
+    )
+    monkeypatch.setattr(
+        "control_okua.services.remote_api_bootstrap._discover_tailscale_ipv4_address",
+        lambda: "",
+    )
+
+    with pytest.raises(RuntimeError):
+        resolve_remote_api_bind_host(config)

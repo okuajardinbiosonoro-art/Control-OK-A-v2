@@ -24,6 +24,7 @@ class AdvancedToolsDialog(QDialog):
         on_reload_config: Callable[[], None],
         on_open_firmware_manager: Callable[[], None],
         state_provider: Callable[[], tuple[dict[str, Any], Path, list[str]]],
+        remote_status_provider: Callable[[], Any | None],
         parent=None,
     ) -> None:
         super().__init__(parent)
@@ -35,6 +36,7 @@ class AdvancedToolsDialog(QDialog):
         self._on_reload_config = on_reload_config
         self._on_open_firmware_manager = on_open_firmware_manager
         self._state_provider = state_provider
+        self._remote_status_provider = remote_status_provider
 
         self._build_ui()
 
@@ -79,6 +81,36 @@ class AdvancedToolsDialog(QDialog):
 
         root_layout.addWidget(config_group)
 
+        remote_group = QGroupBox("Servicio remoto")
+        remote_layout = QVBoxLayout(remote_group)
+        remote_form = QFormLayout()
+        self.remote_status_label = QLabel("-")
+        self.remote_status_label.setWordWrap(True)
+        remote_form.addRow("Estado:", self.remote_status_label)
+        self.remote_exposure_mode_label = QLabel("-")
+        self.remote_exposure_mode_label.setWordWrap(True)
+        remote_form.addRow("Exposición:", self.remote_exposure_mode_label)
+        self.remote_bind_label = QLabel("-")
+        self.remote_bind_label.setWordWrap(True)
+        remote_form.addRow("Bind efectivo:", self.remote_bind_label)
+        self.remote_port_label = QLabel("-")
+        self.remote_port_label.setWordWrap(True)
+        remote_form.addRow("Puerto:", self.remote_port_label)
+        self.remote_local_url_label = QLabel("-")
+        self.remote_local_url_label.setWordWrap(True)
+        remote_form.addRow("URL local:", self.remote_local_url_label)
+        self.remote_remote_url_label = QLabel("-")
+        self.remote_remote_url_label.setWordWrap(True)
+        remote_form.addRow("URL remota:", self.remote_remote_url_label)
+        self.remote_store_label = QLabel("-")
+        self.remote_store_label.setWordWrap(True)
+        remote_form.addRow("Store usuarios:", self.remote_store_label)
+        self.remote_failure_label = QLabel("-")
+        self.remote_failure_label.setWordWrap(True)
+        remote_form.addRow("Último fallo:", self.remote_failure_label)
+        remote_layout.addLayout(remote_form)
+        root_layout.addWidget(remote_group)
+
         firmware_group = QGroupBox("Firmware")
         firmware_layout = QVBoxLayout(firmware_group)
         firmware_hint = QLabel(
@@ -115,6 +147,35 @@ class AdvancedToolsDialog(QDialog):
         self.config_path_label.setText(str(config_path))
         self.warnings_label.setText(f"Advertencias de config: {warning_count}")
         self.midi_outputs_widget.refresh_from_config(cfg)
+        remote_status = self._remote_status_provider()
+        if remote_status is None:
+            self.remote_status_label.setText("-")
+            self.remote_exposure_mode_label.setText("-")
+            self.remote_bind_label.setText("-")
+            self.remote_port_label.setText("-")
+            self.remote_local_url_label.setText("-")
+            self.remote_remote_url_label.setText("-")
+            self.remote_store_label.setText("-")
+            self.remote_failure_label.setText("-")
+            return
+
+        self.remote_status_label.setText(str(getattr(remote_status, "service_state", "-")))
+        self.remote_exposure_mode_label.setText(str(getattr(remote_status, "exposure_mode", "-")))
+        bind_text = getattr(remote_status, "effective_bind_host", None) or "-"
+        self.remote_bind_label.setText(str(bind_text))
+        self.remote_port_label.setText(str(getattr(remote_status, "port", "-")))
+        self.remote_local_url_label.setText(
+            str(getattr(remote_status, "local_access_url", None) or "No sugerida")
+        )
+        self.remote_remote_url_label.setText(
+            str(getattr(remote_status, "remote_access_url", None) or "No sugerida")
+        )
+        self.remote_store_label.setText(
+            str(getattr(remote_status, "user_store_path", None) or "No disponible")
+        )
+        self.remote_failure_label.setText(
+            str(getattr(remote_status, "failure_message", None) or "Ninguno")
+        )
 
     def _handle_reload_clicked(self) -> None:
         self._on_reload_config()

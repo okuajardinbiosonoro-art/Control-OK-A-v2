@@ -16,6 +16,9 @@ from control_okua.app_qt.main_window import MainWindow  # noqa: E402
 from control_okua.app_qt.viewmodels import NodesTabViewState  # noqa: E402
 from control_okua.core.registry import NodeSnapshot, NodeStatus  # noqa: E402
 from control_okua.core.session import BackendKind, SessionSnapshot, SessionState  # noqa: E402
+from control_okua.services.remote_api_bootstrap import (  # noqa: E402
+    RemoteApiRuntimeStatus,
+)
 
 
 def _ensure_qapp() -> QApplication:
@@ -211,5 +214,42 @@ def test_help_menu_has_about_action_and_uses_qmessagebox(monkeypatch) -> None:
         window.show_about_dialog()
         assert called["title"] == "Acerca de"
         assert "Control OKÚA v2" in called["text"]
+    finally:
+        window.close()
+
+
+def test_advanced_tools_dialog_surfaces_remote_api_runtime_status(monkeypatch) -> None:
+    _ensure_qapp()
+    window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
+    remote_status = RemoteApiRuntimeStatus(
+        enabled=True,
+        service_state="running",
+        exposure_mode="tailscale_only",
+        effective_bind_host="100.88.127.119",
+        port=8788,
+        local_access_url=None,
+        remote_access_url="http://100.88.127.119:8788/remote/",
+        access_urls=("http://100.88.127.119:8788/remote/",),
+        failure_message=None,
+        user_store_path=Path("remote_api_users.json"),
+    )
+    window.set_remote_api_status(remote_status)
+
+    def _fake_exec(self) -> int:
+        return 0
+
+    monkeypatch.setattr("control_okua.app_qt.advanced_tools_dialog.AdvancedToolsDialog.exec", _fake_exec)
+    try:
+        window.open_advanced_tools()
+        dialog = window._advanced_dialog
+        assert dialog is not None
+        assert dialog.remote_status_label.text() == "running"
+        assert dialog.remote_exposure_mode_label.text() == "tailscale_only"
+        assert dialog.remote_bind_label.text() == "100.88.127.119"
+        assert dialog.remote_port_label.text() == "8788"
+        assert dialog.remote_local_url_label.text() == "No sugerida"
+        assert dialog.remote_remote_url_label.text() == "http://100.88.127.119:8788/remote/"
+        assert dialog.remote_store_label.text() == "remote_api_users.json"
+        assert dialog.remote_failure_label.text() == "Ninguno"
     finally:
         window.close()

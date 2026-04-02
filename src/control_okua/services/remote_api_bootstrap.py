@@ -30,6 +30,34 @@ class RemoteApiBootstrapResult:
     warnings: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class RemoteApiExposureStatus:
+    exposure_mode: str
+    effective_bind_host: str | None
+    port: int
+    local_access_url: str | None
+    remote_access_url: str | None
+    access_urls: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RemoteApiRuntimeStatus:
+    enabled: bool
+    service_state: str
+    exposure_mode: str
+    effective_bind_host: str | None
+    port: int
+    local_access_url: str | None
+    remote_access_url: str | None
+    access_urls: tuple[str, ...]
+    failure_message: str | None = None
+    user_store_path: Path | None = None
+
+
+class RemoteApiExposureError(RuntimeError):
+    """Raised when a requested remote API exposure mode cannot be resolved."""
+
+
 def ensure_remote_api_runtime_config(
     cfg: dict[str, Any],
 ) -> tuple[dict[str, Any], tuple[str, ...], bool]:
@@ -44,11 +72,18 @@ def ensure_remote_api_runtime_config(
     warnings: list[str] = []
     changed = False
 
+    exposure_mode = remote_cfg.get("exposure_mode")
     bind_host = remote_cfg.get("bind_host")
-    if bind_host in {"127.0.0.1", "::1"}:
-        remote_cfg["bind_host"] = "0.0.0.0"
+    if exposure_mode not in {"local_only", "tailscale_only", "custom_bind"}:
+        remote_cfg["exposure_mode"] = (
+            "custom_bind"
+            if isinstance(bind_host, str)
+            and bind_host.strip()
+            and bind_host.strip() not in {"127.0.0.1", "::1"}
+            else "local_only"
+        )
         warnings.append(
-            "remote_api.bind_host actualizado a '0.0.0.0' para acceso LAN/Tailscale."
+            "remote_api.exposure_mode ausente o invalido; se infirio desde bind_host."
         )
         changed = True
 
@@ -139,18 +174,58 @@ def build_default_remote_api_token_inventory_dicts() -> list[dict[str, str]]:
     ]
 
 
-def build_remote_api_access_urls(config: RemoteApiConfig) -> tuple[str, ...]:
+def resolve_remote_api_bind_host(config: RemoteApiConfig) -> str:
+    exposure_mode = str(config.exposure_mode).strip() or "local_only"
+    if exposure_mode == "local_only":
+        return "127.0.0.1"
+    if exposure_mode == "tailscale_only":
+        tailscale_ipv4 = _discover_tailscale_ipv4_address()
+        if tailscale_ipv4:
+            return tailscale_ipv4
+        raise RemoteApiExposureError(
+            "remote_api.exposure_mode='tailscale_only' requiere una IPv4 Tailscale activa en este host."
+        )
+    if exposure_mode == "custom_bind":
+        bind_host = str(config.bind_host).strip()
+        if bind_host:
+            return bind_host
+        raise RemoteApiExposureError(
+            "remote_api.bind_host es obligatorio cuando exposure_mode='custom_bind'."
+        )
+    raise RemoteApiExposureError(
+        f"remote_api.exposure_mode no soportado: {config.exposure_mode!r}"
+    )
+
+
+def build_remote_api_access_urls(
+    config: RemoteApiConfig,
+    *,
+    effective_bind_host: str | None = None,
+) -> tuple[str, ...]:
     port = int(config.port)
-    bind_host = str(config.bind_host).strip() or "127.0.0.1"
-    urls: list[str] = [f"http://127.0.0.1:{port}/remote/"]
-    if bind_host not in {"127.0.0.1", "::1"}:
-        if bind_host not in {"0.0.0.0", "::"}:
-            urls.append(f"http://{bind_host}:{port}/remote/")
-        else:
-            for hostname in _discover_access_hostnames():
-                urls.append(f"http://{hostname}:{port}/remote/")
-            for address in _discover_local_ipv4_addresses():
-                urls.append(f"http://{address}:{port}/remote/")
+    exposure_mode = str(config.exposure_mode).strip() or "local_only"
+    bind_host = effective_bind_host or resolve_remote_api_bind_host(config)
+    urls: list[str] = []
+    if exposure_mode == "local_only":
+        urls.append(f"http://127.0.0.1:{port}/remote/")
+    elif exposure_mode == "tailscale_only":
+        urls.append(f"http://{bind_host}:{port}/remote/")
+        tailscale_dns_name = _discover_tailscale_dns_name()
+        if tailscale_dns_name:
+            urls.append(f"http://{tailscale_dns_name}:{port}/remote/")
+            short_name = tailscale_dns_name.split(".", 1)[0].strip()
+            if short_name:
+                urls.append(f"http://{short_name}:{port}/remote/")
+    elif bind_host in {"0.0.0.0", "::"}:
+        urls.append(f"http://127.0.0.1:{port}/remote/")
+        for hostname in _discover_access_hostnames():
+            urls.append(f"http://{hostname}:{port}/remote/")
+        for address in _discover_local_ipv4_addresses():
+            urls.append(f"http://{address}:{port}/remote/")
+    else:
+        urls.append(f"http://{bind_host}:{port}/remote/")
+        if bind_host not in {"127.0.0.1", "::1"}:
+            urls.append(f"http://127.0.0.1:{port}/remote/")
     deduped: list[str] = []
     seen: set[str] = set()
     for url in urls:
@@ -159,6 +234,89 @@ def build_remote_api_access_urls(config: RemoteApiConfig) -> tuple[str, ...]:
         seen.add(url)
         deduped.append(url)
     return tuple(deduped)
+
+
+def build_remote_api_exposure_status(
+    config: RemoteApiConfig,
+    *,
+    effective_bind_host: str | None = None,
+) -> RemoteApiExposureStatus:
+    bind_host = effective_bind_host or resolve_remote_api_bind_host(config)
+    access_urls = build_remote_api_access_urls(
+        config,
+        effective_bind_host=bind_host,
+    )
+    if config.exposure_mode == "tailscale_only":
+        local_access_url = None
+        remote_access_url = next((url for url in access_urls if _is_remote_access_url(url)), None)
+        if remote_access_url is None and access_urls:
+            remote_access_url = access_urls[0]
+    else:
+        local_access_url = next((url for url in access_urls if not _is_remote_access_url(url)), None)
+        remote_access_url = next((url for url in access_urls if _is_remote_access_url(url)), None)
+    return RemoteApiExposureStatus(
+        exposure_mode=config.exposure_mode,
+        effective_bind_host=bind_host,
+        port=int(config.port),
+        local_access_url=local_access_url,
+        remote_access_url=remote_access_url,
+        access_urls=access_urls,
+    )
+
+
+def build_remote_api_runtime_status(
+    config: RemoteApiConfig,
+    *,
+    service_state: str,
+    effective_bind_host: str | None = None,
+    failure_message: str | None = None,
+    user_store_path: Path | None = None,
+) -> RemoteApiRuntimeStatus:
+    if not config.enabled:
+        return RemoteApiRuntimeStatus(
+            enabled=False,
+            service_state="stopped",
+            exposure_mode=config.exposure_mode,
+            effective_bind_host=None,
+            port=int(config.port),
+            local_access_url=None,
+            remote_access_url=None,
+            access_urls=(),
+            failure_message=None,
+            user_store_path=user_store_path,
+        )
+
+    try:
+        exposure = build_remote_api_exposure_status(
+            config,
+            effective_bind_host=effective_bind_host,
+        )
+    except RemoteApiExposureError as exc:
+        return RemoteApiRuntimeStatus(
+            enabled=True,
+            service_state=service_state,
+            exposure_mode=config.exposure_mode,
+            effective_bind_host=effective_bind_host,
+            port=int(config.port),
+            local_access_url=None,
+            remote_access_url=None,
+            access_urls=(),
+            failure_message=failure_message or str(exc),
+            user_store_path=user_store_path,
+        )
+
+    return RemoteApiRuntimeStatus(
+        enabled=True,
+        service_state=service_state,
+        exposure_mode=exposure.exposure_mode,
+        effective_bind_host=exposure.effective_bind_host,
+        port=exposure.port,
+        local_access_url=exposure.local_access_url,
+        remote_access_url=exposure.remote_access_url,
+        access_urls=exposure.access_urls,
+        failure_message=failure_message,
+        user_store_path=user_store_path,
+    )
 
 
 def _discover_access_hostnames() -> tuple[str, ...]:
@@ -227,11 +385,48 @@ def _discover_tailscale_dns_name() -> str:
     return dns_name.strip().rstrip(".")
 
 
+def _discover_tailscale_ipv4_address() -> str:
+    try:
+        result = subprocess.run(
+            ["tailscale", "status", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if result.returncode != 0 and not result.stdout.strip():
+        return ""
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return ""
+
+    candidates: list[str] = []
+    if isinstance(payload, dict):
+        raw_ips = payload.get("TailscaleIPs")
+        if isinstance(raw_ips, list):
+            candidates.extend(str(item).strip() for item in raw_ips)
+        self_payload = payload.get("Self")
+        if isinstance(self_payload, dict):
+            self_ips = self_payload.get("TailscaleIPs")
+            if isinstance(self_ips, list):
+                candidates.extend(str(item).strip() for item in self_ips)
+
+    for candidate in candidates:
+        if candidate and ":" not in candidate and candidate.startswith("100."):
+            return candidate
+    return ""
+
+
 def _iter_required_entries(
     config: RemoteApiConfig,
 ) -> tuple[Any, ...]:
     if config.auth_mode == "bearer_token_inventory":
         return config.tokens
+    if config.auth_mode == "human_session_only":
+        return ()
     return (
         build_remote_api_token_entry(
             env_var=config.token_env_var,
@@ -314,11 +509,14 @@ def _save_access_note(
             "Tokens:",
         ]
     )
-    for credential in credentials:
-        label_suffix = f" ({credential.label})" if credential.label else ""
-        lines.append(
-            f"- role={credential.role}{label_suffix} env_var={credential.env_var} token={credential.token}"
-        )
+    if credentials:
+        for credential in credentials:
+            label_suffix = f" ({credential.label})" if credential.label else ""
+            lines.append(
+                f"- role={credential.role}{label_suffix} env_var={credential.env_var} token={credential.token}"
+            )
+    else:
+        lines.append("- Compatibilidad bearer token deshabilitada en esta configuración.")
     lines.extend(
         [
             "",
@@ -359,6 +557,11 @@ def _discover_local_ipv4_addresses() -> tuple[str, ...]:
         pass
 
     return tuple(addresses)
+
+
+def _is_remote_access_url(url: str) -> bool:
+    lower = str(url).lower()
+    return "://100." in lower or ".ts.net:" in lower
 
 
 def _utc_now_iso() -> str:

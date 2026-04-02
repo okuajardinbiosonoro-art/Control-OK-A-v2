@@ -36,27 +36,12 @@
   },
   "remote_api": {
     "enabled": false,
+    "exposure_mode": "local_only",
     "bind_host": "127.0.0.1",
     "port": 8788,
-    "auth_mode": "bearer_token_inventory",
+    "auth_mode": "human_session_only",
     "token_env_var": "CKV2_REMOTE_API_TOKEN",
-    "tokens": [
-      {
-        "env_var": "CKV2_REMOTE_API_OBSERVER_TOKEN",
-        "role": "observador",
-        "label": "observer-main"
-      },
-      {
-        "env_var": "CKV2_REMOTE_API_TECH_TOKEN",
-        "role": "tecnico",
-        "label": "tech-main"
-      },
-      {
-        "env_var": "CKV2_REMOTE_API_ADMIN_TOKEN",
-        "role": "admin",
-        "label": "admin-main"
-      }
-    ],
+    "tokens": [],
     "audit_enabled": true,
     "audit_folder": "logs/remote_api",
     "user_store_filename": "remote_api_users.json",

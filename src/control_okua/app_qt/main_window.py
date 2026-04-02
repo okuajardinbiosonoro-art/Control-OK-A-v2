@@ -121,6 +121,7 @@ class MainWindow(QMainWindow):
         self._details_dialog: QDialog | None = None
         self._node_box_expanded: dict[int, bool] = {}
         self._preflight_panel_visible = False
+        self._remote_api_status: Any | None = None
         self.session_controller = session_controller or SessionController(
             self._session_cfg_provider,
             parent=self,
@@ -788,6 +789,7 @@ class MainWindow(QMainWindow):
                 on_reload_config=self.reload_config,
                 on_open_firmware_manager=self.open_firmware_manager,
                 state_provider=self._advanced_state,
+                remote_status_provider=self._remote_api_status_provider,
                 parent=self,
             )
 
@@ -811,6 +813,14 @@ class MainWindow(QMainWindow):
 
     def _advanced_state(self) -> tuple[dict[str, Any], Path, list[str]]:
         return self.cfg, self.config_path, self.warnings
+
+    def _remote_api_status_provider(self) -> Any | None:
+        return self._remote_api_status
+
+    def set_remote_api_status(self, status: Any | None) -> None:
+        self._remote_api_status = status
+        if self._advanced_dialog is not None and self._advanced_dialog.isVisible():
+            self._advanced_dialog.set_state(self.cfg, self.config_path, self.warnings)
 
     def open_config_folder(self) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.config_path.parent)))

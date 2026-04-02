@@ -145,6 +145,8 @@ def resolve_remote_api_token_bindings(
     environ: Mapping[str, str] | None = None,
 ) -> tuple[RemoteApiTokenBinding, ...]:
     env_map = environ or {}
+    if config.auth_mode == "human_session_only":
+        return ()
     if config.auth_mode == "bearer_token":
         token_value = resolve_expected_bearer_token(
             config.token_env_var,

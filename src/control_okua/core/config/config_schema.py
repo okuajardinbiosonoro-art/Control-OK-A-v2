@@ -17,6 +17,12 @@ DEFAULT_OUTPUTS: dict[str, str] = {
     "2": "loopMIDI Port 3",
 }
 VALID_REMOTE_API_ROLES: set[str] = {"observador", "tecnico", "admin"}
+VALID_REMOTE_API_EXPOSURE_MODES: set[str] = {"local_only", "tailscale_only", "custom_bind"}
+VALID_REMOTE_API_AUTH_MODES: set[str] = {
+    "human_session_only",
+    "bearer_token",
+    "bearer_token_inventory",
+}
 
 
 def timestamp_tag() -> str:
@@ -66,9 +72,10 @@ def default_config() -> dict[str, Any]:
         },
         "remote_api": {
             "enabled": False,
+            "exposure_mode": "local_only",
             "bind_host": "127.0.0.1",
             "port": 8788,
-            "auth_mode": "bearer_token_inventory",
+            "auth_mode": "human_session_only",
             "token_env_var": "CKV2_REMOTE_API_TOKEN",
             "tokens": [],
             "audit_enabled": True,
@@ -353,6 +360,20 @@ def validate_and_fix(cfg: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
         remote_api_cfg["enabled"] = defaults["remote_api"]["enabled"]
         warnings.append("remote_api.enabled invalido; se restauro default.")
 
+    exposure_mode = remote_api_cfg.get("exposure_mode")
+    bind_host_for_inference = remote_api_cfg.get("bind_host")
+    if exposure_mode not in VALID_REMOTE_API_EXPOSURE_MODES:
+        inferred_exposure_mode = _infer_remote_api_exposure_mode(bind_host_for_inference)
+        remote_api_cfg["exposure_mode"] = inferred_exposure_mode
+        if exposure_mode is None:
+            warnings.append(
+                "remote_api.exposure_mode ausente; se infirio desde bind_host."
+            )
+        else:
+            warnings.append("remote_api.exposure_mode invalido; se infirio desde bind_host.")
+    else:
+        remote_api_cfg["exposure_mode"] = str(exposure_mode)
+
     bind_host = remote_api_cfg.get("bind_host")
     if not isinstance(bind_host, str) or not bind_host.strip():
         remote_api_cfg["bind_host"] = defaults["remote_api"]["bind_host"]
@@ -367,7 +388,7 @@ def validate_and_fix(cfg: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     remote_api_cfg["port"] = remote_port
 
     auth_mode = remote_api_cfg.get("auth_mode")
-    if auth_mode not in {"bearer_token", "bearer_token_inventory"}:
+    if auth_mode not in VALID_REMOTE_API_AUTH_MODES:
         remote_api_cfg["auth_mode"] = defaults["remote_api"]["auth_mode"]
         warnings.append("remote_api.auth_mode invalido; se restauro default.")
     else:
@@ -563,3 +584,11 @@ def load_config() -> tuple[dict[str, Any], list[str], Path]:
 
     save_config(fixed_cfg, cfg_path)
     return fixed_cfg, warnings, cfg_path
+
+
+def _infer_remote_api_exposure_mode(bind_host: object) -> str:
+    if isinstance(bind_host, str):
+        normalized = bind_host.strip()
+        if normalized and normalized not in {"127.0.0.1", "::1"}:
+            return "custom_bind"
+    return "local_only"

@@ -21,9 +21,10 @@ class RemoteApiTokenInventoryEntry:
 @dataclass(frozen=True)
 class RemoteApiConfig:
     enabled: bool = False
+    exposure_mode: str = "local_only"
     bind_host: str = "127.0.0.1"
     port: int = 8788
-    auth_mode: str = "bearer_token"
+    auth_mode: str = "human_session_only"
     token_env_var: str = "CKV2_REMOTE_API_TOKEN"
     tokens: tuple[RemoteApiTokenInventoryEntry, ...] = ()
     audit_enabled: bool = True
@@ -61,6 +62,7 @@ def resolve_remote_api_config(cfg: dict[str, Any]) -> RemoteApiConfig:
     if not isinstance(raw, dict):
         return RemoteApiConfig()
     bind_host = raw.get("bind_host")
+    exposure_mode = raw.get("exposure_mode")
     auth_mode = raw.get("auth_mode")
     token_env_var = raw.get("token_env_var")
     audit_folder = raw.get("audit_folder")
@@ -68,9 +70,10 @@ def resolve_remote_api_config(cfg: dict[str, Any]) -> RemoteApiConfig:
     tokens = _coerce_token_inventory(raw.get("tokens"))
     return RemoteApiConfig(
         enabled=bool(raw.get("enabled") is True),
+        exposure_mode=_coerce_exposure_mode(exposure_mode, bind_host),
         bind_host=bind_host.strip() if isinstance(bind_host, str) and bind_host.strip() else "127.0.0.1",
         port=_coerce_port(raw.get("port"), fallback=8788),
-        auth_mode=auth_mode.strip() if isinstance(auth_mode, str) and auth_mode.strip() else "bearer_token",
+        auth_mode=_coerce_auth_mode(auth_mode),
         token_env_var=(
             token_env_var.strip()
             if isinstance(token_env_var, str) and token_env_var.strip()
@@ -309,6 +312,26 @@ def _coerce_positive_int(value: object, *, fallback: int) -> int:
     if resolved <= 0:
         return fallback
     return resolved
+
+
+def _coerce_exposure_mode(raw_mode: object, bind_host: object) -> str:
+    if isinstance(raw_mode, str):
+        normalized = raw_mode.strip()
+        if normalized in {"local_only", "tailscale_only", "custom_bind"}:
+            return normalized
+    if isinstance(bind_host, str):
+        normalized_bind_host = bind_host.strip()
+        if normalized_bind_host and normalized_bind_host not in {"127.0.0.1", "::1"}:
+            return "custom_bind"
+    return "local_only"
+
+
+def _coerce_auth_mode(raw_mode: object) -> str:
+    if isinstance(raw_mode, str):
+        normalized = raw_mode.strip()
+        if normalized in {"human_session_only", "bearer_token", "bearer_token_inventory"}:
+            return normalized
+    return "human_session_only"
 
 
 def _coerce_token_inventory(value: object) -> tuple[RemoteApiTokenInventoryEntry, ...]:
