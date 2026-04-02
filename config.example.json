@@ -34,6 +34,15 @@
     "format": "jsonl",
     "level": "INFO"
   },
+  "remote_api": {
+    "enabled": false,
+    "bind_host": "127.0.0.1",
+    "port": 8788,
+    "auth_mode": "bearer_token",
+    "token_env_var": "CKV2_REMOTE_API_TOKEN",
+    "audit_enabled": true,
+    "audit_folder": "logs/remote_api"
+  },
   "ui": {
     "refresh_hz": 10
   },

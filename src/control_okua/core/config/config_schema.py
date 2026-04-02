@@ -63,6 +63,15 @@ def default_config() -> dict[str, Any]:
             "format": "jsonl",
             "level": "INFO",
         },
+        "remote_api": {
+            "enabled": False,
+            "bind_host": "127.0.0.1",
+            "port": 8788,
+            "auth_mode": "bearer_token",
+            "token_env_var": "CKV2_REMOTE_API_TOKEN",
+            "audit_enabled": True,
+            "audit_folder": "logs/remote_api",
+        },
         "ui": {
             "refresh_hz": 10,
         },
@@ -329,6 +338,52 @@ def validate_and_fix(cfg: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     if not isinstance(log_cfg.get("level"), str):
         log_cfg["level"] = defaults["logging"]["level"]
         warnings.append("logging.level invalido; se restauro default.")
+
+    remote_api_cfg = candidate.get("remote_api")
+    if not isinstance(remote_api_cfg, dict):
+        candidate["remote_api"] = defaults["remote_api"].copy()
+        remote_api_cfg = candidate["remote_api"]
+        warnings.append("remote_api invalido; se restauraron defaults.")
+
+    if not _is_bool(remote_api_cfg.get("enabled")):
+        remote_api_cfg["enabled"] = defaults["remote_api"]["enabled"]
+        warnings.append("remote_api.enabled invalido; se restauro default.")
+
+    bind_host = remote_api_cfg.get("bind_host")
+    if not isinstance(bind_host, str) or not bind_host.strip():
+        remote_api_cfg["bind_host"] = defaults["remote_api"]["bind_host"]
+        warnings.append("remote_api.bind_host invalido; se restauro default.")
+    else:
+        remote_api_cfg["bind_host"] = bind_host.strip()
+
+    remote_port = _safe_int(remote_api_cfg.get("port"), defaults["remote_api"]["port"])
+    if remote_port < 1 or remote_port > 65535:
+        remote_port = defaults["remote_api"]["port"]
+        warnings.append("remote_api.port invalido; se restauro default.")
+    remote_api_cfg["port"] = remote_port
+
+    auth_mode = remote_api_cfg.get("auth_mode")
+    if auth_mode != "bearer_token":
+        remote_api_cfg["auth_mode"] = defaults["remote_api"]["auth_mode"]
+        warnings.append("remote_api.auth_mode invalido; se restauro default.")
+
+    token_env_var = remote_api_cfg.get("token_env_var")
+    if not isinstance(token_env_var, str) or not token_env_var.strip():
+        remote_api_cfg["token_env_var"] = defaults["remote_api"]["token_env_var"]
+        warnings.append("remote_api.token_env_var invalido; se restauro default.")
+    else:
+        remote_api_cfg["token_env_var"] = token_env_var.strip()
+
+    if not _is_bool(remote_api_cfg.get("audit_enabled")):
+        remote_api_cfg["audit_enabled"] = defaults["remote_api"]["audit_enabled"]
+        warnings.append("remote_api.audit_enabled invalido; se restauro default.")
+
+    audit_folder = remote_api_cfg.get("audit_folder")
+    if not isinstance(audit_folder, str) or not audit_folder.strip():
+        remote_api_cfg["audit_folder"] = defaults["remote_api"]["audit_folder"]
+        warnings.append("remote_api.audit_folder invalido; se restauro default.")
+    else:
+        remote_api_cfg["audit_folder"] = audit_folder.strip()
 
     ui_cfg = candidate.get("ui")
     if not isinstance(ui_cfg, dict):

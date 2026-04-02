@@ -16,6 +16,9 @@ from control_okua.core.profiles.profile_service import (
     is_known_profile_id,
     set_active_profile,
 )
+from control_okua.services.remote_api_contract import resolve_remote_api_config
+from control_okua.services.remote_api_service import RemoteApiService
+from control_okua.services.session_controller import SessionController
 
 
 def _get_active_profile_id(cfg: dict[str, object]) -> str | None:
@@ -60,7 +63,29 @@ def run_app() -> int:
             print(f"[config] {profile_warning}")
             active_profile = selected_profile
 
-    window = MainWindow(cfg=cfg, config_path=config_path, warnings=warnings)
+    session_controller = SessionController(cfg)
+    window = MainWindow(
+        cfg=cfg,
+        config_path=config_path,
+        warnings=warnings,
+        session_controller=session_controller,
+    )
+    remote_api_service: RemoteApiService | None = None
+    remote_api_config = resolve_remote_api_config(cfg)
+    if remote_api_config.enabled:
+        try:
+            remote_api_service = RemoteApiService(
+                runtime_client=session_controller,
+                config=remote_api_config,
+            )
+            remote_api_service.start()
+            app.aboutToQuit.connect(remote_api_service.stop)
+            print(
+                "[remote_api] servicio remoto activo en "
+                f"http://{remote_api_config.bind_host}:{remote_api_service.port}"
+            )
+        except Exception as exc:
+            print(f"[remote_api] no se pudo iniciar servicio remoto: {exc}")
     window.show()
 
     # Permite validaciones automáticas sin afectar ejecución normal.
