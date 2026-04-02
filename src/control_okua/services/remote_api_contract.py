@@ -28,6 +28,8 @@ class RemoteApiConfig:
     tokens: tuple[RemoteApiTokenInventoryEntry, ...] = ()
     audit_enabled: bool = True
     audit_folder: str = "logs/remote_api"
+    user_store_filename: str = "remote_api_users.json"
+    session_ttl_s: int = 43200
 
 
 class RemoteApiError(RuntimeError):
@@ -62,6 +64,7 @@ def resolve_remote_api_config(cfg: dict[str, Any]) -> RemoteApiConfig:
     auth_mode = raw.get("auth_mode")
     token_env_var = raw.get("token_env_var")
     audit_folder = raw.get("audit_folder")
+    user_store_filename = raw.get("user_store_filename")
     tokens = _coerce_token_inventory(raw.get("tokens"))
     return RemoteApiConfig(
         enabled=bool(raw.get("enabled") is True),
@@ -80,6 +83,12 @@ def resolve_remote_api_config(cfg: dict[str, Any]) -> RemoteApiConfig:
             if isinstance(audit_folder, str) and audit_folder.strip()
             else "logs/remote_api"
         ),
+        user_store_filename=(
+            user_store_filename.strip()
+            if isinstance(user_store_filename, str) and user_store_filename.strip()
+            else "remote_api_users.json"
+        ),
+        session_ttl_s=_coerce_positive_int(raw.get("session_ttl_s"), fallback=43200),
     )
 
 
@@ -290,6 +299,16 @@ def _coerce_port(value: object, *, fallback: int) -> int:
     if port < 0 or port > 65535:
         return fallback
     return port
+
+
+def _coerce_positive_int(value: object, *, fallback: int) -> int:
+    try:
+        resolved = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    if resolved <= 0:
+        return fallback
+    return resolved
 
 
 def _coerce_token_inventory(value: object) -> tuple[RemoteApiTokenInventoryEntry, ...]:

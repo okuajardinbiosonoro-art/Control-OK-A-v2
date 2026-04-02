@@ -73,6 +73,8 @@ def default_config() -> dict[str, Any]:
             "tokens": [],
             "audit_enabled": True,
             "audit_folder": "logs/remote_api",
+            "user_store_filename": "remote_api_users.json",
+            "session_ttl_s": 43200,
         },
         "ui": {
             "refresh_hz": 10,
@@ -422,6 +424,22 @@ def validate_and_fix(cfg: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
         warnings.append("remote_api.audit_folder invalido; se restauro default.")
     else:
         remote_api_cfg["audit_folder"] = audit_folder.strip()
+
+    user_store_filename = remote_api_cfg.get("user_store_filename")
+    if not isinstance(user_store_filename, str) or not user_store_filename.strip():
+        remote_api_cfg["user_store_filename"] = defaults["remote_api"]["user_store_filename"]
+        warnings.append("remote_api.user_store_filename invalido; se restauro default.")
+    else:
+        remote_api_cfg["user_store_filename"] = user_store_filename.strip()
+
+    session_ttl_s = _safe_int(
+        remote_api_cfg.get("session_ttl_s"),
+        defaults["remote_api"]["session_ttl_s"],
+    )
+    if session_ttl_s < 300:
+        session_ttl_s = defaults["remote_api"]["session_ttl_s"]
+        warnings.append("remote_api.session_ttl_s invalido; se restauro default.")
+    remote_api_cfg["session_ttl_s"] = session_ttl_s
 
     ui_cfg = candidate.get("ui")
     if not isinstance(ui_cfg, dict):

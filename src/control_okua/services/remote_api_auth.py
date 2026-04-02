@@ -20,8 +20,18 @@ _READ_ONLY_ACTIONS: frozenset[str] = frozenset(
         "node.read",
     }
 )
+_AUTHENTICATED_ANY_ROLE_ACTIONS: frozenset[str] = frozenset({"auth.logout"})
 _TECH_ACTIONS: frozenset[str] = frozenset({"node.request_stat_now"})
-_ADMIN_ACTIONS: frozenset[str] = frozenset({"node.reboot"})
+_ADMIN_ACTIONS: frozenset[str] = frozenset(
+    {
+        "node.reboot",
+        "accounts.read",
+        "account.create",
+        "account.update",
+        "account.change_password",
+        "account.delete",
+    }
+)
 
 
 class RemoteApiAuthError(RuntimeError):
@@ -234,6 +244,8 @@ def authorize_remote_api_action(
         return
     normalized_role = _normalize_role(role)
     if action in _READ_ONLY_ACTIONS:
+        return
+    if action in _AUTHENTICATED_ANY_ROLE_ACTIONS:
         return
     if action in _TECH_ACTIONS and normalized_role in {"tecnico", "admin"}:
         return

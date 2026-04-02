@@ -47,6 +47,8 @@ def test_resolve_remote_api_config_reads_expected_defaults_and_overrides() -> No
             ],
             "audit_enabled": False,
             "audit_folder": "logs/custom_remote",
+            "user_store_filename": "site_users.json",
+            "session_ttl_s": 7200,
         }
     }
 
@@ -62,6 +64,8 @@ def test_resolve_remote_api_config_reads_expected_defaults_and_overrides() -> No
     assert resolved.tokens[0].label == "observer-main"
     assert resolved.audit_enabled is False
     assert resolved.audit_folder == "logs/custom_remote"
+    assert resolved.user_store_filename == "site_users.json"
+    assert resolved.session_ttl_s == 7200
 
 
 def test_serialize_session_snapshot_and_node_detail_follow_runtime_source_of_truth() -> None:

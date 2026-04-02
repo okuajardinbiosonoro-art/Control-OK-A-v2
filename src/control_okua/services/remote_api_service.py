@@ -14,9 +14,7 @@ from urllib.parse import urlparse
 import secrets
 
 from control_okua.core.control_plane.runtime import (
-    ControlPlaneNodeResolutionError,
     ControlPlaneRuntimeSnapshot,
-    ControlPlaneRuntimeUnavailableError,
 )
 from control_okua.core.control_plane.runtime_snapshot import (
     ControlPlaneNodeResolutionStatus,
@@ -33,8 +31,8 @@ from control_okua.services.remote_api_audit import (
     build_remote_api_audit_event,
 )
 from control_okua.services.remote_api_auth import (
-    RemoteApiAuthConfigError,
     RemoteApiAuthContext,
+    RemoteApiAuthConfigError,
     RemoteApiForbiddenError,
     RemoteApiTokenBinding,
     RemoteApiUnauthorizedError,
@@ -55,6 +53,13 @@ from control_okua.services.remote_api_contract import (
     serialize_node_summary,
     serialize_session_snapshot,
 )
+from control_okua.services.remote_auth_service import (
+    RemoteAuthenticatedUser,
+    RemoteAuthService,
+    RemoteAuthServiceError,
+)
+from control_okua.services.remote_session_service import RemoteSessionService
+from control_okua.services.remote_user_store import RemoteUserStore
 
 
 class RemoteApiServiceError(RuntimeError):
@@ -113,6 +118,18 @@ class RemoteApiRuntimeClient(Protocol):
 
 
 @dataclass(frozen=True)
+class _AuthenticatedPrincipal:
+    actor_type: str
+    actor_id: str
+    role: str
+    authorization_result: str
+    auth_scheme: str
+    username: str | None = None
+    token_label: str | None = None
+    session_id: str | None = None
+
+
+@dataclass(frozen=True)
 class _RequestAuditOutcome:
     actor_type: str
     actor_id: str
@@ -146,6 +163,12 @@ class _RemoteApiRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         self.server.remote_api_service.handle_http_request(self)
 
+    def do_PATCH(self) -> None:  # noqa: N802
+        self.server.remote_api_service.handle_http_request(self)
+
+    def do_DELETE(self) -> None:  # noqa: N802
+        self.server.remote_api_service.handle_http_request(self)
+
     def log_message(self, format: str, *args) -> None:
         self.server.remote_api_service.logger.info(
             "Remote API %s - %s",
@@ -160,6 +183,7 @@ class RemoteApiService:
         *,
         runtime_client: RemoteApiRuntimeClient,
         config: RemoteApiConfig,
+        config_path: Path | str | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self._runtime_client = runtime_client
@@ -172,6 +196,10 @@ class RemoteApiService:
             folder=Path(config.audit_folder),
             enabled=config.audit_enabled,
         )
+        self._site_root = Path.cwd() if config_path is None else Path(config_path).resolve().parent
+        self._user_store = RemoteUserStore(self._site_root / config.user_store_filename)
+        self._auth_service = RemoteAuthService(self._user_store)
+        self._session_service = RemoteSessionService(ttl_s=config.session_ttl_s)
 
     @property
     def logger(self) -> logging.Logger:
@@ -194,6 +222,10 @@ class RemoteApiService:
     @property
     def audit_path(self) -> Path:
         return self._audit_writer.audit_path
+
+    @property
+    def user_store_path(self) -> Path:
+        return self._user_store.path
 
     def start(self) -> None:
         if self.is_running:
@@ -222,7 +254,11 @@ class RemoteApiService:
         )
         if self._config.auth_mode == "bearer_token":
             self._logger.warning(
-                "Servicio remoto en modo legado bearer_token; el token único se autoriza como admin."
+                "Servicio remoto con compatibilidad legado bearer_token; si existe token válido se autoriza como admin."
+            )
+        if not self._token_bindings:
+            self._logger.info(
+                "Servicio remoto sin bearer tokens técnicos cargados; la consola humana por usuario/contraseña sigue disponible."
             )
 
     def stop(self) -> None:
@@ -245,6 +281,7 @@ class RemoteApiService:
         if method == "GET" and _is_remote_console_path(raw_path):
             self._serve_remote_console(handler, raw_path)
             return
+
         actor_type = "anonymous"
         actor_id = "anonymous"
         role: str | None = None
@@ -257,38 +294,57 @@ class RemoteApiService:
         correlation_cmd_seq: int | None = None
         correlation_nonce: int | None = None
         payload: dict[str, Any]
+        extra_headers: list[tuple[str, str]] = []
+        cookie_header = handler.headers.get("Cookie")
+        authorization_header = handler.headers.get("Authorization")
+        body = self._read_body(handler)
 
         try:
-            auth_context = self._authenticate(handler.headers.get("Authorization"))
-            actor_type = auth_context.actor_type
-            actor_id = auth_context.actor_id
-            role = auth_context.role
-            authorization_result = auth_context.authorization_result
-            token_label = auth_context.token_label
-            authorize_remote_api_action(
-                role=auth_context.role,
-                action=action,
-                actor_type=auth_context.actor_type,
-                actor_id=auth_context.actor_id,
-                token_label=auth_context.token_label,
-            )
-            status_code, payload, outcome = self._dispatch(
-                method=method,
-                path=raw_path,
-                request_id=request_id,
-                body=self._read_body(handler),
-            )
+            if _is_public_remote_api_route(method, raw_path):
+                status_code, payload, outcome, extra_headers = self._dispatch_public(
+                    method=method,
+                    path=raw_path,
+                    request_id=request_id,
+                    body=body,
+                    cookie_header=cookie_header,
+                    authorization_header=authorization_header,
+                )
+            else:
+                principal, should_clear_cookie = self._authenticate_protected_request(
+                    cookie_header=cookie_header,
+                    authorization_header=authorization_header,
+                )
+                if should_clear_cookie:
+                    extra_headers.append(
+                        ("Set-Cookie", self._session_service.build_clear_cookie_header())
+                    )
+                authorize_remote_api_action(
+                    role=principal.role,
+                    action=action,
+                    actor_type=principal.actor_type,
+                    actor_id=principal.actor_id,
+                    token_label=principal.token_label,
+                )
+                status_code, payload, outcome, dispatch_headers = self._dispatch_protected(
+                    method=method,
+                    path=raw_path,
+                    request_id=request_id,
+                    body=body,
+                    principal=principal,
+                )
+                extra_headers.extend(dispatch_headers)
+
+            actor_type = outcome.actor_type
+            actor_id = outcome.actor_id
+            role = outcome.role
+            authorization_result = outcome.authorization_result
+            token_label = outcome.token_label
             action = outcome.action
             node_id = outcome.node_id
             result = outcome.result
             status_code = outcome.status_code
             correlation_cmd_seq = outcome.correlation_cmd_seq
             correlation_nonce = outcome.correlation_nonce
-            actor_type = outcome.actor_type or actor_type
-            actor_id = outcome.actor_id or actor_id
-            role = outcome.role or role
-            authorization_result = outcome.authorization_result or authorization_result
-            token_label = outcome.token_label or token_label
         except RemoteApiUnauthorizedError as exc:
             actor_type = exc.actor_type
             actor_id = exc.actor_id
@@ -302,6 +358,10 @@ class RemoteApiService:
                 message=str(exc),
                 request_id=request_id,
             )
+            if self._session_service.has_session_cookie(cookie_header):
+                extra_headers.append(
+                    ("Set-Cookie", self._session_service.build_clear_cookie_header())
+                )
         except RemoteApiForbiddenError as exc:
             actor_type = exc.actor_type
             actor_id = exc.actor_id
@@ -337,7 +397,12 @@ class RemoteApiService:
                 request_id=request_id,
             )
 
-        self._write_json_response(handler, status_code, payload)
+        self._write_json_response(
+            handler,
+            status_code,
+            payload,
+            extra_headers=extra_headers,
+        )
         self._audit_writer.write_event(
             build_remote_api_audit_event(
                 request_id=request_id,
@@ -360,14 +425,55 @@ class RemoteApiService:
             )
         )
 
-    def _dispatch(
+    def _dispatch_public(
         self,
         *,
         method: str,
         path: str,
         request_id: str,
         body: bytes,
-    ) -> tuple[int, dict[str, Any], _RequestAuditOutcome]:
+        cookie_header: str | None,
+        authorization_header: str | None,
+    ) -> tuple[int, dict[str, Any], _RequestAuditOutcome, list[tuple[str, str]]]:
+        if method == "GET" and path == "/api/v1/auth/session":
+            return self._handle_auth_session(
+                request_id=request_id,
+                cookie_header=cookie_header,
+                authorization_header=authorization_header,
+            )
+        if method == "POST" and path == "/api/v1/auth/login":
+            return self._handle_auth_login(
+                request_id=request_id,
+                body=body,
+            )
+        if method == "POST" and path == "/api/v1/auth/bootstrap":
+            return self._handle_auth_bootstrap(
+                request_id=request_id,
+                body=body,
+            )
+        if method == "POST" and path == "/api/v1/auth/logout":
+            return self._handle_auth_logout(
+                request_id=request_id,
+                cookie_header=cookie_header,
+                authorization_header=authorization_header,
+            )
+        raise RemoteApiError(
+            "invalid_request",
+            "Ruta pública remota inválida.",
+            status_code=404,
+            action="request.invalid",
+            result="invalid_request",
+        )
+
+    def _dispatch_protected(
+        self,
+        *,
+        method: str,
+        path: str,
+        request_id: str,
+        body: bytes,
+        principal: _AuthenticatedPrincipal,
+    ) -> tuple[int, dict[str, Any], _RequestAuditOutcome, list[tuple[str, str]]]:
         if method == "GET" and path == "/api/v1/health":
             payload = {
                 "service": "ckv2-remote-site-service",
@@ -380,14 +486,12 @@ class RemoteApiService:
                     ),
                 },
             }
-            return 200, build_success_response(data=payload, request_id=request_id), _RequestAuditOutcome(
-                actor_type="technical_token",
-                actor_id="",
+            return 200, build_success_response(data=payload, request_id=request_id), self._audit_outcome(
+                principal=principal,
                 action="health.read",
-                node_id=None,
                 result="ok",
                 status_code=200,
-            )
+            ), []
 
         if method == "GET" and path == "/api/v1/runtime/summary":
             session_snapshot = self._runtime_client.get_snapshot()
@@ -399,14 +503,12 @@ class RemoteApiService:
                 ),
                 "control_plane": serialize_control_plane_summary(cp_snapshot),
             }
-            return 200, build_success_response(data=payload, request_id=request_id), _RequestAuditOutcome(
-                actor_type="technical_token",
-                actor_id="",
+            return 200, build_success_response(data=payload, request_id=request_id), self._audit_outcome(
+                principal=principal,
                 action="runtime.summary.read",
-                node_id=None,
                 result="ok",
                 status_code=200,
-            )
+            ), []
 
         if method == "GET" and path == "/api/v1/nodes":
             now_monotonic = time.monotonic()
@@ -419,203 +521,536 @@ class RemoteApiService:
                 "nodes": [
                     serialize_node_summary(
                         snapshot,
-                        control_plane_snapshot=cp_map.get(int(snapshot.node_id)),
+                        control_plane_snapshot=cp_map.get(snapshot.node_id),
                     )
                     for snapshot in snapshots
                 ]
             }
-            return 200, build_success_response(data=payload, request_id=request_id), _RequestAuditOutcome(
-                actor_type="technical_token",
-                actor_id="",
+            return 200, build_success_response(data=payload, request_id=request_id), self._audit_outcome(
+                principal=principal,
                 action="nodes.read",
-                node_id=None,
                 result="ok",
                 status_code=200,
-            )
+            ), []
 
         if method == "GET" and path.startswith("/api/v1/nodes/"):
             node_id = _parse_node_id_from_path(path)
-            now_monotonic = time.monotonic()
-            snapshot = self._runtime_client.get_node_snapshot(node_id=node_id, now=now_monotonic)
+            snapshot = self._runtime_client.get_node_snapshot(node_id, now=time.monotonic())
             if snapshot is None:
                 raise RemoteApiError(
                     "node_not_found",
-                    f"No existe nodo {node_id} en snapshots actuales.",
+                    f"No existe node_id {node_id} en runtime actual.",
                     status_code=404,
                     action="node.read",
                     node_id=node_id,
                     result="node_not_found",
                 )
-            control_snapshot = self._runtime_client.get_control_plane_node_snapshot(
-                node_id=node_id,
-                now=now_monotonic,
-            )
             payload = serialize_node_detail(
                 snapshot,
-                control_plane_snapshot=control_snapshot,
+                control_plane_snapshot=self._runtime_client.get_control_plane_node_snapshot(
+                    node_id,
+                    now=time.monotonic(),
+                ),
             )
-            return 200, build_success_response(data=payload, request_id=request_id), _RequestAuditOutcome(
-                actor_type="technical_token",
-                actor_id="",
+            return 200, build_success_response(data=payload, request_id=request_id), self._audit_outcome(
+                principal=principal,
                 action="node.read",
                 node_id=node_id,
                 result="ok",
                 status_code=200,
-            )
+            ), []
 
         if method == "POST" and path.endswith("/actions/request-stat-now"):
             node_id = _parse_node_id_from_action_path(path, "request-stat-now")
-            _ = _parse_json_body(body)
-            tx_result = self._execute_action_request_stat_now(node_id=node_id)
-            payload = {
-                "action": "request_stat_now",
-                "node_id": node_id,
-                "result": serialize_control_transaction_result(tx_result),
-            }
-            final_status = tx_result.final_status.value
-            if tx_result.final_status is not ControlTransactionFinalStatus.ACK_MATCHED:
-                raise RemoteApiError(
-                    "command_failed",
-                    f"REQUEST_STAT_NOW terminó en estado '{final_status}'.",
-                    status_code=502,
-                    action="node.request_stat_now",
-                    node_id=node_id,
-                    result=final_status,
-                    correlation_cmd_seq=tx_result.cmd_seq,
-                    correlation_nonce=tx_result.nonce,
-                )
-            return 200, build_success_response(data=payload, request_id=request_id), _RequestAuditOutcome(
-                actor_type="technical_token",
-                actor_id="",
-                action="node.request_stat_now",
-                node_id=node_id,
-                result=final_status,
-                status_code=200,
-                correlation_cmd_seq=tx_result.cmd_seq,
-                correlation_nonce=tx_result.nonce,
-            )
-
-        if method == "POST" and path.endswith("/actions/reboot"):
-            node_id = _parse_node_id_from_action_path(path, "reboot")
-            body_payload = _parse_json_body(body)
-            delay_ms = 0
-            if "delay_ms" in body_payload:
-                delay_ms = _parse_delay_ms(body_payload["delay_ms"])
-            tx_result = self._execute_action_reboot(node_id=node_id, delay_ms=delay_ms)
-            payload = {
-                "action": "reboot",
-                "node_id": node_id,
-                "result": serialize_control_transaction_result(tx_result),
-            }
-            final_status = tx_result.final_status.value
-            if tx_result.final_status is not ControlTransactionFinalStatus.ACK_MATCHED:
-                raise RemoteApiError(
-                    "command_failed",
-                    f"REBOOT_SOFT terminó en estado '{final_status}'.",
-                    status_code=502,
-                    action="node.reboot",
-                    node_id=node_id,
-                    result=final_status,
-                    correlation_cmd_seq=tx_result.cmd_seq,
-                    correlation_nonce=tx_result.nonce,
-                )
-            return 200, build_success_response(data=payload, request_id=request_id), _RequestAuditOutcome(
-                actor_type="technical_token",
-                actor_id="",
-                action="node.reboot",
-                node_id=node_id,
-                result=final_status,
-                status_code=200,
-                correlation_cmd_seq=tx_result.cmd_seq,
-                correlation_nonce=tx_result.nonce,
-            )
-
-        raise RemoteApiError(
-            "invalid_request",
-            "Endpoint remoto no soportado por v1.",
-            status_code=400,
-            action=_infer_action(method, path),
-            node_id=_infer_node_id(path),
-            result="invalid_request",
-        )
-
-    def _execute_action_request_stat_now(self, *, node_id: int) -> ControlTransactionResult:
-        self._assert_action_preconditions(node_id=node_id, action="node.request_stat_now")
-        try:
-            return self._runtime_client.send_control_request_stat_now(
+            self._ensure_runtime_ready_for_action(node_id=node_id, action="node.request_stat_now")
+            result = self._runtime_client.send_control_request_stat_now(
                 node_id=node_id,
                 source="remote_api",
             )
-        except ControlPlaneNodeResolutionError as exc:
-            raise RemoteApiError(
-                "node_unresolved",
-                str(exc),
-                status_code=409,
+            payload = {"result": serialize_control_transaction_result(result)}
+            return 200, build_success_response(data=payload, request_id=request_id), self._audit_outcome(
+                principal=principal,
                 action="node.request_stat_now",
                 node_id=node_id,
-                result="node_unresolved",
-            ) from exc
-        except ControlPlaneRuntimeUnavailableError as exc:
-            raise RemoteApiError(
-                "control_plane_unavailable",
-                str(exc),
-                status_code=409,
-                action="node.request_stat_now",
-                node_id=node_id,
-                result="control_plane_unavailable",
-            ) from exc
-        except Exception as exc:
-            raise RemoteApiError(
-                "command_failed",
-                f"No se pudo ejecutar REQUEST_STAT_NOW: {exc}",
-                status_code=502,
-                action="node.request_stat_now",
-                node_id=node_id,
-                result="command_failed",
-            ) from exc
+                result="ok",
+                status_code=200,
+                correlation_cmd_seq=getattr(result, "cmd_seq", None),
+                correlation_nonce=getattr(result, "nonce", None),
+            ), []
 
-    def _execute_action_reboot(self, *, node_id: int, delay_ms: int) -> ControlTransactionResult:
-        self._assert_action_preconditions(node_id=node_id, action="node.reboot")
-        try:
-            return self._runtime_client.send_control_reboot_soft(
+        if method == "POST" and path.endswith("/actions/reboot"):
+            node_id = _parse_node_id_from_action_path(path, "reboot")
+            request_payload = _parse_json_body(body)
+            delay_ms = _parse_delay_ms(request_payload.get("delay_ms", 0))
+            self._ensure_runtime_ready_for_action(node_id=node_id, action="node.reboot")
+            result = self._runtime_client.send_control_reboot_soft(
                 node_id=node_id,
                 delay_ms=delay_ms,
                 source="remote_api",
             )
-        except ControlPlaneNodeResolutionError as exc:
-            raise RemoteApiError(
-                "node_unresolved",
-                str(exc),
-                status_code=409,
+            payload = {"result": serialize_control_transaction_result(result)}
+            return 200, build_success_response(data=payload, request_id=request_id), self._audit_outcome(
+                principal=principal,
                 action="node.reboot",
                 node_id=node_id,
-                result="node_unresolved",
-            ) from exc
-        except ControlPlaneRuntimeUnavailableError as exc:
-            raise RemoteApiError(
-                "control_plane_unavailable",
-                str(exc),
-                status_code=409,
-                action="node.reboot",
-                node_id=node_id,
-                result="control_plane_unavailable",
-            ) from exc
-        except Exception as exc:
-            raise RemoteApiError(
-                "command_failed",
-                f"No se pudo ejecutar REBOOT_SOFT: {exc}",
-                status_code=502,
-                action="node.reboot",
-                node_id=node_id,
-                result="command_failed",
-            ) from exc
+                result="ok",
+                status_code=200,
+                correlation_cmd_seq=getattr(result, "cmd_seq", None),
+                correlation_nonce=getattr(result, "nonce", None),
+            ), []
 
-    def _assert_action_preconditions(self, *, node_id: int, action: str) -> None:
+        if method == "GET" and path == "/api/v1/accounts":
+            users = [item.to_public_dict() for item in self._auth_service.list_public_users()]
+            payload = {"users": users}
+            return 200, build_success_response(data=payload, request_id=request_id), self._audit_outcome(
+                principal=principal,
+                action="accounts.read",
+                result="ok",
+                status_code=200,
+            ), []
+
+        if method == "POST" and path == "/api/v1/accounts":
+            request_payload = _parse_json_body(body)
+            user = self._auth_service.create_user(
+                username=str(request_payload.get("username", "")),
+                password=str(request_payload.get("password", "")),
+                role=str(request_payload.get("role", "")),
+                enabled=bool(request_payload.get("enabled", True)),
+                notes=_coerce_optional_text(request_payload.get("notes")),
+            )
+            payload = {"user": user.to_public_dict()}
+            return 201, build_success_response(data=payload, request_id=request_id), self._audit_outcome(
+                principal=principal,
+                action="account.create",
+                result="ok",
+                status_code=201,
+            ), []
+
+        if method == "PATCH" and path.startswith("/api/v1/accounts/"):
+            target_username = _parse_account_username_from_path(path)
+            request_payload = _parse_json_body(body)
+            updated = self._auth_service.update_user_profile(
+                username=target_username,
+                new_username=_coerce_optional_text(request_payload.get("username")),
+                role=_coerce_optional_text(request_payload.get("role")),
+                enabled=_coerce_optional_bool(request_payload.get("enabled")),
+                notes=_coerce_optional_text_for_patch(request_payload),
+            )
+            headers = self._refresh_session_headers_if_needed(
+                principal=principal,
+                old_username=target_username,
+                updated_user=updated,
+            )
+            payload = {"user": updated.to_public_dict()}
+            return 200, build_success_response(data=payload, request_id=request_id), self._audit_outcome(
+                principal=principal,
+                action="account.update",
+                result="ok",
+                status_code=200,
+            ), headers
+
+        if method == "POST" and path.startswith("/api/v1/accounts/") and path.endswith("/password"):
+            target_username = _parse_account_username_from_password_path(path)
+            request_payload = _parse_json_body(body)
+            updated = self._auth_service.change_password(
+                username=target_username,
+                new_password=str(request_payload.get("new_password", "")),
+            )
+            headers = self._refresh_session_headers_if_needed(
+                principal=principal,
+                old_username=target_username,
+                updated_user=updated,
+            )
+            payload = {"user": updated.to_public_dict()}
+            return 200, build_success_response(data=payload, request_id=request_id), self._audit_outcome(
+                principal=principal,
+                action="account.change_password",
+                result="ok",
+                status_code=200,
+            ), headers
+
+        if method == "DELETE" and path.startswith("/api/v1/accounts/"):
+            target_username = _parse_account_username_from_path(path)
+            self._auth_service.delete_user(username=target_username)
+            headers = self._clear_session_headers_if_current_user(
+                principal=principal,
+                username=target_username,
+            )
+            payload = {"deleted_username": target_username}
+            return 200, build_success_response(data=payload, request_id=request_id), self._audit_outcome(
+                principal=principal,
+                action="account.delete",
+                result="ok",
+                status_code=200,
+            ), headers
+
+        raise RemoteApiError(
+            "invalid_request",
+            "Ruta protegida remota inválida.",
+            status_code=404,
+            action="request.invalid",
+            result="invalid_request",
+        )
+
+    def _handle_auth_session(
+        self,
+        *,
+        request_id: str,
+        cookie_header: str | None,
+        authorization_header: str | None,
+    ) -> tuple[int, dict[str, Any], _RequestAuditOutcome, list[tuple[str, str]]]:
+        principal, should_clear_cookie = self._resolve_optional_principal(
+            cookie_header=cookie_header,
+            authorization_header=authorization_header,
+        )
+        headers: list[tuple[str, str]] = []
+        if should_clear_cookie:
+            headers.append(("Set-Cookie", self._session_service.build_clear_cookie_header()))
+        payload = {
+            "bootstrap_required": self._auth_service.bootstrap_required(),
+            "authenticated": principal is not None,
+            "auth_scheme": None if principal is None else principal.auth_scheme,
+            "user": None if principal is None else {
+                "username": principal.username,
+                "role": principal.role,
+            },
+            "legacy_token_available": bool(self._token_bindings),
+            "session_ttl_s": self._config.session_ttl_s,
+        }
+        actor_type = principal.actor_type if principal is not None else "anonymous"
+        actor_id = principal.actor_id if principal is not None else "anonymous"
+        return 200, build_success_response(data=payload, request_id=request_id), _RequestAuditOutcome(
+            actor_type=actor_type,
+            actor_id=actor_id,
+            role=None if principal is None else principal.role,
+            authorization_result=None if principal is None else principal.authorization_result,
+            token_label=None if principal is None else principal.token_label,
+            action="auth.session.read",
+            node_id=None,
+            result="ok",
+            status_code=200,
+        ), headers
+
+    def _handle_auth_login(
+        self,
+        *,
+        request_id: str,
+        body: bytes,
+    ) -> tuple[int, dict[str, Any], _RequestAuditOutcome, list[tuple[str, str]]]:
+        request_payload = _parse_json_body(body)
+        username = str(request_payload.get("username", "")).strip()
+        password = str(request_payload.get("password", ""))
+        if not username or not password:
+            raise RemoteApiError(
+                "invalid_request",
+                "Login remoto requiere username y password.",
+                status_code=400,
+                action="auth.login",
+                result="invalid_request",
+            )
+        try:
+            user = self._auth_service.authenticate_credentials(
+                username=username,
+                password=password,
+            )
+        except RemoteAuthServiceError as exc:
+            raise self._map_remote_auth_error(exc, action="auth.login") from exc
+
+        session = self._session_service.create_session(username=user.username)
+        principal = self._principal_from_user(
+            user,
+            session_id=session.session_id,
+            auth_scheme="session_cookie",
+            authorization_result="granted_session",
+        )
+        payload = {
+            "authenticated": True,
+            "bootstrap_required": False,
+            "auth_scheme": "session_cookie",
+            "user": user.to_public_dict(),
+        }
+        headers = [("Set-Cookie", self._session_service.build_set_cookie_header(session.session_id))]
+        return 200, build_success_response(data=payload, request_id=request_id), self._audit_outcome(
+            principal=principal,
+            action="auth.login",
+            result="ok",
+            status_code=200,
+        ), headers
+
+    def _handle_auth_bootstrap(
+        self,
+        *,
+        request_id: str,
+        body: bytes,
+    ) -> tuple[int, dict[str, Any], _RequestAuditOutcome, list[tuple[str, str]]]:
+        request_payload = _parse_json_body(body)
+        raw_accounts = request_payload.get("accounts")
+        if not isinstance(raw_accounts, list):
+            raise RemoteApiError(
+                "invalid_request",
+                "Bootstrap remoto requiere una lista 'accounts'.",
+                status_code=400,
+                action="auth.bootstrap",
+                result="invalid_request",
+            )
+        try:
+            created = self._auth_service.bootstrap_initial_accounts(raw_accounts)
+        except RemoteAuthServiceError as exc:
+            raise self._map_remote_auth_error(exc, action="auth.bootstrap") from exc
+
+        admin_user = next((item for item in created if item.role == "admin"), None)
+        if admin_user is None:
+            raise RemoteApiError(
+                "invalid_bootstrap",
+                "Bootstrap inicial sin cuenta admin resultante.",
+                status_code=400,
+                action="auth.bootstrap",
+                result="invalid_bootstrap",
+            )
+        session = self._session_service.create_session(username=admin_user.username)
+        principal = self._principal_from_user(
+            admin_user,
+            session_id=session.session_id,
+            auth_scheme="session_cookie",
+            authorization_result="granted_session",
+        )
+        payload = {
+            "authenticated": True,
+            "bootstrap_required": False,
+            "auth_scheme": "session_cookie",
+            "user": admin_user.to_public_dict(),
+            "created_users": [item.to_public_dict() for item in created],
+        }
+        headers = [("Set-Cookie", self._session_service.build_set_cookie_header(session.session_id))]
+        return 200, build_success_response(data=payload, request_id=request_id), self._audit_outcome(
+            principal=principal,
+            action="auth.bootstrap",
+            result="ok",
+            status_code=200,
+        ), headers
+
+    def _handle_auth_logout(
+        self,
+        *,
+        request_id: str,
+        cookie_header: str | None,
+        authorization_header: str | None,
+    ) -> tuple[int, dict[str, Any], _RequestAuditOutcome, list[tuple[str, str]]]:
+        principal, _ = self._resolve_optional_principal(
+            cookie_header=cookie_header,
+            authorization_header=authorization_header,
+        )
+        if principal is not None and principal.session_id is not None:
+            self._session_service.destroy_session(principal.session_id)
+        else:
+            self._session_service.destroy_session_from_cookie(cookie_header)
+
+        actor_type = principal.actor_type if principal is not None else "anonymous"
+        actor_id = principal.actor_id if principal is not None else "anonymous"
+        role = principal.role if principal is not None else None
+        authorization_result = (
+            principal.authorization_result if principal is not None else "granted_logout"
+        )
+        payload = {
+            "authenticated": False,
+            "logged_out": True,
+        }
+        headers = [("Set-Cookie", self._session_service.build_clear_cookie_header())]
+        return 200, build_success_response(data=payload, request_id=request_id), _RequestAuditOutcome(
+            actor_type=actor_type,
+            actor_id=actor_id,
+            role=role,
+            authorization_result=authorization_result,
+            token_label=None if principal is None else principal.token_label,
+            action="auth.logout",
+            node_id=None,
+            result="ok",
+            status_code=200,
+        ), headers
+
+    def _authenticate_protected_request(
+        self,
+        *,
+        cookie_header: str | None,
+        authorization_header: str | None,
+    ) -> tuple[_AuthenticatedPrincipal, bool]:
+        session_cookie_present = self._session_service.has_session_cookie(cookie_header)
+        session_record = self._session_service.resolve_session(cookie_header)
+        if session_record is not None:
+            principal = self._principal_from_session_record(session_record)
+            if principal is not None:
+                return principal, False
+            self._session_service.destroy_session(session_record.session_id)
+            raise RemoteApiUnauthorizedError(
+                "Sesión remota inválida o expirada.",
+                actor_type="remote_user_session",
+                actor_id="anonymous",
+                authorization_result="denied_invalid_session",
+            )
+        if session_cookie_present:
+            self._session_service.destroy_session_from_cookie(cookie_header)
+            raise RemoteApiUnauthorizedError(
+                "Sesión remota inválida o expirada.",
+                actor_type="remote_user_session",
+                actor_id="anonymous",
+                authorization_result="denied_invalid_session",
+            )
+        if authorization_header is not None:
+            if not self._token_bindings:
+                raise RemoteApiUnauthorizedError(
+                    "Bearer token invalido.",
+                    actor_type="technical_token",
+                    actor_id="anonymous",
+                    authorization_result="denied_invalid_token",
+                )
+            context = authenticate_bearer_request(
+                authorization_header,
+                token_bindings=self._token_bindings,
+            )
+            return self._principal_from_bearer_context(context), False
+        raise RemoteApiUnauthorizedError(
+            "Autenticación requerida para esta operación.",
+            actor_type="anonymous",
+            actor_id="anonymous",
+            authorization_result="denied_missing_token",
+        )
+
+    def _resolve_optional_principal(
+        self,
+        *,
+        cookie_header: str | None,
+        authorization_header: str | None,
+    ) -> tuple[_AuthenticatedPrincipal | None, bool]:
+        session_cookie_present = self._session_service.has_session_cookie(cookie_header)
+        session_record = self._session_service.resolve_session(cookie_header)
+        if session_record is not None:
+            principal = self._principal_from_session_record(session_record)
+            if principal is not None:
+                return principal, False
+            self._session_service.destroy_session(session_record.session_id)
+            return None, True
+        if session_cookie_present:
+            self._session_service.destroy_session_from_cookie(cookie_header)
+            return None, True
+        if authorization_header is not None and self._token_bindings:
+            try:
+                context = authenticate_bearer_request(
+                    authorization_header,
+                    token_bindings=self._token_bindings,
+                )
+            except RemoteApiUnauthorizedError:
+                return None, False
+            return self._principal_from_bearer_context(context), False
+        return None, False
+
+    def _principal_from_session_record(
+        self,
+        session_record: Any,
+    ) -> _AuthenticatedPrincipal | None:
+        try:
+            user = self._auth_service.get_user(session_record.username)
+        except RemoteAuthServiceError as exc:
+            raise self._map_remote_auth_error(exc, action="auth.session.read") from exc
+        if user is None or not user.enabled:
+            return None
+        return self._principal_from_user(
+            user,
+            session_id=session_record.session_id,
+            auth_scheme="session_cookie",
+            authorization_result="granted_session",
+        )
+
+    @staticmethod
+    def _principal_from_user(
+        user: RemoteAuthenticatedUser,
+        *,
+        session_id: str | None,
+        auth_scheme: str,
+        authorization_result: str,
+    ) -> _AuthenticatedPrincipal:
+        return _AuthenticatedPrincipal(
+            actor_type="remote_user_session",
+            actor_id=user.actor_id,
+            username=user.username,
+            role=user.role,
+            token_label=None,
+            session_id=session_id,
+            auth_scheme=auth_scheme,
+            authorization_result=authorization_result,
+        )
+
+    @staticmethod
+    def _principal_from_bearer_context(context: RemoteApiAuthContext) -> _AuthenticatedPrincipal:
+        return _AuthenticatedPrincipal(
+            actor_type=context.actor_type,
+            actor_id=context.actor_id,
+            role=context.role,
+            authorization_result=context.authorization_result,
+            auth_scheme="bearer_token",
+            token_label=context.token_label,
+        )
+
+    @staticmethod
+    def _audit_outcome(
+        *,
+        principal: _AuthenticatedPrincipal,
+        action: str,
+        result: str,
+        status_code: int,
+        node_id: int | None = None,
+        correlation_cmd_seq: int | None = None,
+        correlation_nonce: int | None = None,
+    ) -> _RequestAuditOutcome:
+        return _RequestAuditOutcome(
+            actor_type=principal.actor_type,
+            actor_id=principal.actor_id,
+            role=principal.role,
+            authorization_result=principal.authorization_result,
+            token_label=principal.token_label,
+            action=action,
+            node_id=node_id,
+            result=result,
+            status_code=status_code,
+            correlation_cmd_seq=correlation_cmd_seq,
+            correlation_nonce=correlation_nonce,
+        )
+
+    def _refresh_session_headers_if_needed(
+        self,
+        *,
+        principal: _AuthenticatedPrincipal,
+        old_username: str,
+        updated_user: RemoteAuthenticatedUser,
+    ) -> list[tuple[str, str]]:
+        if principal.auth_scheme != "session_cookie" or principal.session_id is None:
+            return []
+        if principal.username != old_username:
+            return []
+        self._session_service.destroy_session(principal.session_id)
+        if not updated_user.enabled:
+            return [("Set-Cookie", self._session_service.build_clear_cookie_header())]
+        session = self._session_service.create_session(username=updated_user.username)
+        return [("Set-Cookie", self._session_service.build_set_cookie_header(session.session_id))]
+
+    def _clear_session_headers_if_current_user(
+        self,
+        *,
+        principal: _AuthenticatedPrincipal,
+        username: str,
+    ) -> list[tuple[str, str]]:
+        if principal.auth_scheme != "session_cookie" or principal.session_id is None:
+            return []
+        if principal.username != username:
+            return []
+        self._session_service.destroy_session(principal.session_id)
+        return [("Set-Cookie", self._session_service.build_clear_cookie_header())]
+
+    def _ensure_runtime_ready_for_action(self, *, node_id: int, action: str) -> None:
         snapshot = self._runtime_client.get_snapshot()
         if snapshot.state is not SessionState.RUNNING:
             raise RemoteApiError(
                 "session_not_running",
-                "La sesión no está running.",
+                "La sesión CKv2 no está running; no se puede ejecutar acción remota.",
                 status_code=409,
                 action=action,
                 node_id=node_id,
@@ -624,29 +1059,36 @@ class RemoteApiService:
         if not self._runtime_client.is_control_plane_available():
             raise RemoteApiError(
                 "control_plane_unavailable",
-                "Control-plane requiere sesión UDP/LAB running.",
+                "Control-plane F3 no disponible en runtime actual.",
                 status_code=409,
                 action=action,
                 node_id=node_id,
                 result="control_plane_unavailable",
             )
-        runtime_node = self._runtime_client.get_node_snapshot(node_id=node_id, now=time.monotonic())
-        if runtime_node is None:
+        node_snapshot = self._runtime_client.get_node_snapshot(node_id, now=time.monotonic())
+        if node_snapshot is None:
             raise RemoteApiError(
                 "node_not_found",
-                f"No existe nodo {node_id} en snapshots actuales.",
+                f"No existe node_id {node_id} en runtime actual.",
                 status_code=404,
                 action=action,
                 node_id=node_id,
                 result="node_not_found",
             )
         control_snapshot = self._runtime_client.get_control_plane_node_snapshot(
-            node_id=node_id,
+            node_id,
             now=time.monotonic(),
         )
-        if control_snapshot is not None and (
-            control_snapshot.resolution_status is ControlPlaneNodeResolutionStatus.UNRESOLVED
-        ):
+        if control_snapshot is None:
+            raise RemoteApiError(
+                "node_unresolved",
+                "No existe snapshot de control-plane para node_id solicitado.",
+                status_code=409,
+                action=action,
+                node_id=node_id,
+                result="node_unresolved",
+            )
+        if control_snapshot.resolution_status is ControlPlaneNodeResolutionStatus.UNRESOLVED:
             raise RemoteApiError(
                 "node_unresolved",
                 "No se pudo resolver IP para node_id en runtime actual.",
@@ -656,14 +1098,6 @@ class RemoteApiService:
                 result="node_unresolved",
             )
 
-    def _authenticate(self, authorization_header: str | None) -> RemoteApiAuthContext:
-        if not self._token_bindings:
-            raise RemoteApiAuthConfigError("Servicio remoto sin inventario de tokens cargado.")
-        return authenticate_bearer_request(
-            authorization_header,
-            token_bindings=self._token_bindings,
-        )
-
     def _load_token_bindings(self) -> tuple[RemoteApiTokenBinding, ...]:
         try:
             return resolve_remote_api_token_bindings(
@@ -671,7 +1105,11 @@ class RemoteApiService:
                 environ=os.environ,
             )
         except RemoteApiAuthConfigError as exc:
-            raise RemoteApiServiceError(str(exc)) from exc
+            self._logger.warning(
+                "Compatibilidad bearer token no disponible al iniciar servicio remoto: %s",
+                exc,
+            )
+            return ()
 
     def _serve_remote_console(self, handler: BaseHTTPRequestHandler, path: str) -> None:
         asset_name = _resolve_remote_console_asset_name(path)
@@ -707,10 +1145,16 @@ class RemoteApiService:
         handler: BaseHTTPRequestHandler,
         status_code: int,
         payload: dict[str, Any],
+        *,
+        extra_headers: list[tuple[str, str]] | None = None,
     ) -> None:
         raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         handler.send_response(int(status_code))
         handler.send_header("Content-Type", "application/json; charset=utf-8")
+        handler.send_header("Cache-Control", "no-store")
+        if extra_headers:
+            for header_name, header_value in extra_headers:
+                handler.send_header(str(header_name), str(header_value))
         handler.send_header("Content-Length", str(len(raw)))
         handler.end_headers()
         handler.wfile.write(raw)
@@ -743,6 +1187,61 @@ class RemoteApiService:
             content_type="text/plain; charset=utf-8",
         )
 
+    def _map_remote_auth_error(
+        self,
+        exc: RemoteAuthServiceError,
+        *,
+        action: str,
+    ) -> RemoteApiError:
+        code = exc.code
+        if code == "invalid_credentials":
+            return RemoteApiError(
+                "unauthorized",
+                "Usuario o contraseña inválidos.",
+                status_code=401,
+                action=action,
+                result="unauthorized",
+            )
+        if code == "account_disabled":
+            return RemoteApiError(
+                "account_disabled",
+                exc.message,
+                status_code=403,
+                action=action,
+                result="account_disabled",
+            )
+        if code in {"invalid_bootstrap", "invalid_username", "invalid_role", "invalid_password"}:
+            return RemoteApiError(
+                code,
+                exc.message,
+                status_code=400,
+                action=action,
+                result=code,
+            )
+        if code in {"username_conflict", "bootstrap_already_completed", "last_admin_violation", "bootstrap_required"}:
+            return RemoteApiError(
+                code,
+                exc.message,
+                status_code=409,
+                action=action,
+                result=code,
+            )
+        if code == "user_not_found":
+            return RemoteApiError(
+                code,
+                exc.message,
+                status_code=404,
+                action=action,
+                result=code,
+            )
+        return RemoteApiError(
+            "internal_error",
+            "Error interno del servicio remoto.",
+            status_code=500,
+            action=action,
+            result="internal_error",
+        )
+
     def _session_state_value(self) -> str:
         snapshot = self._runtime_client.get_snapshot()
         return snapshot.state.value
@@ -772,8 +1271,46 @@ def _parse_json_body(body: bytes) -> dict[str, Any]:
     return payload
 
 
+def _coerce_optional_text(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _coerce_optional_bool(value: object) -> bool | None:
+    if value is None:
+        return None
+    return bool(value)
+
+
+class _UnsetSentinel:
+    pass
+
+
+_UNSET = _UnsetSentinel()
+
+
+def _coerce_optional_text_for_patch(payload: dict[str, Any]) -> str | None | object:
+    if "notes" not in payload:
+        return _UNSET
+    return _coerce_optional_text(payload.get("notes"))
+
+
 def _is_remote_console_path(path: str) -> bool:
     return path == "/remote" or path.startswith("/remote/")
+
+
+def _is_public_remote_api_route(method: str, path: str) -> bool:
+    if method == "GET" and path == "/api/v1/auth/session":
+        return True
+    if method == "POST" and path in {
+        "/api/v1/auth/login",
+        "/api/v1/auth/bootstrap",
+        "/api/v1/auth/logout",
+    }:
+        return True
+    return False
 
 
 def _resolve_remote_console_asset_name(path: str) -> str | None:
@@ -814,6 +1351,32 @@ def _parse_node_id_from_action_path(path: str, action_name: str) -> int:
             result="invalid_request",
         )
     return _parse_node_id(parts[3], action=f"node.{action_name.replace('-', '_')}")
+
+
+def _parse_account_username_from_path(path: str) -> str:
+    parts = [part for part in path.split("/") if part]
+    if len(parts) != 4 or parts[:3] != ["api", "v1", "accounts"]:
+        raise RemoteApiError(
+            "invalid_request",
+            "Path de cuenta remota invalido para v1.",
+            status_code=400,
+            action="account.update",
+            result="invalid_request",
+        )
+    return str(parts[3]).strip().lower()
+
+
+def _parse_account_username_from_password_path(path: str) -> str:
+    parts = [part for part in path.split("/") if part]
+    if len(parts) != 5 or parts[:3] != ["api", "v1", "accounts"] or parts[4] != "password":
+        raise RemoteApiError(
+            "invalid_request",
+            "Path de cambio de password remoto invalido para v1.",
+            status_code=400,
+            action="account.change_password",
+            result="invalid_request",
+        )
+    return str(parts[3]).strip().lower()
 
 
 def _parse_node_id(raw_value: str, *, action: str) -> int:
@@ -874,6 +1437,24 @@ def _infer_action(method: str, path: str) -> str:
         return "node.request_stat_now"
     if method == "POST" and path.endswith("/actions/reboot"):
         return "node.reboot"
+    if method == "GET" and path == "/api/v1/auth/session":
+        return "auth.session.read"
+    if method == "POST" and path == "/api/v1/auth/login":
+        return "auth.login"
+    if method == "POST" and path == "/api/v1/auth/bootstrap":
+        return "auth.bootstrap"
+    if method == "POST" and path == "/api/v1/auth/logout":
+        return "auth.logout"
+    if method == "GET" and path == "/api/v1/accounts":
+        return "accounts.read"
+    if method == "POST" and path == "/api/v1/accounts":
+        return "account.create"
+    if method == "PATCH" and path.startswith("/api/v1/accounts/"):
+        return "account.update"
+    if method == "POST" and path.startswith("/api/v1/accounts/") and path.endswith("/password"):
+        return "account.change_password"
+    if method == "DELETE" and path.startswith("/api/v1/accounts/"):
+        return "account.delete"
     return "request.invalid"
 
 

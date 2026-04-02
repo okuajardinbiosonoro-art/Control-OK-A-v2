@@ -18,9 +18,9 @@ from control_okua.core.profiles.profile_service import (
 )
 from control_okua.services.remote_api_contract import resolve_remote_api_config
 from control_okua.services.remote_api_bootstrap import (
-    ensure_remote_api_local_credentials,
     ensure_remote_api_runtime_config,
 )
+from control_okua.services.remote_api_bootstrap import build_remote_api_access_urls
 from control_okua.services.remote_api_service import RemoteApiService
 from control_okua.services.session_controller import SessionController
 
@@ -88,20 +88,10 @@ def run_app() -> int:
             f"http://{remote_api_config.bind_host}:{remote_api_config.port}/remote/"
         )
         try:
-            bootstrap = ensure_remote_api_local_credentials(
-                remote_api_config,
-                config_path=config_path,
-                environ=os.environ,
-            )
-            for warning in bootstrap.warnings:
-                print(f"[remote_api] {warning}")
-            print(f"[remote_api] secrets store: {bootstrap.secrets_path}")
-            print(f"[remote_api] access note: {bootstrap.access_note_path}")
-            for access_url in bootstrap.access_urls:
-                print(f"[remote_api] access url: {access_url}")
             remote_api_service = RemoteApiService(
                 runtime_client=session_controller,
                 config=remote_api_config,
+                config_path=config_path,
             )
             remote_api_service.start()
             app.aboutToQuit.connect(remote_api_service.stop)
@@ -110,9 +100,15 @@ def run_app() -> int:
                 f"http://{remote_api_config.bind_host}:{remote_api_service.port}"
             )
             print(
+                "[remote_api] store de usuarios remotos en "
+                f"{remote_api_service.user_store_path}"
+            )
+            print(
                 "[remote_api] consola remota disponible en "
                 f"http://{remote_api_config.bind_host}:{remote_api_service.port}/remote/"
             )
+            for access_url in build_remote_api_access_urls(remote_api_config):
+                print(f"[remote_api] access url: {access_url}")
         except Exception as exc:
             print(f"[remote_api] no se pudo iniciar servicio remoto: {exc}")
             if remote_api_config.auth_mode == "bearer_token_inventory":

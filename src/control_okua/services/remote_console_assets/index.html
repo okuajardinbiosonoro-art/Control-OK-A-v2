@@ -13,10 +13,15 @@
           <p class="eyebrow">CKv2 Remote Console v1</p>
           <h1>Consola remota mínima</h1>
           <p class="hero-copy">
-            Superficie remota ligera para resumen, nodos y acciones curadas según rol.
+            Acceso humano por usuario y contraseña, con vista operativa ligera y gestión local de cuentas.
           </p>
         </div>
         <div class="hero-actions">
+          <span id="current-user-chip" class="status-chip">No autenticado</span>
+          <span id="current-role-chip" class="status-chip">Rol: n/a</span>
+          <button id="logout-button" class="button button-secondary" type="button">
+            Cerrar sesión
+          </button>
           <button id="refresh-all-button" class="button button-secondary" type="button">
             Refresh
           </button>
@@ -27,46 +32,84 @@
         <section class="panel access-panel">
           <div class="panel-header">
             <h2>Acceso</h2>
-            <p>Bearer token local del sitio y role hint para la UX.</p>
+            <p id="access-subtitle">Login local del sitio para operarios y administración remota.</p>
           </div>
 
-          <form id="token-form" class="stack-form">
+          <div id="auth-message" class="message-banner hidden" role="status"></div>
+
+          <section id="bootstrap-panel" class="stack-block hidden">
+            <h3>Bootstrap inicial</h3>
+            <p class="fine-print">
+              Este sitio todavía no tiene cuentas remotas. Define aquí los usuarios iniciales del sitio.
+            </p>
+
+            <form id="bootstrap-form" class="stack-form">
+              <article class="bootstrap-card">
+                <h4>admin</h4>
+                <label class="field">
+                  <span>Username</span>
+                  <input id="bootstrap-admin-username" type="text" value="admin.okua" autocomplete="username" />
+                </label>
+                <label class="field">
+                  <span>Contraseña inicial</span>
+                  <input id="bootstrap-admin-password" type="password" autocomplete="new-password" />
+                </label>
+              </article>
+
+              <article class="bootstrap-card">
+                <h4>tecnico</h4>
+                <label class="field">
+                  <span>Username</span>
+                  <input id="bootstrap-tech-username" type="text" value="tecnico.okua" autocomplete="username" />
+                </label>
+                <label class="field">
+                  <span>Contraseña inicial</span>
+                  <input id="bootstrap-tech-password" type="password" autocomplete="new-password" />
+                </label>
+              </article>
+
+              <article class="bootstrap-card">
+                <h4>observador</h4>
+                <label class="field">
+                  <span>Username</span>
+                  <input id="bootstrap-observer-username" type="text" value="observador.okua" autocomplete="username" />
+                </label>
+                <label class="field">
+                  <span>Contraseña inicial</span>
+                  <input id="bootstrap-observer-password" type="password" autocomplete="new-password" />
+                </label>
+              </article>
+
+              <div class="button-row">
+                <button class="button" type="submit">Crear cuentas iniciales</button>
+              </div>
+            </form>
+          </section>
+
+          <form id="login-form" class="stack-form hidden">
             <label class="field">
-              <span>Token</span>
-              <input
-                id="token-input"
-                name="token"
-                type="password"
-                autocomplete="off"
-                placeholder="Pega aquí el bearer token"
-              />
+              <span>Usuario</span>
+              <input id="login-username" type="text" autocomplete="username" />
             </label>
 
             <label class="field">
-              <span>Role hint</span>
-              <select id="role-select" name="role_hint">
-                <option value="observador">observador</option>
-                <option value="tecnico">tecnico</option>
-                <option value="admin">admin</option>
-              </select>
+              <span>Contraseña</span>
+              <input id="login-password" type="password" autocomplete="current-password" />
             </label>
 
             <div class="button-row">
-              <button class="button" type="submit">Guardar acceso</button>
-              <button id="logout-button" class="button button-secondary" type="button">
-                Limpiar token
-              </button>
+              <button class="button" type="submit">Ingresar</button>
             </div>
           </form>
 
-          <div class="status-chip-row">
-            <span class="status-chip" id="auth-chip">Sin token</span>
-            <span class="status-chip" id="role-chip">Role hint: observador</span>
-          </div>
+          <div id="access-summary" class="fine-print hidden"></div>
 
-          <p class="fine-print">
-            El role hint solo ayuda a mostrar u ocultar controles. La autoridad final sigue siendo el backend.
-          </p>
+          <details class="legacy-note">
+            <summary>Modo técnico heredado</summary>
+            <p class="fine-print">
+              El backend mantiene compatibilidad con bearer tokens para soporte técnico, pero ya no es el flujo principal visible para operarios.
+            </p>
+          </details>
         </section>
 
         <section class="panel summary-panel">
@@ -86,7 +129,7 @@
           </div>
 
           <div id="nodes-empty" class="empty-state">
-            Sin datos todavía. Guarda un token válido para consultar la API.
+            Inicia sesión para consultar la lista de nodos remotos.
           </div>
           <div id="nodes-list" class="nodes-list" aria-live="polite"></div>
         </section>
@@ -108,18 +151,10 @@
                 <p id="detail-subtitle" class="detail-subtitle"></p>
               </div>
               <div class="button-row">
-                <button
-                  id="request-stat-button"
-                  class="button"
-                  type="button"
-                >
+                <button id="request-stat-button" class="button" type="button">
                   REQUEST_STAT_NOW
                 </button>
-                <button
-                  id="reboot-button"
-                  class="button button-danger"
-                  type="button"
-                >
+                <button id="reboot-button" class="button button-danger" type="button">
                   REBOOT_SOFT
                 </button>
               </div>
@@ -143,6 +178,51 @@
               </article>
             </div>
           </div>
+        </section>
+
+        <section id="users-panel" class="panel users-panel hidden">
+          <div class="panel-header">
+            <h2>Usuarios remotos</h2>
+            <p>Administración local de cuentas remotas del sitio. Solo admin.</p>
+          </div>
+
+          <div id="users-message" class="message-banner hidden" role="status"></div>
+
+          <form id="create-user-form" class="stack-form">
+            <h3>Crear usuario</h3>
+            <label class="field">
+              <span>Username</span>
+              <input id="create-username" type="text" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>Contraseña inicial</span>
+              <input id="create-password" type="password" autocomplete="new-password" />
+            </label>
+            <label class="field">
+              <span>Rol</span>
+              <select id="create-role">
+                <option value="observador">observador</option>
+                <option value="tecnico">tecnico</option>
+                <option value="admin">admin</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Notas</span>
+              <input id="create-notes" type="text" autocomplete="off" />
+            </label>
+            <label class="field checkbox-field">
+              <input id="create-enabled" type="checkbox" checked />
+              <span>Cuenta habilitada</span>
+            </label>
+            <div class="button-row">
+              <button class="button" type="submit">Crear usuario</button>
+            </div>
+          </form>
+
+          <div id="users-empty" class="empty-state hidden">
+            No hay usuarios cargados.
+          </div>
+          <div id="users-list" class="users-list"></div>
         </section>
       </main>
     </div>

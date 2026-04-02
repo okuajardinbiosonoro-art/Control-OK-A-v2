@@ -262,6 +262,12 @@ def test_authorize_remote_api_action_enforces_v1_role_matrix() -> None:
         actor_type="technical_token",
         actor_id="remote_api_token:admin",
     )
+    authorize_remote_api_action(
+        role="admin",
+        action="accounts.read",
+        actor_type="technical_token",
+        actor_id="remote_api_token:admin",
+    )
 
     with pytest.raises(RemoteApiForbiddenError):
         authorize_remote_api_action(
@@ -275,6 +281,14 @@ def test_authorize_remote_api_action_enforces_v1_role_matrix() -> None:
         authorize_remote_api_action(
             role="tecnico",
             action="node.reboot",
+            actor_type="technical_token",
+            actor_id="remote_api_token:tech",
+        )
+
+    with pytest.raises(RemoteApiForbiddenError):
+        authorize_remote_api_action(
+            role="tecnico",
+            action="accounts.read",
             actor_type="technical_token",
             actor_id="remote_api_token:tech",
         )

@@ -58,7 +58,9 @@
       }
     ],
     "audit_enabled": true,
-    "audit_folder": "logs/remote_api"
+    "audit_folder": "logs/remote_api",
+    "user_store_filename": "remote_api_users.json",
+    "session_ttl_s": 43200
   },
   "ui": {
     "refresh_hz": 10

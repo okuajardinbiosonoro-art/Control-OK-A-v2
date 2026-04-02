@@ -1,28 +1,37 @@
 (function () {
   "use strict";
 
-  const STORAGE_KEY = "ckv2_remote_console_session_v1";
   const POLL_SUMMARY_MS = 4000;
   const POLL_DETAIL_MS = 3000;
-  const ROLE_ORDER = ["observador", "tecnico", "admin"];
 
   const state = {
-    token: "",
-    roleHint: "observador",
+    session: null,
+    bootstrapRequired: false,
     selectedNodeId: null,
+    nodes: [],
     summaryTimer: null,
     detailTimer: null,
     isBusy: false,
   };
 
   const refs = {
-    tokenForm: document.getElementById("token-form"),
-    tokenInput: document.getElementById("token-input"),
-    roleSelect: document.getElementById("role-select"),
+    loginForm: document.getElementById("login-form"),
+    loginUsername: document.getElementById("login-username"),
+    loginPassword: document.getElementById("login-password"),
+    bootstrapPanel: document.getElementById("bootstrap-panel"),
+    bootstrapForm: document.getElementById("bootstrap-form"),
+    bootstrapAdminUsername: document.getElementById("bootstrap-admin-username"),
+    bootstrapAdminPassword: document.getElementById("bootstrap-admin-password"),
+    bootstrapTechUsername: document.getElementById("bootstrap-tech-username"),
+    bootstrapTechPassword: document.getElementById("bootstrap-tech-password"),
+    bootstrapObserverUsername: document.getElementById("bootstrap-observer-username"),
+    bootstrapObserverPassword: document.getElementById("bootstrap-observer-password"),
+    authMessage: document.getElementById("auth-message"),
+    accessSummary: document.getElementById("access-summary"),
+    currentUserChip: document.getElementById("current-user-chip"),
+    currentRoleChip: document.getElementById("current-role-chip"),
     logoutButton: document.getElementById("logout-button"),
     refreshAllButton: document.getElementById("refresh-all-button"),
-    authChip: document.getElementById("auth-chip"),
-    roleChip: document.getElementById("role-chip"),
     globalMessage: document.getElementById("global-message"),
     summaryGrid: document.getElementById("summary-grid"),
     nodesList: document.getElementById("nodes-list"),
@@ -38,6 +47,16 @@
     runtimeFields: document.getElementById("runtime-fields"),
     controlFields: document.getElementById("control-fields"),
     otaFields: document.getElementById("ota-fields"),
+    usersPanel: document.getElementById("users-panel"),
+    usersMessage: document.getElementById("users-message"),
+    usersList: document.getElementById("users-list"),
+    usersEmpty: document.getElementById("users-empty"),
+    createUserForm: document.getElementById("create-user-form"),
+    createUsername: document.getElementById("create-username"),
+    createPassword: document.getElementById("create-password"),
+    createRole: document.getElementById("create-role"),
+    createNotes: document.getElementById("create-notes"),
+    createEnabled: document.getElementById("create-enabled"),
   };
 
   document.addEventListener("visibilitychange", () => {
@@ -45,31 +64,24 @@
       stopPolling();
       return;
     }
-    startPolling();
-    void refreshAll();
+    if (isAuthenticated()) {
+      startPolling();
+      void refreshAll();
+    }
   });
 
-  refs.tokenForm.addEventListener("submit", (event) => {
+  refs.loginForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    const token = refs.tokenInput.value.trim();
-    const roleHint = refs.roleSelect.value;
-    if (!token) {
-      setBanner(refs.globalMessage, "Ingresa un bearer token para continuar.", true);
-      return;
-    }
-    state.token = token;
-    state.roleHint = roleHint;
-    saveSession();
-    syncAccessUi();
-    refs.tokenInput.value = "";
-    setBanner(refs.globalMessage, "Token guardado localmente para esta consola.", false);
-    startPolling();
-    void refreshAll();
+    void handleLogin();
+  });
+
+  refs.bootstrapForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void handleBootstrap();
   });
 
   refs.logoutButton.addEventListener("click", () => {
-    clearSession();
-    renderLoggedOutState();
+    void handleLogout();
   });
 
   refs.refreshAllButton.addEventListener("click", () => {
@@ -77,30 +89,162 @@
   });
 
   refs.requestStatButton.addEventListener("click", () => {
-    if (state.selectedNodeId === null) {
-      return;
+    if (state.selectedNodeId !== null) {
+      void invokeNodeAction("request-stat-now");
     }
-    void invokeNodeAction("request-stat-now");
   });
 
   refs.rebootButton.addEventListener("click", () => {
-    if (state.selectedNodeId === null) {
-      return;
+    if (state.selectedNodeId !== null) {
+      void invokeNodeAction("reboot", { delay_ms: 0 });
     }
-    void invokeNodeAction("reboot", { delay_ms: 0 });
   });
 
-  loadSession();
-  syncAccessUi();
-  if (state.token) {
-    startPolling();
-    void refreshAll();
-  } else {
-    renderLoggedOutState();
+  refs.createUserForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void handleCreateUser();
+  });
+
+  refs.usersList.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement)) {
+      return;
+    }
+    const card = target.closest("[data-username]");
+    if (!(card instanceof HTMLElement)) {
+      return;
+    }
+    const username = card.dataset.username || "";
+    if (!username) {
+      return;
+    }
+    if (target.dataset.action === "save-profile") {
+      void handleSaveUser(card, username);
+      return;
+    }
+    if (target.dataset.action === "change-password") {
+      void handleChangePassword(card, username);
+      return;
+    }
+    if (target.dataset.action === "delete-user") {
+      void handleDeleteUser(username);
+    }
+  });
+
+  void syncSessionState();
+
+  async function syncSessionState() {
+    try {
+      const response = await apiRequest("/api/v1/auth/session", { authOptional: true });
+      const data = response.data || {};
+      state.bootstrapRequired = Boolean(data.bootstrap_required);
+      state.session = data.authenticated ? data.user : null;
+      syncAccessUi(data);
+      if (state.session) {
+        startPolling();
+        await refreshAll();
+      } else {
+        stopPolling();
+        renderLoggedOutState();
+      }
+    } catch (error) {
+      stopPolling();
+      state.session = null;
+      state.bootstrapRequired = false;
+      syncAccessUi({});
+      renderLoggedOutState();
+      setBanner(refs.authMessage, describeError(error), true);
+    }
+  }
+
+  async function handleLogin() {
+    const username = refs.loginUsername.value.trim();
+    const password = refs.loginPassword.value;
+    if (!username || !password) {
+      setBanner(refs.authMessage, "Ingresa usuario y contraseña.", true);
+      return;
+    }
+    try {
+      const response = await apiRequest("/api/v1/auth/login", {
+        method: "POST",
+        body: { username, password },
+        authOptional: true,
+      });
+      refs.loginPassword.value = "";
+      state.session = response.data?.user || null;
+      state.bootstrapRequired = false;
+      clearBanner(refs.authMessage);
+      syncAccessUi(response.data || {});
+      startPolling();
+      await refreshAll();
+    } catch (error) {
+      refs.loginPassword.value = "";
+      setBanner(refs.authMessage, describeError(error), true);
+    }
+  }
+
+  async function handleBootstrap() {
+    const accounts = [
+      {
+        username: refs.bootstrapAdminUsername.value.trim(),
+        password: refs.bootstrapAdminPassword.value,
+        role: "admin",
+      },
+      {
+        username: refs.bootstrapTechUsername.value.trim(),
+        password: refs.bootstrapTechPassword.value,
+        role: "tecnico",
+      },
+      {
+        username: refs.bootstrapObserverUsername.value.trim(),
+        password: refs.bootstrapObserverPassword.value,
+        role: "observador",
+      },
+    ];
+    try {
+      const response = await apiRequest("/api/v1/auth/bootstrap", {
+        method: "POST",
+        body: { accounts },
+        authOptional: true,
+      });
+      refs.bootstrapAdminPassword.value = "";
+      refs.bootstrapTechPassword.value = "";
+      refs.bootstrapObserverPassword.value = "";
+      state.session = response.data?.user || null;
+      state.bootstrapRequired = false;
+      setBanner(refs.authMessage, "Bootstrap inicial completado. Sesión admin activa.", false);
+      syncAccessUi(response.data || {});
+      startPolling();
+      await refreshAll();
+    } catch (error) {
+      refs.bootstrapAdminPassword.value = "";
+      refs.bootstrapTechPassword.value = "";
+      refs.bootstrapObserverPassword.value = "";
+      setBanner(refs.authMessage, describeError(error), true);
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await apiRequest("/api/v1/auth/logout", {
+        method: "POST",
+        authOptional: true,
+      });
+    } catch (_error) {
+      // Logout debe limpiar UI aunque la sesión ya no exista.
+    } finally {
+      state.session = null;
+      state.selectedNodeId = null;
+      stopPolling();
+      clearBanner(refs.globalMessage);
+      clearBanner(refs.detailMessage);
+      clearBanner(refs.usersMessage);
+      void syncSessionState();
+    }
   }
 
   async function refreshAll() {
-    if (!state.token || state.isBusy) {
+    if (!isAuthenticated() || state.isBusy) {
       return;
     }
     state.isBusy = true;
@@ -111,12 +255,19 @@
         apiRequest("/api/v1/nodes"),
       ]);
 
+      const nodes = Array.isArray(nodesResponse.data?.nodes) ? nodesResponse.data.nodes : [];
+      state.nodes = nodes;
       renderSummary(healthResponse.data, summaryResponse.data);
-      renderNodes(nodesResponse.data.nodes || []);
+      renderNodes(nodes);
       clearBanner(refs.globalMessage);
 
       if (state.selectedNodeId !== null) {
         await refreshSelectedNode();
+      }
+      if (state.session?.role === "admin") {
+        await loadUsers();
+      } else {
+        hideUsersPanel();
       }
     } catch (error) {
       handleGlobalError(error);
@@ -126,7 +277,7 @@
   }
 
   async function refreshSelectedNode() {
-    if (state.selectedNodeId === null || !state.token) {
+    if (!isAuthenticated() || state.selectedNodeId === null) {
       return;
     }
     try {
@@ -139,7 +290,7 @@
   }
 
   async function invokeNodeAction(actionName, body) {
-    if (state.selectedNodeId === null) {
+    if (!isAuthenticated() || state.selectedNodeId === null) {
       return;
     }
     const nodeId = state.selectedNodeId;
@@ -167,19 +318,113 @@
     }
   }
 
+  async function loadUsers() {
+    try {
+      const response = await apiRequest("/api/v1/accounts");
+      const users = Array.isArray(response.data?.users) ? response.data.users : [];
+      renderUsers(users);
+      clearBanner(refs.usersMessage);
+    } catch (error) {
+      hideUsersPanel();
+      setBanner(refs.usersMessage, describeError(error), true);
+    }
+  }
+
+  async function handleCreateUser() {
+    try {
+      await apiRequest("/api/v1/accounts", {
+        method: "POST",
+        body: {
+          username: refs.createUsername.value.trim(),
+          password: refs.createPassword.value,
+          role: refs.createRole.value,
+          notes: refs.createNotes.value.trim(),
+          enabled: refs.createEnabled.checked,
+        },
+      });
+      refs.createUserForm.reset();
+      refs.createRole.value = "observador";
+      refs.createEnabled.checked = true;
+      setBanner(refs.usersMessage, "Usuario remoto creado.", false);
+      await syncSessionState();
+    } catch (error) {
+      setBanner(refs.usersMessage, describeError(error), true);
+    }
+  }
+
+  async function handleSaveUser(card, username) {
+    const usernameInput = card.querySelector("[data-field='username']");
+    const roleSelect = card.querySelector("[data-field='role']");
+    const enabledInput = card.querySelector("[data-field='enabled']");
+    const notesInput = card.querySelector("[data-field='notes']");
+    try {
+      await apiRequest(`/api/v1/accounts/${encodeURIComponent(username)}`, {
+        method: "PATCH",
+        body: {
+          username: usernameInput ? usernameInput.value.trim() : username,
+          role: roleSelect ? roleSelect.value : "observador",
+          enabled: enabledInput ? enabledInput.checked : true,
+          notes: notesInput ? notesInput.value.trim() : "",
+        },
+      });
+      setBanner(refs.usersMessage, `Usuario ${username} actualizado.`, false);
+      await syncSessionState();
+    } catch (error) {
+      setBanner(refs.usersMessage, describeError(error), true);
+    }
+  }
+
+  async function handleChangePassword(card, username) {
+    const passwordInput = card.querySelector("[data-field='new-password']");
+    const newPassword = passwordInput ? passwordInput.value : "";
+    if (!newPassword) {
+      setBanner(refs.usersMessage, "Ingresa una nueva contraseña antes de guardar.", true);
+      return;
+    }
+    try {
+      await apiRequest(`/api/v1/accounts/${encodeURIComponent(username)}/password`, {
+        method: "POST",
+        body: { new_password: newPassword },
+      });
+      if (passwordInput) {
+        passwordInput.value = "";
+      }
+      setBanner(refs.usersMessage, `Contraseña actualizada para ${username}.`, false);
+      await syncSessionState();
+    } catch (error) {
+      setBanner(refs.usersMessage, describeError(error), true);
+    }
+  }
+
+  async function handleDeleteUser(username) {
+    if (!window.confirm(`¿Borrar usuario remoto ${username}?`)) {
+      return;
+    }
+    try {
+      await apiRequest(`/api/v1/accounts/${encodeURIComponent(username)}`, {
+        method: "DELETE",
+      });
+      setBanner(refs.usersMessage, `Usuario ${username} borrado.`, false);
+      await syncSessionState();
+    } catch (error) {
+      setBanner(refs.usersMessage, describeError(error), true);
+    }
+  }
+
   async function apiRequest(path, options = {}) {
     const headers = {
       Accept: "application/json",
-      Authorization: `Bearer ${state.token}`,
     };
     if (options.body !== undefined) {
       headers["Content-Type"] = "application/json";
     }
+
     let response;
     try {
       response = await fetch(path, {
         method: options.method || "GET",
         headers,
+        credentials: "same-origin",
         body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
       });
     } catch (error) {
@@ -198,6 +443,11 @@
     }
 
     if (!response.ok) {
+      if (response.status === 401 && !options.authOptional) {
+        state.session = null;
+        stopPolling();
+        syncAccessUi({});
+      }
       throw {
         kind: "http",
         status: response.status,
@@ -206,6 +456,34 @@
     }
 
     return payload;
+  }
+
+  function syncAccessUi(sessionData) {
+    const sessionUser = state.session;
+    const bootstrapRequired = Boolean(state.bootstrapRequired || sessionData.bootstrap_required);
+    refs.bootstrapPanel.classList.toggle("hidden", !bootstrapRequired);
+    refs.loginForm.classList.toggle("hidden", bootstrapRequired || Boolean(sessionUser));
+    refs.logoutButton.disabled = !sessionUser;
+    refs.refreshAllButton.disabled = !sessionUser;
+    refs.currentUserChip.textContent = sessionUser
+      ? `Usuario: ${sessionUser.username || "n/a"}`
+      : "No autenticado";
+    refs.currentRoleChip.textContent = sessionUser
+      ? `Rol: ${sessionUser.role || "n/a"}`
+      : "Rol: n/a";
+
+    if (bootstrapRequired) {
+      refs.accessSummary.classList.remove("hidden");
+      refs.accessSummary.textContent =
+        "Bootstrap pendiente: crea las cuentas iniciales del sitio para habilitar el acceso remoto.";
+    } else if (sessionUser) {
+      refs.accessSummary.classList.remove("hidden");
+      refs.accessSummary.textContent =
+        `Sesión activa vía ${sessionData.auth_scheme || "session_cookie"} para ${sessionUser.username}.`;
+    } else {
+      refs.accessSummary.classList.add("hidden");
+      refs.accessSummary.textContent = "";
+    }
   }
 
   function renderSummary(healthData, summaryData) {
@@ -222,14 +500,11 @@
 
   function renderNodes(nodes) {
     if (!Array.isArray(nodes) || nodes.length === 0) {
-      refs.nodesEmpty.textContent = state.token
+      refs.nodesEmpty.textContent = isAuthenticated()
         ? "No hay nodos visibles en el runtime actual."
-        : "Sin datos todavía. Guarda un token válido para consultar la API.";
+        : "Inicia sesión para consultar la lista de nodos remotos.";
       refs.nodesEmpty.classList.remove("hidden");
       refs.nodesList.innerHTML = "";
-      if (state.selectedNodeId !== null) {
-        refs.detailEmpty.classList.remove("hidden");
-      }
       return;
     }
 
@@ -311,41 +586,105 @@
     syncActionButtons();
   }
 
-  function renderDefinitionList(values) {
-    return Object.entries(values)
-      .map(([key, value]) => {
-        return `<dt>${escapeHtml(key)}</dt><dd>${escapeHtml(stringifyValue(value))}</dd>`;
+  function renderUsers(users) {
+    if (!isAuthenticated() || state.session?.role !== "admin") {
+      hideUsersPanel();
+      return;
+    }
+
+    refs.usersPanel.classList.remove("hidden");
+    if (!Array.isArray(users) || users.length === 0) {
+      refs.usersEmpty.classList.remove("hidden");
+      refs.usersList.innerHTML = "";
+      return;
+    }
+
+    refs.usersEmpty.classList.add("hidden");
+    refs.usersList.innerHTML = users
+      .map((user) => {
+        const isCurrent = state.session?.username === user.username;
+        return `
+          <article class="user-card" data-username="${escapeHtml(user.username)}">
+            <header>
+              <div>
+                <strong>${escapeHtml(user.username)}</strong>
+                <div class="user-meta">
+                  <span>rol actual: ${escapeHtml(user.role)}</span>
+                  <span>último cambio password: ${escapeHtml(stringifyValue(user.last_password_change_at))}</span>
+                </div>
+              </div>
+              <span class="user-status">${isCurrent ? "sesión actual" : user.enabled ? "habilitado" : "deshabilitado"}</span>
+            </header>
+
+            <div class="user-grid">
+              <label class="field">
+                <span>Username</span>
+                <input data-field="username" type="text" value="${escapeHtml(user.username)}" />
+              </label>
+              <label class="field">
+                <span>Rol</span>
+                <select data-field="role">
+                  ${roleOption(user.role, "observador")}
+                  ${roleOption(user.role, "tecnico")}
+                  ${roleOption(user.role, "admin")}
+                </select>
+              </label>
+              <label class="field">
+                <span>Notas</span>
+                <input data-field="notes" type="text" value="${escapeHtml(user.notes || "")}" />
+              </label>
+              <label class="field checkbox-field">
+                <input data-field="enabled" type="checkbox" ${user.enabled ? "checked" : ""} />
+                <span>Cuenta habilitada</span>
+              </label>
+              <label class="field">
+                <span>Nueva contraseña</span>
+                <input data-field="new-password" type="password" autocomplete="new-password" />
+              </label>
+            </div>
+
+            <div class="button-row">
+              <button class="button" type="button" data-action="save-profile">Guardar perfil</button>
+              <button class="button button-secondary" type="button" data-action="change-password">Cambiar contraseña</button>
+              <button class="button button-danger" type="button" data-action="delete-user">Borrar</button>
+            </div>
+          </article>
+        `;
       })
       .join("");
   }
 
+  function hideUsersPanel() {
+    refs.usersPanel.classList.add("hidden");
+    refs.usersList.innerHTML = "";
+    refs.usersEmpty.classList.add("hidden");
+  }
+
   function syncActionButtons() {
-    const canRequestStat = state.token && roleAtLeast(state.roleHint, "tecnico");
-    const canReboot = state.token && roleAtLeast(state.roleHint, "admin");
+    const role = state.session?.role || "";
+    const canRequestStat = role === "tecnico" || role === "admin";
+    const canReboot = role === "admin";
     refs.requestStatButton.disabled = !canRequestStat || state.selectedNodeId === null;
     refs.rebootButton.disabled = !canReboot || state.selectedNodeId === null;
 
-    if (!state.token) {
-      refs.actionHint.textContent = "Guarda primero un token para habilitar la consola.";
+    if (!isAuthenticated()) {
+      refs.actionHint.textContent = "Inicia sesión para habilitar acciones remotas.";
       return;
     }
-    if (state.roleHint === "observador") {
-      refs.actionHint.textContent =
-        "Role hint observador: la UI deja las acciones bloqueadas. El backend seguiría respondiendo 403 si se intentaran.";
+    if (role === "observador") {
+      refs.actionHint.textContent = "Rol observador: solo lectura.";
       return;
     }
-    if (state.roleHint === "tecnico") {
-      refs.actionHint.textContent =
-        "Role hint tecnico: REQUEST_STAT_NOW habilitado; REBOOT_SOFT sigue reservado para admin.";
+    if (role === "tecnico") {
+      refs.actionHint.textContent = "Rol tecnico: REQUEST_STAT_NOW habilitado; REBOOT_SOFT sigue reservado para admin.";
       return;
     }
-    refs.actionHint.textContent =
-      "Role hint admin: ambas acciones curadas están disponibles, sujetas a las precondiciones reales del runtime.";
+    refs.actionHint.textContent = "Rol admin: ambas acciones curadas están disponibles, sujetas a las precondiciones reales del runtime.";
   }
 
   function startPolling() {
     stopPolling();
-    if (!state.token) {
+    if (!isAuthenticated()) {
       return;
     }
     state.summaryTimer = window.setInterval(() => {
@@ -372,11 +711,7 @@
   function handleGlobalError(error) {
     setBanner(refs.globalMessage, describeError(error), true);
     if (error?.status === 401) {
-      refs.authChip.textContent = "Token rechazado";
-    }
-    if (error?.status === 401 || error?.kind === "network") {
-      refs.nodesList.innerHTML = "";
-      refs.nodesEmpty.classList.remove("hidden");
+      void syncSessionState();
     }
   }
 
@@ -387,6 +722,18 @@
       refs.detailEmpty.classList.remove("hidden");
       refs.detailEmpty.textContent = "El nodo seleccionado ya no aparece en snapshots actuales.";
     }
+  }
+
+  function renderLoggedOutState() {
+    refs.summaryGrid.innerHTML = "";
+    refs.nodesList.innerHTML = "";
+    refs.nodeDetail.classList.add("hidden");
+    refs.detailEmpty.classList.remove("hidden");
+    refs.detailEmpty.textContent = "Selecciona un nodo para ver su detalle técnico.";
+    refs.nodesEmpty.classList.remove("hidden");
+    refs.nodesEmpty.textContent = "Inicia sesión para consultar la lista de nodos remotos.";
+    hideUsersPanel();
+    syncActionButtons();
   }
 
   function describeError(error) {
@@ -400,13 +747,13 @@
     const code = error.payload?.error?.code;
     const message = error.payload?.error?.message;
     if (status === 401) {
-      return "401 unauthorized: token ausente o inválido.";
+      return `401 unauthorized: ${message || "credenciales inválidas o sesión expirada."}`;
     }
     if (status === 403) {
-      return "403 forbidden: acción no permitida para este rol.";
+      return `403 forbidden: ${message || "acción no permitida para este rol."}`;
     }
-    if (status === 404 && code === "node_not_found") {
-      return "404 node_not_found: el nodo ya no existe en los snapshots actuales.";
+    if (status === 404) {
+      return `404 ${code || "not_found"}: ${message || "recurso no encontrado."}`;
     }
     if (status === 409) {
       return `409 ${code || "conflict"}: ${message || "el runtime no está en condición accionable."}`;
@@ -417,104 +764,58 @@
     return `${status || "error"} ${code || "internal_error"}: ${message || "fallo no controlado."}`;
   }
 
-  function renderLoggedOutState() {
-    stopPolling();
-    refs.summaryGrid.innerHTML = "";
-    refs.nodesList.innerHTML = "";
-    refs.nodeDetail.classList.add("hidden");
-    refs.detailEmpty.classList.remove("hidden");
-    refs.detailEmpty.textContent = "Selecciona un nodo para ver su detalle técnico.";
-    refs.nodesEmpty.classList.remove("hidden");
-    refs.nodesEmpty.textContent = "Sin datos todavía. Guarda un token válido para consultar la API.";
-    clearBanner(refs.detailMessage);
-    setBanner(refs.globalMessage, "Ingresa un bearer token para habilitar la consola.", false);
-    syncAccessUi();
-    syncActionButtons();
-  }
-
-  function syncAccessUi() {
-    refs.roleSelect.value = state.roleHint;
-    refs.authChip.textContent = state.token ? "Token cargado" : "Sin token";
-    refs.roleChip.textContent = `Role hint: ${state.roleHint}`;
-    syncActionButtons();
-  }
-
-  function saveSession() {
-    window.sessionStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        token: state.token,
-        roleHint: state.roleHint,
-      })
-    );
-  }
-
-  function loadSession() {
-    try {
-      const raw = window.sessionStorage.getItem(STORAGE_KEY);
-      if (!raw) {
-        return;
-      }
-      const payload = JSON.parse(raw);
-      state.token = typeof payload.token === "string" ? payload.token : "";
-      state.roleHint = ROLE_ORDER.includes(payload.roleHint) ? payload.roleHint : "observador";
-      refs.roleSelect.value = state.roleHint;
-    } catch (_error) {
-      clearSession();
-    }
-  }
-
-  function clearSession() {
-    state.token = "";
-    state.roleHint = "observador";
-    state.selectedNodeId = null;
-    refs.tokenInput.value = "";
-    refs.roleSelect.value = "observador";
-    window.sessionStorage.removeItem(STORAGE_KEY);
-  }
-
-  function setBanner(target, message, isError) {
-    target.textContent = message;
-    target.classList.remove("hidden");
-    target.classList.toggle("is-error", Boolean(isError));
-  }
-
-  function clearBanner(target) {
-    target.textContent = "";
-    target.classList.add("hidden");
-    target.classList.remove("is-error");
-  }
-
-  function roleAtLeast(currentRole, requiredRole) {
-    return ROLE_ORDER.indexOf(currentRole) >= ROLE_ORDER.indexOf(requiredRole);
-  }
-
-  function card(label, value, secondary) {
+  function card(title, value, detail) {
     return `
       <article class="summary-card">
-        <h3>${escapeHtml(label)}</h3>
+        <h3>${escapeHtml(title)}</h3>
         <strong>${escapeHtml(stringifyValue(value))}</strong>
-        <span>${escapeHtml(stringifyValue(secondary))}</span>
+        <span>${escapeHtml(detail || "")}</span>
       </article>
     `;
+  }
+
+  function renderDefinitionList(values) {
+    return Object.entries(values)
+      .map(([key, value]) => {
+        return `<dt>${escapeHtml(key)}</dt><dd>${escapeHtml(stringifyValue(value))}</dd>`;
+      })
+      .join("");
+  }
+
+  function roleOption(currentRole, optionRole) {
+    const selected = currentRole === optionRole ? "selected" : "";
+    return `<option value="${optionRole}" ${selected}>${optionRole}</option>`;
+  }
+
+  function setBanner(element, text, isError) {
+    element.textContent = text;
+    element.classList.remove("hidden");
+    element.classList.toggle("is-error", Boolean(isError));
+  }
+
+  function clearBanner(element) {
+    element.textContent = "";
+    element.classList.add("hidden");
+    element.classList.remove("is-error");
   }
 
   function stringifyValue(value) {
     if (value === null || value === undefined || value === "") {
       return "n/a";
     }
-    if (typeof value === "boolean") {
-      return value ? "true" : "false";
-    }
     return String(value);
   }
 
   function escapeHtml(value) {
-    return String(value)
+    return String(value ?? "")
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#39;");
+  }
+
+  function isAuthenticated() {
+    return Boolean(state.session && state.session.username && state.session.role);
   }
 })();
