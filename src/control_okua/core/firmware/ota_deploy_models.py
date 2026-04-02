@@ -127,6 +127,7 @@ class OtaDeployRequest:
     port: int = DEFAULT_OTA_HTTP_PORT
     ack_timeout_ms: int = 600
     max_retries: int = 0
+    allow_downgrade: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "artifact_id", normalize_text(self.artifact_id))
@@ -154,6 +155,7 @@ class OtaDeployRequest:
         object.__setattr__(self, "rollout_channel", rollout_channel)
         object.__setattr__(self, "ack_timeout_ms", int(self.ack_timeout_ms))
         object.__setattr__(self, "max_retries", int(self.max_retries))
+        object.__setattr__(self, "allow_downgrade", bool(self.allow_downgrade))
         if self.ack_timeout_ms <= 0:
             raise OtaDeployValidationError("ack_timeout_ms debe ser > 0")
         if self.max_retries < 0:

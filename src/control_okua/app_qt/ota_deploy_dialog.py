@@ -8,6 +8,7 @@ from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QDialog,
     QFormLayout,
@@ -233,6 +234,15 @@ class OtaDeployDialog(QDialog):
         self.max_retries_spin.setRange(0, 3)
         self.max_retries_spin.setValue(0)
         layout.addRow("Retries trigger:", self.max_retries_spin)
+
+        self.allow_downgrade_check = QCheckBox(
+            "Permitir downgrade / reinstalar versión no más nueva", self
+        )
+        self.allow_downgrade_check.setToolTip(
+            "Publica el rollout con una advertencia explícita para permitir "
+            "instalar una versión más vieja o no más nueva."
+        )
+        layout.addRow("Downgrade:", self.allow_downgrade_check)
         return group
 
     def reload_artifacts(self) -> None:
@@ -311,6 +321,8 @@ class OtaDeployDialog(QDialog):
             return
 
         self.artifact_summary_label.setText(option.summary)
+        if option.recommended_host:
+            self.advertise_host_edit.setText(option.recommended_host)
         recommended_channel = build_recommended_rollout_channel(option.artifact)
         index = self.rollout_channel_combo.findData(recommended_channel)
         if index >= 0:
@@ -364,10 +376,24 @@ class OtaDeployDialog(QDialog):
                 rollout_channel=str(self.rollout_channel_combo.currentData() or "stable"),
                 ack_timeout_ms=int(self.ack_timeout_spin.value()),
                 max_retries=int(self.max_retries_spin.value()),
+                allow_downgrade=self.allow_downgrade_check.isChecked(),
             )
         except OtaDeployValidationError as exc:
             QMessageBox.warning(self, "Request OTA inválido", str(exc))
             return
+
+        if request.allow_downgrade:
+            answer = QMessageBox.warning(
+                self,
+                "Downgrade OTA permitido",
+                "Estás autorizando una OTA con versión no más nueva. "
+                "Esto puede reinstalar una versión antigua y es riesgoso si el "
+                "build tiene regresiones. ¿Quieres continuar?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if answer != QMessageBox.Yes:
+                return
 
         try:
             result = self._orchestrator.deploy(request)

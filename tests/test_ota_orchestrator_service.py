@@ -371,3 +371,43 @@ def test_orchestrator_refreshes_runtime_progress_and_timeout_visibility(tmp_path
 
     assert refreshed.node_statuses[0].phase.value == "confirmed"
     assert "boot_confirmed" in refreshed.node_statuses[0].last_message
+
+
+def test_orchestrator_passes_allow_downgrade_to_manifest_publish(tmp_path: Path) -> None:
+    artifact, manifest_service = _import_artifact(tmp_path)
+    runtime_client = _FakeRuntimeClient(
+        snapshots=[_snapshot(1, ota_state_key="idle", resolved_ip="192.168.80.33")],
+        control_results={
+            1: _control_result(
+                node_id=1,
+                node_ip="192.168.80.33",
+                final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+            ),
+        },
+    )
+    fake_server = _FakeOtaServerService(
+        root_dir=manifest_service.publish_root_dir,
+        bind_host="0.0.0.0",
+        port=18082,
+    )
+    orchestrator = OtaOrchestratorService(
+        runtime_client=runtime_client,
+        manifest_service=manifest_service,
+        ota_server_service=fake_server,
+    )
+
+    result = orchestrator.deploy(
+        OtaDeployRequest(
+            artifact_id=artifact.artifact_id,
+            node_ids=[1],
+            advertise_host="192.168.80.14",
+            bind_host="0.0.0.0",
+            port=18082,
+            rollout_token="20260341",
+            allow_downgrade=True,
+        )
+    )
+
+    assert result.success is True
+    manifest_payload = Path(result.manifest_path).read_text(encoding="utf-8")
+    assert '"allow_downgrade": true' in manifest_payload

@@ -277,3 +277,28 @@ def test_import_requires_explicit_version(tmp_path: Path) -> None:
 
     assert not catalog_path.exists()
     assert not managed_store_dir.exists()
+
+
+def test_delete_artifact_removes_catalog_entry_and_managed_file(tmp_path: Path) -> None:
+    service, store, _catalog_path, managed_store_dir = _build_service(tmp_path)
+    source_path, sha256 = _write_bin(tmp_path, "delete_me.bin", b"delete-me")
+
+    import_result = service.import_artifact(
+        FirmwareImportRequest(
+            source_file_path=source_path,
+            target_kind="plant",
+            target_variant="ed1",
+            version="1.0.0",
+        )
+    )
+    assert import_result.success is True
+    managed_path = managed_store_dir / f"{sha256}.bin"
+    assert managed_path.exists()
+
+    delete_result = service.delete_artifact(import_result.artifact_id or "")
+
+    assert delete_result.success is True
+    assert delete_result.catalog_updated is True
+    assert delete_result.managed_file_deleted is True
+    assert not managed_path.exists()
+    assert store.load().artifact_count == 0

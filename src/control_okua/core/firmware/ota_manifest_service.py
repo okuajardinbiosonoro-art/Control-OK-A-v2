@@ -126,6 +126,7 @@ class OtaManifestService:
             flags=OtaManifestFlags(
                 reboot_required=resolved_request.reboot_required,
                 allow_auto_rollback=resolved_request.allow_auto_rollback,
+                allow_downgrade=resolved_request.allow_downgrade,
             ),
         )
 
@@ -178,6 +179,11 @@ class OtaManifestService:
             warnings.append("Se publicó un artefacto beta para OTA.")
         if artifact.status is FirmwareStatus.SITUATIONAL:
             warnings.append("Se publicó un artefacto situacional para OTA.")
+        if resolved_request.allow_downgrade:
+            warnings.append(
+                "El rollout OTA fue publicado con allow_downgrade=true; "
+                "el nodo podrá instalar una versión no más nueva si el firmware lo permite."
+            )
         if not normalize_text(resolved_request.build_profile):
             inferred_profile = self._infer_build_profile_from_artifact(artifact)
             if inferred_profile:

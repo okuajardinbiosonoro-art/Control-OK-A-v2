@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import ipaddress
+import re
 from typing import Iterable
 
 from control_okua.app_qt.viewmodels.firmware_manager_vm import (
@@ -35,6 +37,7 @@ class OtaDeployArtifactOption:
     summary: str
     is_eligible: bool
     ineligibility_reason: str
+    recommended_host: str
     artifact: FirmwareArtifact
 
 
@@ -77,12 +80,15 @@ def build_ota_artifact_options(
 def build_ota_artifact_option(artifact: FirmwareArtifact) -> OtaDeployArtifactOption:
     target_kind = normalize_target_kind(artifact.target_kind)
     is_eligible, reason = evaluate_ota_artifact_eligibility(artifact)
+    recommended_host = infer_artifact_pc_ip(artifact)
     target_text = f"{target_kind.value}/{artifact.target_variant}"
     label = f"{artifact.display_name} | {artifact.version} | {target_text}"
     summary = (
         f"Status={artifact.status.value} | SHA={build_sha256_short(artifact.sha256)} | "
         f"Tamaño={build_file_size_text(artifact.file_size)}"
     )
+    if recommended_host:
+        summary = f"{summary} | Host sugerido={recommended_host}"
     if not is_eligible:
         summary = f"{summary} | No elegible: {reason}"
     return OtaDeployArtifactOption(
@@ -91,6 +97,7 @@ def build_ota_artifact_option(artifact: FirmwareArtifact) -> OtaDeployArtifactOp
         summary=summary,
         is_eligible=is_eligible,
         ineligibility_reason=reason,
+        recommended_host=recommended_host,
         artifact=artifact,
     )
 
@@ -211,6 +218,25 @@ def build_recommended_rollout_channel(artifact: FirmwareArtifact | None) -> str:
     if artifact.status is FirmwareStatus.SITUATIONAL:
         return "situational"
     return "stable"
+
+
+_PC_IP_PATTERN = re.compile(r"\bPC_IP\s*=\s*([0-9]{1,3}(?:\.[0-9]{1,3}){3})\b", re.IGNORECASE)
+
+
+def infer_artifact_pc_ip(artifact: FirmwareArtifact | None) -> str:
+    if artifact is None:
+        return ""
+    for field in (artifact.notes, artifact.source_notes):
+        match = _PC_IP_PATTERN.search(normalize_text(field))
+        if not match:
+            continue
+        candidate = match.group(1)
+        try:
+            ipaddress.ip_address(candidate)
+        except ValueError:
+            continue
+        return candidate
+    return ""
 
 
 def format_ota_deploy_phase(phase: OtaNodeDeployPhase | str) -> str:

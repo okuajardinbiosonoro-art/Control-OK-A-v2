@@ -154,6 +154,26 @@ def test_set_current_disables_previous_current_for_same_target(tmp_path: Path) -
     assert store.get_current_for_target("plant", "eb1") == promoted
 
 
+def test_remove_artifact_deletes_selected_entry(tmp_path: Path) -> None:
+    catalog_path = tmp_path / "firmware_catalog.json"
+    file_a, sha_a, size_a = _write_firmware_file(tmp_path, "firmware_a.bin", b"aaa")
+    file_b, sha_b, size_b = _write_firmware_file(tmp_path, "firmware_b.bin", b"bbb")
+    artifact_a = _build_artifact(file_a, sha_a, size_a, display_name="A")
+    artifact_b = _build_artifact(file_b, sha_b, size_b, display_name="B", target_variant="ec1")
+
+    store = FirmwareCatalogStore(catalog_path)
+    store.load()
+    store.add_artifact(artifact_a)
+    store.add_artifact(artifact_b)
+
+    removed = store.remove_artifact(artifact_a.artifact_id)
+
+    assert removed.artifact_id == artifact_a.artifact_id
+    assert store.get_by_id(artifact_a.artifact_id) is None
+    assert store.get_by_id(artifact_b.artifact_id) is not None
+    assert len(store.list_all()) == 1
+
+
 def test_filter_by_target_and_status(tmp_path: Path) -> None:
     catalog_path = tmp_path / "firmware_catalog.json"
     file_a, sha_a, size_a = _write_firmware_file(tmp_path, "plant_eb1.bin", b"plant-eb1")

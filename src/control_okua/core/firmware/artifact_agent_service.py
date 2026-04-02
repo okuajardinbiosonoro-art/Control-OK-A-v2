@@ -47,6 +47,7 @@ DEFAULT_PLANT_TEST_NODES = (
     ("ED1", 3),
 )
 DEFAULT_FIRST_PHYSICAL_TEST_NODE = ("ED1", 3)
+DEFAULT_BANK_PROBE_NODE = ("ED1", 3)
 DEFAULT_COMPARATIVE_FRUIT_NODE = ("ED1", 3)
 _SEMVER_PATTERN = re.compile(
     r"^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<patch>\d+)(?P<suffix>(?:[-+][0-9A-Za-z._-]+)?)$"
@@ -56,6 +57,7 @@ _SEMVER_PATTERN = re.compile(
 class ArtifactIntent(str, Enum):
     CURRENT_CLONE = "current_clone"
     COMPARATIVE = "comparative"
+    OBSERVABLE_PROBE = "observable_probe"
 
 
 class ArtifactAgentError(RuntimeError):
@@ -343,6 +345,7 @@ class ArtifactAgentService:
             intent is ArtifactIntent.COMPARATIVE
             and target_kind is resolved_audit.default_target_kind
         )
+        probe_artifact = intent is ArtifactIntent.OBSERVABLE_PROBE
         display_name = self._resolve_display_name(
             intent=intent,
             target_kind=target_kind,
@@ -353,7 +356,11 @@ class ArtifactAgentService:
         )
         version_label = normalize_text(
             request.version_label,
-            fallback=f"v{version} {'comparativo' if intent is ArtifactIntent.COMPARATIVE else 'baseline'} situational",
+            fallback=(
+                f"v{version} probe observable situational"
+                if probe_artifact
+                else f"v{version} {'comparativo' if intent is ArtifactIntent.COMPARATIVE else 'baseline'} situational"
+            ),
         )
         changelog_short = normalize_text(
             request.changelog_short,
@@ -394,6 +401,11 @@ class ArtifactAgentService:
                 "El artifact comparativo mantiene target_kind, target_variant y build_profile del baseline; "
                 "el cambio observable esperado es la nueva version/artifact_id para validar OTA física real."
             )
+        if probe_artifact:
+            warnings.append(
+                "El artifact probe observable mantiene compatibilidad OTA con el baseline y agrega "
+                "blink LED + notas ascendentes para verificación física de banco."
+            )
         if build_profile != resolved_audit.default_build_profile:
             warnings.append(
                 "El build_profile solicitado difiere del baseline actual del repo; confirma compatibilidad OTA antes de desplegar."
@@ -425,6 +437,16 @@ class ArtifactAgentService:
             f"#define FW_PATCH {patch}",
             f'#define OKUA_FW_VERSION_STR "{version}"',
             f"#define OKUA_FW_VERSION_CODE {version_code}",
+        ) + (
+            (
+                "#define OKUA_TEST_PROBE_ENABLED 1",
+                "#define OKUA_TEST_PROBE_LED_PIN 2",
+                "#define OKUA_TEST_PROBE_INTERVAL_MS 1000UL",
+                "#define OKUA_TEST_PROBE_NOTE_START 0",
+                "#define OKUA_TEST_PROBE_NOTE_MAX 80",
+            )
+            if probe_artifact
+            else tuple()
         )
         return ArtifactBuildPlan(
             intent=intent,
@@ -535,6 +557,41 @@ class ArtifactAgentService:
         )
         return baseline_plan, comparative_plan
 
+    def build_bank_probe_plans(
+        self,
+        *,
+        audit: ArtifactSourceAudit | None = None,
+        catalog_store: FirmwareCatalogStore | None = None,
+        node_label: str = DEFAULT_BANK_PROBE_NODE[0],
+        node_id: int = DEFAULT_BANK_PROBE_NODE[1],
+        probe_version: str | None = None,
+    ) -> tuple[ArtifactBuildPlan, ArtifactBuildPlan]:
+        resolved_audit = audit or self.audit_current_firmware()
+        baseline_plan = self.build_plan(
+            ArtifactPlanRequest(
+                intent=ArtifactIntent.CURRENT_CLONE,
+                node_label=node_label,
+                node_id=node_id,
+            ),
+            audit=resolved_audit,
+        )
+        resolved_probe_version = probe_version or self.suggest_next_version_for_variant(
+            node_label=node_label,
+            catalog_store=catalog_store,
+            audit=resolved_audit,
+        )
+        probe_plan = self.build_plan(
+            ArtifactPlanRequest(
+                intent=ArtifactIntent.OBSERVABLE_PROBE,
+                node_label=node_label,
+                node_id=node_id,
+                target_kind=resolved_audit.default_target_kind,
+                version=resolved_probe_version,
+            ),
+            audit=resolved_audit,
+        )
+        return baseline_plan, probe_plan
+
     def resolve_catalog_artifact(
         self,
         *,
@@ -600,6 +657,8 @@ class ArtifactAgentService:
         output_root: Path | str | None = None,
         platformio_executable: str | None = None,
         clean: bool = True,
+        extra_override_lines: Iterable[str] = (),
+        exported_override_lines: Iterable[str] | None = None,
     ) -> ArtifactBuildResult:
         resolved_output_root = (
             Path(output_root).expanduser().resolve()
@@ -611,8 +670,14 @@ class ArtifactAgentService:
         build_work_dir = self._resolve_platformio_work_dir(plan.output_slug)
         build_work_dir.mkdir(parents=True, exist_ok=True)
         build_override_header_path = build_work_dir / "artifact_build_overrides.h"
+        compile_override_lines = tuple(plan.override_header_lines) + tuple(extra_override_lines)
+        export_override_lines = (
+            tuple(exported_override_lines)
+            if exported_override_lines is not None
+            else compile_override_lines
+        )
         build_override_header_path.write_text(
-            "\n".join(plan.override_header_lines) + "\n",
+            "\n".join(compile_override_lines) + "\n",
             encoding="utf-8",
         )
         platformio_bin = self._resolve_platformio_executable(platformio_executable)
@@ -638,7 +703,10 @@ class ArtifactAgentService:
         override_header_path = output_dir / "artifact_build_overrides.h"
         project_conf_path = output_dir / "platformio_artifact.ini"
         shutil.copy2(built_bin_path, binary_path)
-        shutil.copy2(build_override_header_path, override_header_path)
+        override_header_path.write_text(
+            "\n".join(export_override_lines) + "\n",
+            encoding="utf-8",
+        )
         shutil.copy2(build_project_conf_path, project_conf_path)
         payload = binary_path.read_bytes()
         sha256 = hashlib.sha256(payload).hexdigest()
@@ -839,7 +907,7 @@ class ArtifactAgentService:
             except ValueError as exc:
                 raise ArtifactAgentValidationError(str(exc)) from exc
             return version
-        if intent is ArtifactIntent.COMPARATIVE:
+        if intent in (ArtifactIntent.COMPARATIVE, ArtifactIntent.OBSERVABLE_PROBE):
             return self._increment_patch_version(audit.default_version)
         return audit.default_version
 
@@ -850,6 +918,11 @@ class ArtifactAgentService:
         *,
         ota_compatible: bool,
     ) -> str:
+        if intent is ArtifactIntent.OBSERVABLE_PROBE:
+            return (
+                f"Build probe observable situational de {target_kind.value} para validar OTA física "
+                "con blink LED y notas ascendentes de banco."
+            )
         if intent is ArtifactIntent.COMPARATIVE:
             if ota_compatible:
                 return (
@@ -871,6 +944,12 @@ class ArtifactAgentService:
         ota_compatible: bool,
         baseline_target_kind: FirmwareTargetKind,
     ) -> str:
+        if intent is ArtifactIntent.OBSERVABLE_PROBE:
+            return (
+                f"Artifact probe observable para {node_label}. Mantiene target_kind={target_kind.value}, "
+                f"target_variant={normalize_target_variant(node_label)} y build_profile={build_profile}; "
+                "al arrancar debe hacer blink del LED azul cada segundo y emitir notas ascendentes de 0 a 80."
+            )
         if intent is ArtifactIntent.COMPARATIVE:
             if ota_compatible:
                 return (
@@ -894,6 +973,8 @@ class ArtifactAgentService:
         *,
         ota_compatible: bool,
     ) -> str:
+        if intent is ArtifactIntent.OBSERVABLE_PROBE:
+            return f"Generado por artifact agent como probe observable OTA-compatible para {node_label}."
         if intent is ArtifactIntent.COMPARATIVE:
             if ota_compatible:
                 return (
@@ -922,6 +1003,8 @@ class ArtifactAgentService:
             target_variant,
             f"build_profile_{build_profile}",
         ]
+        if intent is ArtifactIntent.OBSERVABLE_PROBE:
+            derived_tags.extend(("ota_compatible", "probe", "bank_probe"))
         if intent is ArtifactIntent.COMPARATIVE:
             derived_tags.append("ota_compatible" if ota_compatible else "cross_kind_comparison")
         for tag in (*derived_tags, *explicit_tags):
@@ -946,6 +1029,8 @@ class ArtifactAgentService:
             return explicit_value
         if intent is ArtifactIntent.CURRENT_CLONE:
             kind_text = "planta prueba actual"
+        elif intent is ArtifactIntent.OBSERVABLE_PROBE:
+            kind_text = "planta prueba sonda observable OTA-compatible"
         elif target_kind is baseline_target_kind:
             kind_text = "planta prueba comparativa OTA-compatible"
         elif target_kind is FirmwareTargetKind.FRUIT:

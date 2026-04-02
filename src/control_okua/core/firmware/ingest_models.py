@@ -82,6 +82,18 @@ class FirmwareImportResult:
     warnings: tuple[str, ...] = field(default_factory=tuple)
 
 
+@dataclass(frozen=True)
+class FirmwareDeleteResult:
+    success: bool
+    artifact_id: str | None = None
+    deleted_artifact: FirmwareArtifact | None = None
+    catalog_updated: bool = False
+    managed_file_deleted: bool = False
+    managed_file_path: str | None = None
+    message: str = ""
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+
+
 def _coerce_import_target_kind(value: FirmwareTargetKind | str) -> FirmwareTargetKind:
     raw = normalize_key(value)
     if not raw:

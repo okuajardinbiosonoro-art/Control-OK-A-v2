@@ -87,6 +87,62 @@
 #define NODE_ID OKUA_BUILD_NODE_ID
 #endif
 
+#ifdef OKUA_BUILD_WIFI_SSID
+#ifdef WIFI_SSID
+#undef WIFI_SSID
+#endif
+#define WIFI_SSID OKUA_BUILD_WIFI_SSID
+#endif
+
+#ifdef OKUA_BUILD_WIFI_PASS
+#ifdef WIFI_PASS
+#undef WIFI_PASS
+#endif
+#define WIFI_PASS OKUA_BUILD_WIFI_PASS
+#endif
+
+#ifdef OKUA_BUILD_CONTROL_SECRET
+#ifdef OKUA_CONTROL_SECRET
+#undef OKUA_CONTROL_SECRET
+#endif
+#define OKUA_CONTROL_SECRET OKUA_BUILD_CONTROL_SECRET
+#endif
+
+#ifdef OKUA_BUILD_WIFI_CHANNEL
+#ifdef WIFI_CHANNEL
+#undef WIFI_CHANNEL
+#endif
+#define WIFI_CHANNEL OKUA_BUILD_WIFI_CHANNEL
+#endif
+
+#ifdef OKUA_BUILD_PC_IP_A
+#ifdef PC_IP_A
+#undef PC_IP_A
+#endif
+#define PC_IP_A OKUA_BUILD_PC_IP_A
+#endif
+
+#ifdef OKUA_BUILD_PC_IP_B
+#ifdef PC_IP_B
+#undef PC_IP_B
+#endif
+#define PC_IP_B OKUA_BUILD_PC_IP_B
+#endif
+
+#ifdef OKUA_BUILD_PC_IP_C
+#ifdef PC_IP_C
+#undef PC_IP_C
+#endif
+#define PC_IP_C OKUA_BUILD_PC_IP_C
+#endif
+
+#ifdef OKUA_BUILD_PC_IP_D
+#ifdef PC_IP_D
+#undef PC_IP_D
+#endif
+#define PC_IP_D OKUA_BUILD_PC_IP_D
+#endif
+
 // Etiqueta visible para debug
 #ifndef NODE_LABEL
 #define NODE_LABEL "EB1"
@@ -158,6 +214,21 @@ IPAddress PC_IP(PC_IP_A, PC_IP_B, PC_IP_C, PC_IP_D);
 #endif
 #ifndef OKUA_OTA_BASE_URL
 #define OKUA_OTA_BASE_URL "http://" OKUA_STR(PC_IP_A) "." OKUA_STR(PC_IP_B) "." OKUA_STR(PC_IP_C) "." OKUA_STR(PC_IP_D) ":8080"
+#endif
+#ifndef OKUA_TEST_PROBE_ENABLED
+#define OKUA_TEST_PROBE_ENABLED 0
+#endif
+#ifndef OKUA_TEST_PROBE_LED_PIN
+#define OKUA_TEST_PROBE_LED_PIN 2
+#endif
+#ifndef OKUA_TEST_PROBE_INTERVAL_MS
+#define OKUA_TEST_PROBE_INTERVAL_MS 1000UL
+#endif
+#ifndef OKUA_TEST_PROBE_NOTE_START
+#define OKUA_TEST_PROBE_NOTE_START 0
+#endif
+#ifndef OKUA_TEST_PROBE_NOTE_MAX
+#define OKUA_TEST_PROBE_NOTE_MAX 80
 #endif
 
 
@@ -1845,8 +1916,52 @@ uint32_t g_testLastFruitCycleMs = 0;
 bool g_testFruitActive = false;
 uint32_t g_testFruitTouchStartMs = 0;
 uint8_t g_testPlantNote = 60;
+#if OKUA_TEST_PROBE_ENABLED
+bool g_testProbeLedOn = false;
+uint8_t g_testProbeCurrentNote = (uint8_t)OKUA_TEST_PROBE_NOTE_START;
+
+void testProbeInit() {
+  pinMode(OKUA_TEST_PROBE_LED_PIN, OUTPUT);
+  digitalWrite(OKUA_TEST_PROBE_LED_PIN, LOW);
+  g_testProbeLedOn = false;
+  g_testProbeCurrentNote = (uint8_t)OKUA_TEST_PROBE_NOTE_START;
+}
+
+void testProbeToggleLed() {
+  g_testProbeLedOn = !g_testProbeLedOn;
+  digitalWrite(OKUA_TEST_PROBE_LED_PIN, g_testProbeLedOn ? HIGH : LOW);
+}
+
+void servicePlantTestProbe() {
+  const uint32_t now = millis();
+  if (now - g_testLastPlantEvtMs < (uint32_t)OKUA_TEST_PROBE_INTERVAL_MS) return;
+  g_testLastPlantEvtMs = now;
+
+  sendOkuaEvt(PLANT_MIDI_BUS, toMidiCh0(PLANT_MIDI_CHANNEL_1B), g_testPlantNote, 0, 0);
+  g_testPlantNote = g_testProbeCurrentNote;
+  sendOkuaEvt(PLANT_MIDI_BUS, toMidiCh0(PLANT_MIDI_CHANNEL_1B), g_testPlantNote, 100, 0);
+  testProbeToggleLed();
+
+  Serial.print("[TEST_PROBE] note=");
+  Serial.print(g_testPlantNote);
+  Serial.print(" led=");
+  Serial.println(g_testProbeLedOn ? "ON" : "OFF");
+
+  if (g_testProbeCurrentNote >= (uint8_t)OKUA_TEST_PROBE_NOTE_MAX) {
+    g_testProbeCurrentNote = (uint8_t)OKUA_TEST_PROBE_NOTE_START;
+  } else {
+    g_testProbeCurrentNote = (uint8_t)(g_testProbeCurrentNote + 1);
+  }
+}
+#else
+void testProbeInit() {}
+#endif
 
 void servicePlantTest() {
+#if OKUA_TEST_PROBE_ENABLED
+  servicePlantTestProbe();
+  return;
+#endif
   uint32_t now = millis();
   // Align test-bench plant auto-notes with runtime throttle semantics.
   // SET_THROTTLE updates g_plantThrottleMs (runtime-only), and this cadence
@@ -1918,6 +2033,7 @@ void setup() {
   okuaConfigureBuildInfo(kOkuaBuildInfoConfig);
   okuaOtaConfigure(kOkuaOtaConfig);
   okuaOtaBegin();
+  testProbeInit();
 
   connectWiFiBlocking();
 
@@ -1944,6 +2060,16 @@ void setup() {
   Serial.print("FW_ARTIFACT   : "); Serial.println(okuaBuildArtifactId());
   Serial.print("FW_SHA256     : "); Serial.println(okuaBuildArtifactSha256());
   Serial.print("OTA_BASE_URL  : "); Serial.println(OKUA_OTA_BASE_URL);
+#if OKUA_TEST_PROBE_ENABLED
+  Serial.print("TEST_PROBE    : "); Serial.print("enabled gpio=");
+  Serial.print(OKUA_TEST_PROBE_LED_PIN);
+  Serial.print(" cadence_ms=");
+  Serial.print((unsigned long)OKUA_TEST_PROBE_INTERVAL_MS);
+  Serial.print(" note_start=");
+  Serial.print(OKUA_TEST_PROBE_NOTE_START);
+  Serial.print(" note_max=");
+  Serial.println(OKUA_TEST_PROBE_NOTE_MAX);
+#endif
   Serial.println("==========================================");
 
   // Emit a startup STAT so runtime can observe fresh uptime/reset metadata quickly.

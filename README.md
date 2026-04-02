@@ -244,6 +244,86 @@ Campos principales:
 - El estado canónico por nodo distingue `resolved/stale/unresolved` e incluye último resultado F3 + resumen de verificación de reboot.
 - El panel técnico `Plano de control` consume la API integrada de `SessionController` (sin instancias privadas de runtime en widgets).
 
+## Firmware catalog, artifacts y OTA local
+
+- La app ya mantiene una biblioteca local de firmware en:
+  - `artifacts/firmware_catalog.json`
+  - `artifacts/firmware_store/`
+- `Firmware Manager` permite:
+  - importar `.bin` al managed store
+  - inspeccionar metadata OTA
+  - abrir `OTA Deploy`
+  - borrar artifacts mal cargados desde la propia UI
+- La ingesta deduplica por `sha256`; cambiar el nombre del archivo no crea un artifact nuevo si el contenido es el mismo.
+- Los estados operativos del catálogo son:
+  - `current`
+  - `beta`
+  - `obsolete`
+  - `situational`
+- Para pruebas de banco, comparación, probes y builds de red, la convención actual es usar `situational`.
+
+## Agente de artifacts OTA
+
+- Existe un agente reusable para generar artifacts OTA y probes de banco:
+  - `src/control_okua/core/firmware/artifact_agent_service.py`
+  - `tools/firmware_artifact_agent.py`
+- El agente soporta:
+  - clon del baseline actual
+  - comparativos OTA-compatible
+  - probe observable de banco
+  - perfiles de red por artifact
+- Los exports del agente se guardan bajo:
+  - `artifacts/ota_artifact_agent/`
+- El sidecar `artifact_build_overrides.h` exportado por el agente redacta credenciales sensibles (`password`, `secret`) para no dejar esos datos en claro en los outputs operativos.
+
+## Probe observable de banco
+
+- El firmware soporta un modo de prueba observable embebido por macro de build:
+  - blink del LED onboard (`GPIO2`) cada segundo
+  - emisión de notas ascendentes `0..80`
+  - reinicio de la secuencia a `0` al llegar a `80`
+- Este probe se usa para verificar en banco una OTA física real con evidencia visual y serial, sin cambiar `target_kind`, `target_variant` ni `build_profile`.
+
+## OTA Deploy actual
+
+- `OTA Deploy` publica un rollout local y dispara `OTA_CHECK_NOW` sobre nodos seleccionados explícitamente.
+- El campo `Host visible al nodo` ya se autocompleta desde el `PC_IP` embebido en la metadata del artifact cuando ese dato está presente en `notes/source_notes`.
+- Esto evita publicar por error un artifact de una red hacia el host de otra red.
+- La telemetría OTA observable en app distingue, entre otros:
+  - `fetching_manifest`
+  - `validating_manifest`
+  - `downloading`
+  - `ready_reboot`
+  - `boot_validating`
+  - `boot_confirmed`
+
+## Downgrade OTA explícito
+
+- La política OTA actual no obliga a “inventar” bins nuevos solo para volver atrás.
+- `OTA Deploy` ya permite autorizar un downgrade con advertencia explícita:
+  - opción: `Permitir downgrade / reinstalar versión no más nueva`
+- Cuando se activa:
+  - el manifest se publica con `flags.allow_downgrade = true`
+  - el firmware acepta instalar una versión más vieja o no más nueva solo si ese permiso viene explícito en el rollout
+- Si no se activa esa opción, se mantiene la protección normal contra downgrade accidental.
+
+## Perfiles de red embebidos
+
+- El firmware soporta overrides de build para:
+  - `SSID`
+  - `password`
+  - `OKUA_CONTROL_SECRET`
+  - `WIFI_CHANNEL`
+  - `PC_IP`
+- Esto permite generar bins específicos por red sin depender del `okua_node_secrets.h` local del momento.
+- La convención de banco actual usa perfiles por red para `ED1`:
+  - `KITTY`
+  - `MARIANA`
+  - `MIKROTIK`
+- Cada perfil puede tener:
+  - un baseline `1.0.0-dev`
+  - un probe observable `1.0.1-dev`
+
 ## Control Plane F3 (Tickets 16.1 a 16.4RRR)
 
 - Existe snapshot canónico backend-side por nodo para control-plane F3:

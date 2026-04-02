@@ -108,11 +108,13 @@ def validate_http_url(value: str) -> str:
 class OtaManifestFlags:
     reboot_required: bool = True
     allow_auto_rollback: bool = True
+    allow_downgrade: bool = False
 
     def to_dict(self) -> dict[str, bool]:
         return {
             "reboot_required": bool(self.reboot_required),
             "allow_auto_rollback": bool(self.allow_auto_rollback),
+            "allow_downgrade": bool(self.allow_downgrade),
         }
 
 
@@ -217,6 +219,7 @@ class OtaRolloutPublishRequest:
     publish_root_dir: Path | str | None = None
     reboot_required: bool = True
     allow_auto_rollback: bool = True
+    allow_downgrade: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "rollout_token", normalize_rollout_token_hex(self.rollout_token))

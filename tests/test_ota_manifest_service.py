@@ -92,6 +92,7 @@ def test_build_manifest_from_valid_artifact_produces_expected_fields(tmp_path: P
     assert manifest.build_profile == "field"
     assert manifest.protocol_version == "okua_v1"
     assert manifest.compatible_hw == ("esp32dev",)
+    assert manifest.flags.allow_downgrade is False
 
 
 def test_build_manifest_infers_build_profile_from_artifact_tags_when_request_omits_it(
@@ -158,6 +159,26 @@ def test_publish_rollout_creates_manifest_and_self_contained_bin(tmp_path: Path)
     assert result.download_url.endswith("/ota/rollouts/20260329/firmware.bin")
     assert "beta" in result.warnings[0].lower()
     assert firmware_path.read_bytes() == b"payload-ota"
+
+
+def test_publish_rollout_can_mark_manifest_as_allow_downgrade(tmp_path: Path) -> None:
+    artifact = _import_artifact(tmp_path, version="2.0.0", status="situational", content=b"payload-downgrade")
+    _store, _ingest_service, manifest_service = _build_services(tmp_path)
+
+    result = manifest_service.publish_rollout(
+        OtaRolloutPublishRequest(
+            rollout_token="20260340",
+            artifact_id=artifact.artifact_id,
+            host="192.168.80.14",
+            port=8080,
+            allow_downgrade=True,
+        )
+    )
+
+    assert result.success is True
+    assert result.manifest is not None
+    assert result.manifest.flags.allow_downgrade is True
+    assert any("allow_downgrade" in warning for warning in result.warnings)
 
 
 def test_publish_rollout_rejects_unknown_target(tmp_path: Path) -> None:

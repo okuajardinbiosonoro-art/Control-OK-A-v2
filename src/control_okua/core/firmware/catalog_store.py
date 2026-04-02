@@ -237,6 +237,25 @@ class FirmwareCatalogStore:
         )
         return artifact
 
+    def remove_artifact(self, artifact_id: str) -> FirmwareArtifact:
+        target_artifact = self.get_by_id(artifact_id)
+        if target_artifact is None:
+            raise FirmwareArtifactNotFoundError(
+                f"Firmware no encontrado para eliminar: {artifact_id}"
+            )
+
+        updated_artifacts = tuple(
+            artifact
+            for artifact in self._catalog.artifacts
+            if artifact.artifact_id != target_artifact.artifact_id
+        )
+        self._catalog = replace(
+            self._catalog,
+            artifacts=updated_artifacts,
+            updated_at_utc=utc_now_iso(),
+        )
+        return target_artifact
+
     def set_current(self, artifact_id: str) -> FirmwareArtifact:
         target_artifact = self.get_by_id(artifact_id)
         if target_artifact is None:

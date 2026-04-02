@@ -20,6 +20,7 @@ from control_okua.core.firmware.catalog_store import (
     FirmwareCatalogStoreError,
 )
 from control_okua.core.firmware.ingest_models import (
+    FirmwareDeleteResult,
     FirmwareImportRequest,
     FirmwareImportResult,
     FirmwareImportValidationError,
@@ -197,6 +198,53 @@ class FirmwareIngestService:
                 warnings=tuple(warnings),
             )
 
+    def delete_artifact(self, artifact_id: str) -> FirmwareDeleteResult:
+        warnings: list[str] = []
+        try:
+            self._catalog_store.load()
+            artifact = self._catalog_store.get_by_id(artifact_id)
+            if artifact is None:
+                raise FirmwareCatalogStoreError(
+                    f"No se encontró el artifact a eliminar: {artifact_id}"
+                )
+
+            managed_file_deleted = False
+            managed_file_path = normalize_path_or_none(artifact.file_path)
+            managed_path = Path(managed_file_path) if managed_file_path else None
+            if managed_path is not None and self._is_inside_managed_store(managed_path):
+                if managed_path.exists():
+                    managed_path.unlink()
+                    managed_file_deleted = True
+                else:
+                    warnings.append("El bin gestionado ya no existía en disco; se eliminó solo la entrada del catálogo.")
+            elif managed_file_path:
+                warnings.append("El artifact apuntaba fuera del managed store; se eliminó solo la entrada del catálogo.")
+
+            deleted_artifact = self._catalog_store.remove_artifact(artifact.artifact_id)
+            self._catalog_store.save()
+            return FirmwareDeleteResult(
+                success=True,
+                artifact_id=deleted_artifact.artifact_id,
+                deleted_artifact=deleted_artifact,
+                catalog_updated=True,
+                managed_file_deleted=managed_file_deleted,
+                managed_file_path=managed_file_path,
+                message="Artifact eliminado correctamente del catálogo.",
+                warnings=tuple(warnings),
+            )
+        except (
+            FirmwareCatalogValidationError,
+            FirmwareCatalogStoreError,
+            OSError,
+        ) as exc:
+            self._rollback_catalog_state()
+            self._logger.warning("Eliminación de firmware falló: %s", exc)
+            return FirmwareDeleteResult(
+                success=False,
+                message=str(exc),
+                warnings=tuple(warnings),
+            )
+
     def _coerce_request(self, request: FirmwareImportRequest) -> FirmwareImportRequest:
         if isinstance(request, FirmwareImportRequest):
             return request
@@ -304,6 +352,14 @@ class FirmwareIngestService:
         except OSError:
             return
 
+    def _is_inside_managed_store(self, path: Path) -> bool:
+        try:
+            resolved_managed_dir = self._managed_store_dir.resolve()
+            resolved_path = path.resolve()
+        except OSError:
+            return False
+        return resolved_path.is_relative_to(resolved_managed_dir)
+
 
 def _default_display_name(source_path: Path) -> str:
     stem = source_path.stem.strip()
@@ -311,3 +367,10 @@ def _default_display_name(source_path: Path) -> str:
         return source_path.name
     text = _DISPLAY_NAME_SEPARATOR_PATTERN.sub(" ", stem)
     return re.sub(r"\s+", " ", text).strip()
+
+
+def normalize_path_or_none(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None

@@ -21,6 +21,7 @@ from control_okua.app_qt.viewmodels.ota_deploy_vm import (  # noqa: E402
     build_recommended_rollout_channel,
     evaluate_ota_artifact_eligibility,
     format_ota_deploy_phase,
+    infer_artifact_pc_ip,
 )
 from control_okua.core.firmware import (  # noqa: E402
     FirmwareArtifact,
@@ -30,7 +31,15 @@ from control_okua.core.firmware import (  # noqa: E402
 )
 
 
-def _artifact(tmp_path: Path, *, version: str = "1.2.3", target_kind: str = "plant", status: str = "beta") -> FirmwareArtifact:
+def _artifact(
+    tmp_path: Path,
+    *,
+    version: str = "1.2.3",
+    target_kind: str = "plant",
+    status: str = "beta",
+    notes: str = "",
+    source_notes: str = "",
+) -> FirmwareArtifact:
     payload = f"ota-deploy-vm:{target_kind}:{version}:{status}".encode("utf-8")
     file_path = tmp_path / f"{target_kind}_{version}.bin"
     file_path.write_bytes(payload)
@@ -48,11 +57,18 @@ def _artifact(tmp_path: Path, *, version: str = "1.2.3", target_kind: str = "pla
         sha256=sha256,
         file_size=len(payload),
         source_kind="manual_import",
+        notes=notes,
+        source_notes=source_notes,
     )
 
 
 def test_artifact_options_mark_eligibility_and_recommended_channel(tmp_path: Path) -> None:
-    valid = _artifact(tmp_path, version="2.3.4", status="current")
+    valid = _artifact(
+        tmp_path,
+        version="2.3.4",
+        status="current",
+        notes="Red embebida: MARIANA (SSID, canal 13, PC_IP=192.168.80.14).",
+    )
     unknown = _artifact(tmp_path, version="2.3.4", target_kind="unknown")
     invalid_version = _artifact(tmp_path, version="release-candidate")
 
@@ -60,12 +76,31 @@ def test_artifact_options_mark_eligibility_and_recommended_channel(tmp_path: Pat
 
     assert options[0].artifact_id == valid.artifact_id
     assert options[0].is_eligible is True
+    assert options[0].recommended_host == "192.168.80.14"
+    assert "Host sugerido=192.168.80.14" in options[0].summary
     assert build_recommended_rollout_channel(valid) == "stable"
 
     eligibility_unknown = evaluate_ota_artifact_eligibility(unknown)
     eligibility_invalid_version = evaluate_ota_artifact_eligibility(invalid_version)
     assert eligibility_unknown == (False, "target_kind unknown")
     assert "version_code" in eligibility_invalid_version[1]
+
+
+def test_infer_artifact_pc_ip_accepts_notes_or_source_notes(tmp_path: Path) -> None:
+    from_notes = _artifact(
+        tmp_path,
+        notes="Red embebida: KITTY (Kitty_2.4, canal 13, PC_IP=192.168.1.70).",
+    )
+    from_source_notes = _artifact(
+        tmp_path,
+        version="1.2.4",
+        source_notes="Perfil de red: MIKROTIK. PC_IP=192.168.88.254.",
+    )
+    without_ip = _artifact(tmp_path, version="1.2.5", notes="Sin PC_IP usable.")
+
+    assert infer_artifact_pc_ip(from_notes) == "192.168.1.70"
+    assert infer_artifact_pc_ip(from_source_notes) == "192.168.88.254"
+    assert infer_artifact_pc_ip(without_ip) == ""
 
 
 def test_node_options_surface_runtime_summary_and_sorting() -> None:

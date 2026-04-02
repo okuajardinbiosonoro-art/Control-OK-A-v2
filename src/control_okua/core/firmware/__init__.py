@@ -28,6 +28,7 @@ from control_okua.core.firmware.catalog_store import (
     resolve_firmware_catalog_path,
 )
 from control_okua.core.firmware.ingest_models import (
+    FirmwareDeleteResult,
     FirmwareImportRequest,
     FirmwareImportResult,
     FirmwareImportValidationError,
@@ -86,6 +87,7 @@ from control_okua.core.firmware.ota_campaign_models import (
 from control_okua.core.firmware.artifact_agent_service import (
     DEFAULT_ARTIFACT_AGENT_OUTPUT_DIRNAME,
     DEFAULT_ARTIFACT_AGENT_PLATFORMIO_ENV,
+    DEFAULT_BANK_PROBE_NODE,
     DEFAULT_COMPARATIVE_FRUIT_NODE,
     DEFAULT_FIRST_PHYSICAL_TEST_NODE,
     DEFAULT_PLANT_TEST_NODES,
@@ -106,6 +108,7 @@ __all__ = [
     "DEFAULT_MANAGED_FIRMWARE_STORE_DIRNAME",
     "DEFAULT_ARTIFACT_AGENT_OUTPUT_DIRNAME",
     "DEFAULT_ARTIFACT_AGENT_PLATFORMIO_ENV",
+    "DEFAULT_BANK_PROBE_NODE",
     "DEFAULT_COMPARATIVE_FRUIT_NODE",
     "DEFAULT_FIRST_PHYSICAL_TEST_NODE",
     "DEFAULT_OTA_BUILD_PROFILE",
@@ -133,6 +136,7 @@ __all__ = [
     "FirmwareCatalogStoreError",
     "FirmwareImportRequest",
     "FirmwareImportResult",
+    "FirmwareDeleteResult",
     "FirmwareImportValidationError",
     "FirmwareIngestService",
     "FirmwareCatalogValidationError",

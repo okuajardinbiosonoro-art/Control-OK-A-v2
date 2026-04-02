@@ -101,6 +101,11 @@ class FirmwareManagerDialog(QDialog):
         self.mark_current_button.setEnabled(False)
         actions_layout.addWidget(self.mark_current_button)
 
+        self.delete_button = QPushButton("Borrar firmware", self)
+        self.delete_button.clicked.connect(self._on_delete_clicked)
+        self.delete_button.setEnabled(False)
+        actions_layout.addWidget(self.delete_button)
+
         self.refresh_button = QPushButton("Recargar catálogo", self)
         self.refresh_button.clicked.connect(self.refresh_catalog)
         actions_layout.addWidget(self.refresh_button)
@@ -328,6 +333,7 @@ class FirmwareManagerDialog(QDialog):
         self.current_summary_label.setText(build_current_summary(artifact))
         self._current_selection_artifact_id = None if artifact is None else artifact.artifact_id
         self.mark_current_button.setEnabled(artifact is not None)
+        self.delete_button.setEnabled(artifact is not None)
 
     def _select_artifact_by_id(self, artifact_id: str) -> bool:
         for row_index in range(self.catalog_table_model.rowCount()):
@@ -398,6 +404,44 @@ class FirmwareManagerDialog(QDialog):
             "Current actualizado",
             "El firmware seleccionado ahora es current para su target.",
         )
+
+    def _on_delete_clicked(self) -> None:
+        artifact = self._selected_artifact()
+        if artifact is None:
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Confirmar borrado",
+            (
+                "Se eliminará este artifact del catálogo técnico.\n\n"
+                f"Nombre: {artifact.display_name}\n"
+                f"Artifact ID: {artifact.artifact_id}\n"
+                f"Ruta: {artifact.file_path}\n\n"
+                "Si el bin está dentro del managed store, también se borrará del disco.\n"
+                "Esta acción no toca el firmware ya cargado en una ESP32."
+            ),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        result = self._ingest_service.delete_artifact(artifact.artifact_id)
+        if result.success:
+            self.refresh_catalog()
+            details = "\n".join(result.warnings) if result.warnings else "Sin advertencias."
+            QMessageBox.information(
+                self,
+                "Firmware eliminado",
+                f"{result.message}\n\n{details}",
+            )
+            return
+
+        text = result.message
+        if result.warnings:
+            text = f"{text}\n\n" + "\n".join(result.warnings)
+        QMessageBox.critical(self, "No se pudo borrar el firmware", text)
 
     def _selected_artifact(self):
         if not self._current_selection_artifact_id:

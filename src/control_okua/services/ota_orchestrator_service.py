@@ -102,6 +102,7 @@ class OtaOrchestratorService:
                     rollout_channel=resolved_request.rollout_channel,
                     host=resolved_request.advertise_host,
                     port=resolved_request.port,
+                    allow_downgrade=resolved_request.allow_downgrade,
                 )
             )
         except Exception as exc:

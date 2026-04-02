@@ -114,6 +114,28 @@ def test_build_default_situational_plans_returns_three_plant_and_one_fruit() -> 
     assert plans[3].target_variant == "ed1"
 
 
+def test_observable_probe_plan_is_situational_and_enables_probe_macros() -> None:
+    service = ArtifactAgentService()
+
+    plan = service.build_plan(
+        ArtifactPlanRequest(
+            intent=ArtifactIntent.OBSERVABLE_PROBE,
+            node_label="ED1",
+            node_id=3,
+        )
+    )
+
+    assert plan.status is FirmwareStatus.SITUATIONAL
+    assert plan.version == "1.0.1-dev"
+    assert plan.target_kind is FirmwareTargetKind.PLANT
+    assert plan.target_variant == "ed1"
+    assert "sonda observable" in plan.display_name.lower()
+    assert "bank_probe" in plan.tags
+    assert "ota_compatible" in plan.tags
+    assert any("OKUA_TEST_PROBE_ENABLED 1" in line for line in plan.override_header_lines)
+    assert any("OKUA_TEST_PROBE_NOTE_MAX 80" in line for line in plan.override_header_lines)
+
+
 def test_first_physical_test_plan_builds_ota_compatible_plant_candidate(tmp_path: Path) -> None:
     service = ArtifactAgentService()
     catalog_store = FirmwareCatalogStore(tmp_path / "firmware_catalog.json")
@@ -177,6 +199,23 @@ def test_first_physical_test_plan_builds_ota_compatible_plant_candidate(tmp_path
     assert "ota_compatible" in comparative_plan.tags
     assert "build_profile_test" in comparative_plan.tags
     assert "ota-compatible" in comparative_plan.display_name.lower()
+
+
+def test_build_bank_probe_plans_returns_baseline_and_probe(tmp_path: Path) -> None:
+    service = ArtifactAgentService()
+    catalog_store = FirmwareCatalogStore(tmp_path / "firmware_catalog.json")
+    baseline_plan, probe_plan = service.build_bank_probe_plans(
+        catalog_store=catalog_store,
+        node_label="ED1",
+        node_id=3,
+    )
+
+    assert baseline_plan.intent is ArtifactIntent.CURRENT_CLONE
+    assert baseline_plan.version == "1.0.0-dev"
+    assert probe_plan.intent is ArtifactIntent.OBSERVABLE_PROBE
+    assert probe_plan.version == "1.0.1-dev"
+    assert probe_plan.target_kind is FirmwareTargetKind.PLANT
+    assert probe_plan.target_variant == "ed1"
 
 
 def test_resolve_catalog_artifact_finds_existing_baseline_for_node(tmp_path: Path) -> None:

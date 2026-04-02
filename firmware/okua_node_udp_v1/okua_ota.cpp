@@ -58,6 +58,7 @@ struct OkuaOtaManifest {
   char published_at_utc[40];
   bool allow_auto_rollback;
   bool reboot_required;
+  bool allow_downgrade;
 };
 
 OkuaOtaConfig g_config = {kDefaultBaseUrl, kDefaultHealthConfirmMs, kDefaultHttpTimeoutMs};
@@ -279,6 +280,7 @@ bool parseManifestFlags(cJSON* root, OkuaOtaManifest* manifest) {
   if (manifest == nullptr) return false;
   manifest->allow_auto_rollback = true;
   manifest->reboot_required = true;
+  manifest->allow_downgrade = false;
   cJSON* flags = cJSON_GetObjectItemCaseSensitive(root, "flags");
   if (flags == nullptr) return true;
   if (!cJSON_IsObject(flags)) return false;
@@ -289,6 +291,10 @@ bool parseManifestFlags(cJSON* root, OkuaOtaManifest* manifest) {
   cJSON* allow_auto_rollback = cJSON_GetObjectItemCaseSensitive(flags, "allow_auto_rollback");
   if (cJSON_IsBool(allow_auto_rollback)) {
     manifest->allow_auto_rollback = cJSON_IsTrue(allow_auto_rollback);
+  }
+  cJSON* allow_downgrade = cJSON_GetObjectItemCaseSensitive(flags, "allow_downgrade");
+  if (cJSON_IsBool(allow_downgrade)) {
+    manifest->allow_downgrade = cJSON_IsTrue(allow_downgrade);
   }
   return true;
 }
@@ -369,8 +375,10 @@ bool validateManifestCompatibility(const OkuaOtaManifest& manifest) {
     return false;
   }
   if (manifest.version_code < okuaBuildVersionCode()) {
-    setState(OKUA_OTA_STATE_ERROR, OKUA_OTA_ERROR_VERSION_REJECTED, "downgrade rejected");
-    return false;
+    if (!manifest.allow_downgrade) {
+      setState(OKUA_OTA_STATE_ERROR, OKUA_OTA_ERROR_VERSION_REJECTED, "downgrade rejected");
+      return false;
+    }
   }
   if (manifest.version_code == okuaBuildVersionCode() &&
       strEqIgnoreCase(manifest.sha256, okuaBuildArtifactSha256())) {
@@ -378,8 +386,10 @@ bool validateManifestCompatibility(const OkuaOtaManifest& manifest) {
     return false;
   }
   if (manifest.version_code == okuaBuildVersionCode()) {
-    setState(OKUA_OTA_STATE_ERROR, OKUA_OTA_ERROR_VERSION_REJECTED, "version_code not newer");
-    return false;
+    if (!manifest.allow_downgrade) {
+      setState(OKUA_OTA_STATE_ERROR, OKUA_OTA_ERROR_VERSION_REJECTED, "version_code not newer");
+      return false;
+    }
   }
   return true;
 }
