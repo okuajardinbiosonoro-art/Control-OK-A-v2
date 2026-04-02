@@ -1338,7 +1338,20 @@ def _resolve_remote_console_asset_name(path: str) -> str | None:
 
 
 def _remote_console_asset_path(asset_name: str) -> Path:
-    return Path(__file__).resolve().parent / "remote_console_assets" / asset_name
+    dev_path = Path(__file__).resolve().parent / "remote_console_assets" / asset_name
+    meipass = getattr(sys, "_MEIPASS", None)
+    if not meipass:
+        return dev_path
+
+    bundle_root = Path(meipass).resolve()
+    bundled_candidates = (
+        bundle_root / "src" / "control_okua" / "services" / "remote_console_assets" / asset_name,
+        bundle_root / "control_okua" / "services" / "remote_console_assets" / asset_name,
+    )
+    for candidate in bundled_candidates:
+        if candidate.exists():
+            return candidate
+    return dev_path
 
 
 def _parse_node_id_from_path(path: str) -> int:

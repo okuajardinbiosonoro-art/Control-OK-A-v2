@@ -345,3 +345,26 @@ def test_remote_api_server_swallows_benign_disconnect_traces(
         server.handle_error(object(), ("127.0.0.1", 54321))
     finally:
         server.server_close()
+
+
+def test_remote_console_asset_path_supports_frozen_bundle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bundle_root = tmp_path / "bundle"
+    asset_path = (
+        bundle_root
+        / "src"
+        / "control_okua"
+        / "services"
+        / "remote_console_assets"
+        / "index.html"
+    )
+    asset_path.parent.mkdir(parents=True, exist_ok=True)
+    asset_path.write_text("<html>bundled</html>", encoding="utf-8")
+
+    monkeypatch.setattr(remote_api_service_module.sys, "_MEIPASS", str(bundle_root), raising=False)
+
+    resolved = remote_api_service_module._remote_console_asset_path("index.html")
+
+    assert resolved == asset_path

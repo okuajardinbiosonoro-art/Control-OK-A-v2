@@ -29,7 +29,13 @@ a = Analysis(
     ["main.py"],
     pathex=[str(PROJECT_DIR / "src")],
     binaries=[],
-    datas=[(str(PROJECT_DIR / "assets"), "assets")],
+    datas=[
+        (str(PROJECT_DIR / "assets"), "assets"),
+        (
+            str(PROJECT_DIR / "src" / "control_okua" / "services" / "remote_console_assets"),
+            "src/control_okua/services/remote_console_assets",
+        ),
+    ],
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
