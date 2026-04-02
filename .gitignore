@@ -212,6 +212,8 @@ config.json
 config.*.*.json
 !config.example.json
 control_plane_state.json
+remote_api_tokens.json
+remote_api_access.txt
 
 # OKUA dev artifacts (screenshots, evidence)
 artifacts/

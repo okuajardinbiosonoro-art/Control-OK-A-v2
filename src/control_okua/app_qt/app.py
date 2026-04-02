@@ -17,6 +17,10 @@ from control_okua.core.profiles.profile_service import (
     set_active_profile,
 )
 from control_okua.services.remote_api_contract import resolve_remote_api_config
+from control_okua.services.remote_api_bootstrap import (
+    ensure_remote_api_local_credentials,
+    ensure_remote_api_runtime_config,
+)
 from control_okua.services.remote_api_service import RemoteApiService
 from control_okua.services.session_controller import SessionController
 
@@ -35,6 +39,12 @@ def run_app() -> int:
     cfg, warnings, config_path = load_config()
     for warning in warnings:
         print(f"[config] {warning}")
+
+    cfg, remote_runtime_warnings, remote_config_changed = ensure_remote_api_runtime_config(cfg)
+    if remote_config_changed:
+        save_config(cfg, config_path)
+    for warning in remote_runtime_warnings:
+        print(f"[remote_api] {warning}")
 
     app = QApplication(sys.argv)
 
@@ -73,7 +83,22 @@ def run_app() -> int:
     remote_api_service: RemoteApiService | None = None
     remote_api_config = resolve_remote_api_config(cfg)
     if remote_api_config.enabled:
+        print(
+            "[remote_api] intentando iniciar servicio remoto en "
+            f"http://{remote_api_config.bind_host}:{remote_api_config.port}/remote/"
+        )
         try:
+            bootstrap = ensure_remote_api_local_credentials(
+                remote_api_config,
+                config_path=config_path,
+                environ=os.environ,
+            )
+            for warning in bootstrap.warnings:
+                print(f"[remote_api] {warning}")
+            print(f"[remote_api] secrets store: {bootstrap.secrets_path}")
+            print(f"[remote_api] access note: {bootstrap.access_note_path}")
+            for access_url in bootstrap.access_urls:
+                print(f"[remote_api] access url: {access_url}")
             remote_api_service = RemoteApiService(
                 runtime_client=session_controller,
                 config=remote_api_config,
@@ -84,8 +109,29 @@ def run_app() -> int:
                 "[remote_api] servicio remoto activo en "
                 f"http://{remote_api_config.bind_host}:{remote_api_service.port}"
             )
+            print(
+                "[remote_api] consola remota disponible en "
+                f"http://{remote_api_config.bind_host}:{remote_api_service.port}/remote/"
+            )
         except Exception as exc:
             print(f"[remote_api] no se pudo iniciar servicio remoto: {exc}")
+            if remote_api_config.auth_mode == "bearer_token_inventory":
+                print("[remote_api] auth_mode=bearer_token_inventory")
+                if remote_api_config.tokens:
+                    for token_entry in remote_api_config.tokens:
+                        print(
+                            "[remote_api] token requerido: "
+                            f"role={token_entry.role} env_var={token_entry.env_var}"
+                        )
+                else:
+                    print("[remote_api] remote_api.tokens esta vacio en config.")
+            elif remote_api_config.auth_mode == "bearer_token":
+                print(
+                    "[remote_api] token requerido en variable de entorno "
+                    f"{remote_api_config.token_env_var}"
+                )
+    else:
+        print("[remote_api] deshabilitado: remote_api.enabled=false en config.")
     window.show()
 
     # Permite validaciones automáticas sin afectar ejecución normal.
