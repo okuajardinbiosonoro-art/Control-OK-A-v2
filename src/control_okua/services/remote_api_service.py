@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import logging
+import mimetypes
 import os
 from pathlib import Path
 from threading import Thread
@@ -241,6 +242,9 @@ class RemoteApiService:
         parsed = urlparse(handler.path)
         method = handler.command.upper()
         raw_path = parsed.path or "/"
+        if method == "GET" and _is_remote_console_path(raw_path):
+            self._serve_remote_console(handler, raw_path)
+            return
         actor_type = "anonymous"
         actor_id = "anonymous"
         role: str | None = None
@@ -669,6 +673,24 @@ class RemoteApiService:
         except RemoteApiAuthConfigError as exc:
             raise RemoteApiServiceError(str(exc)) from exc
 
+    def _serve_remote_console(self, handler: BaseHTTPRequestHandler, path: str) -> None:
+        asset_name = _resolve_remote_console_asset_name(path)
+        if asset_name is None:
+            self._write_plain_response(handler, 404, "Remote console asset not found.")
+            return
+        asset_path = _remote_console_asset_path(asset_name)
+        if not asset_path.exists():
+            self._write_plain_response(handler, 404, "Remote console asset not found.")
+            return
+        content_type = mimetypes.guess_type(asset_path.name)[0] or "application/octet-stream"
+        raw = asset_path.read_bytes()
+        self._write_bytes_response(
+            handler,
+            status_code=200,
+            raw=raw,
+            content_type=content_type,
+        )
+
     @staticmethod
     def _read_body(handler: BaseHTTPRequestHandler) -> bytes:
         content_length = handler.headers.get("Content-Length")
@@ -692,6 +714,34 @@ class RemoteApiService:
         handler.send_header("Content-Length", str(len(raw)))
         handler.end_headers()
         handler.wfile.write(raw)
+
+    @staticmethod
+    def _write_bytes_response(
+        handler: BaseHTTPRequestHandler,
+        *,
+        status_code: int,
+        raw: bytes,
+        content_type: str,
+    ) -> None:
+        handler.send_response(int(status_code))
+        handler.send_header("Content-Type", str(content_type))
+        handler.send_header("Content-Length", str(len(raw)))
+        handler.end_headers()
+        handler.wfile.write(raw)
+
+    @classmethod
+    def _write_plain_response(
+        cls,
+        handler: BaseHTTPRequestHandler,
+        status_code: int,
+        message: str,
+    ) -> None:
+        cls._write_bytes_response(
+            handler,
+            status_code=status_code,
+            raw=str(message).encode("utf-8"),
+            content_type="text/plain; charset=utf-8",
+        )
 
     def _session_state_value(self) -> str:
         snapshot = self._runtime_client.get_snapshot()
@@ -720,6 +770,24 @@ def _parse_json_body(body: bytes) -> dict[str, Any]:
             result="invalid_request",
         )
     return payload
+
+
+def _is_remote_console_path(path: str) -> bool:
+    return path == "/remote" or path.startswith("/remote/")
+
+
+def _resolve_remote_console_asset_name(path: str) -> str | None:
+    if path in {"/remote", "/remote/", "/remote/index.html"}:
+        return "index.html"
+    if path == "/remote/app.js":
+        return "app.js"
+    if path == "/remote/styles.css":
+        return "styles.css"
+    return None
+
+
+def _remote_console_asset_path(asset_name: str) -> Path:
+    return Path(__file__).resolve().parent / "remote_console_assets" / asset_name
 
 
 def _parse_node_id_from_path(path: str) -> int:

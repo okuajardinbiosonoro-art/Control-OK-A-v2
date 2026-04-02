@@ -164,6 +164,22 @@ def _request(
     return response.status, json.loads(raw.decode("utf-8"))
 
 
+def _request_raw(
+    port: int,
+    *,
+    method: str,
+    path: str,
+) -> tuple[int, str, str]:
+    connection = HTTPConnection("127.0.0.1", port, timeout=5.0)
+    connection.request(method, path)
+    response = connection.getresponse()
+    raw = response.read().decode("utf-8")
+    content_type = response.getheader("Content-Type", "")
+    status = response.status
+    connection.close()
+    return status, content_type, raw
+
+
 def _session_snapshot(state: SessionState) -> SessionSnapshot:
     return SessionSnapshot(
         state=state,
@@ -392,6 +408,61 @@ def test_remote_api_health_requires_valid_token_and_writes_auth_audit(
     assert "observer-test-token" not in audit_text
     assert '"role": "observador"' in audit_text
     assert '"authorization_result": "denied_forbidden_role"' in audit_text
+
+
+def test_remote_api_serves_remote_console_assets_without_breaking_api(
+    tmp_path: Path,
+    remote_token_envs: dict[str, str],
+) -> None:
+    runtime = _RuntimeStub(
+        snapshot=_session_snapshot(SessionState.IDLE),
+        node_summary=None,
+        nodes={},
+        control_plane_snapshot=_control_plane_snapshot(available=False),
+        control_nodes={},
+    )
+    service = RemoteApiService(
+        runtime_client=runtime,
+        config=_service_config(envs=remote_token_envs, audit_folder=tmp_path / "audit_console"),
+    )
+    service.start()
+    try:
+        index_status, index_type, index_body = _request_raw(
+            service.port,
+            method="GET",
+            path="/remote/",
+        )
+        js_status, js_type, js_body = _request_raw(
+            service.port,
+            method="GET",
+            path="/remote/app.js",
+        )
+        css_status, css_type, css_body = _request_raw(
+            service.port,
+            method="GET",
+            path="/remote/styles.css",
+        )
+        api_status, api_payload = _request(
+            service.port,
+            method="GET",
+            path="/api/v1/health",
+            token="observer-test-token",
+        )
+    finally:
+        service.stop()
+
+    assert index_status == 200
+    assert "text/html" in index_type
+    assert '<script src="/remote/app.js" defer></script>' in index_body
+    assert '<link rel="stylesheet" href="/remote/styles.css"' in index_body
+    assert js_status == 200
+    assert "javascript" in js_type
+    assert 'const STORAGE_KEY = "ckv2_remote_console_session_v1";' in js_body
+    assert css_status == 200
+    assert "text/css" in css_type
+    assert ".layout-grid" in css_body
+    assert api_status == 200
+    assert api_payload["ok"] is True
 
 
 def test_remote_api_read_endpoints_return_runtime_data(

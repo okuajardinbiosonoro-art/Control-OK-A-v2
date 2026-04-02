@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CKv2 Remote Console</title>
+    <link rel="stylesheet" href="/remote/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">CKv2 Remote Console v1</p>
+          <h1>Consola remota mínima</h1>
+          <p class="hero-copy">
+            Superficie remota ligera para resumen, nodos y acciones curadas según rol.
+          </p>
+        </div>
+        <div class="hero-actions">
+          <button id="refresh-all-button" class="button button-secondary" type="button">
+            Refresh
+          </button>
+        </div>
+      </header>
+
+      <main class="layout-grid">
+        <section class="panel access-panel">
+          <div class="panel-header">
+            <h2>Acceso</h2>
+            <p>Bearer token local del sitio y role hint para la UX.</p>
+          </div>
+
+          <form id="token-form" class="stack-form">
+            <label class="field">
+              <span>Token</span>
+              <input
+                id="token-input"
+                name="token"
+                type="password"
+                autocomplete="off"
+                placeholder="Pega aquí el bearer token"
+              />
+            </label>
+
+            <label class="field">
+              <span>Role hint</span>
+              <select id="role-select" name="role_hint">
+                <option value="observador">observador</option>
+                <option value="tecnico">tecnico</option>
+                <option value="admin">admin</option>
+              </select>
+            </label>
+
+            <div class="button-row">
+              <button class="button" type="submit">Guardar acceso</button>
+              <button id="logout-button" class="button button-secondary" type="button">
+                Limpiar token
+              </button>
+            </div>
+          </form>
+
+          <div class="status-chip-row">
+            <span class="status-chip" id="auth-chip">Sin token</span>
+            <span class="status-chip" id="role-chip">Role hint: observador</span>
+          </div>
+
+          <p class="fine-print">
+            El role hint solo ayuda a mostrar u ocultar controles. La autoridad final sigue siendo el backend.
+          </p>
+        </section>
+
+        <section class="panel summary-panel">
+          <div class="panel-header">
+            <h2>Resumen operativo</h2>
+            <p>Salud del gateway, sesión y control-plane.</p>
+          </div>
+
+          <div id="global-message" class="message-banner hidden" role="status"></div>
+          <div id="summary-grid" class="summary-grid"></div>
+        </section>
+
+        <section class="panel nodes-panel">
+          <div class="panel-header">
+            <h2>Nodos</h2>
+            <p>Lista canónica actual desde el runtime.</p>
+          </div>
+
+          <div id="nodes-empty" class="empty-state">
+            Sin datos todavía. Guarda un token válido para consultar la API.
+          </div>
+          <div id="nodes-list" class="nodes-list" aria-live="polite"></div>
+        </section>
+
+        <section class="panel detail-panel">
+          <div class="panel-header">
+            <h2>Detalle de nodo</h2>
+            <p>Runtime, control-plane y acciones curadas.</p>
+          </div>
+
+          <div id="detail-empty" class="empty-state">
+            Selecciona un nodo para ver su detalle técnico.
+          </div>
+
+          <div id="node-detail" class="hidden">
+            <div class="detail-header">
+              <div>
+                <h3 id="detail-title">Nodo</h3>
+                <p id="detail-subtitle" class="detail-subtitle"></p>
+              </div>
+              <div class="button-row">
+                <button
+                  id="request-stat-button"
+                  class="button"
+                  type="button"
+                >
+                  REQUEST_STAT_NOW
+                </button>
+                <button
+                  id="reboot-button"
+                  class="button button-danger"
+                  type="button"
+                >
+                  REBOOT_SOFT
+                </button>
+              </div>
+            </div>
+
+            <div id="detail-message" class="message-banner hidden" role="status"></div>
+            <p id="action-hint" class="fine-print"></p>
+
+            <div class="detail-grid">
+              <article class="detail-card">
+                <h4>Runtime</h4>
+                <dl id="runtime-fields" class="detail-fields"></dl>
+              </article>
+              <article class="detail-card">
+                <h4>Control-plane</h4>
+                <dl id="control-fields" class="detail-fields"></dl>
+              </article>
+              <article class="detail-card">
+                <h4>OTA</h4>
+                <dl id="ota-fields" class="detail-fields"></dl>
+              </article>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/remote/app.js" defer></script>
+  </body>
+</html>
