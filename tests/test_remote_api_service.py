@@ -34,6 +34,7 @@ from control_okua.services.control_transaction_service import (  # noqa: E402
 from control_okua.services.remote_api_auth import build_remote_api_token_entry  # noqa: E402
 from control_okua.services.remote_api_contract import RemoteApiConfig  # noqa: E402
 from control_okua.services.remote_api_service import RemoteApiService, RemoteApiServiceError  # noqa: E402
+import control_okua.services.remote_api_service as remote_api_service_module  # noqa: E402
 
 
 @dataclass
@@ -321,3 +322,26 @@ def test_remote_api_bind_failure_is_reported_cleanly(tmp_path: Path, remote_toke
             service.start()
     finally:
         sock.close()
+
+
+def test_remote_api_server_swallows_benign_disconnect_traces(
+    tmp_path: Path,
+    remote_token_envs: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = RemoteApiService(
+        runtime_client=_runtime_stub(),
+        config=_service_config(tmp_path, remote_token_envs),
+        config_path=tmp_path / "config.json",
+    )
+    server = remote_api_service_module._RemoteApiHttpServer(("127.0.0.1", 0), service)
+    try:
+        exc = ConnectionResetError("peer closed")
+        monkeypatch.setattr(
+            remote_api_service_module.sys,
+            "exc_info",
+            lambda: (ConnectionResetError, exc, None),
+        )
+        server.handle_error(object(), ("127.0.0.1", 54321))
+    finally:
+        server.server_close()

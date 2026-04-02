@@ -7,6 +7,7 @@ import logging
 import mimetypes
 import os
 from pathlib import Path
+import sys
 from threading import Thread
 import time
 from typing import Any, Protocol
@@ -151,6 +152,19 @@ class _RemoteApiHttpServer(ThreadingHTTPServer):
     def __init__(self, server_address: tuple[str, int], service: "RemoteApiService") -> None:
         self.remote_api_service = service
         super().__init__(server_address, _RemoteApiRequestHandler)
+
+    def handle_error(self, request: object, client_address: tuple[str, int] | str) -> None:
+        exc_type, exc_value, _ = sys.exc_info()
+        benign_disconnects = (BrokenPipeError, ConnectionAbortedError, ConnectionResetError)
+        if exc_type is not None and issubclass(exc_type, benign_disconnects):
+            remote_addr = client_address[0] if isinstance(client_address, tuple) and client_address else client_address
+            self.remote_api_service.logger.debug(
+                "Remote API conexión cerrada por cliente %s: %s",
+                remote_addr,
+                exc_value,
+            )
+            return
+        super().handle_error(request, client_address)
 
 
 class _RemoteApiRequestHandler(BaseHTTPRequestHandler):
