@@ -16,6 +16,7 @@ DEFAULT_OUTPUTS: dict[str, str] = {
     "1": "loopMIDI Port 2",
     "2": "loopMIDI Port 3",
 }
+VALID_REMOTE_API_ROLES: set[str] = {"observador", "tecnico", "admin"}
 
 
 def timestamp_tag() -> str:
@@ -67,8 +68,9 @@ def default_config() -> dict[str, Any]:
             "enabled": False,
             "bind_host": "127.0.0.1",
             "port": 8788,
-            "auth_mode": "bearer_token",
+            "auth_mode": "bearer_token_inventory",
             "token_env_var": "CKV2_REMOTE_API_TOKEN",
+            "tokens": [],
             "audit_enabled": True,
             "audit_folder": "logs/remote_api",
         },
@@ -363,9 +365,11 @@ def validate_and_fix(cfg: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
     remote_api_cfg["port"] = remote_port
 
     auth_mode = remote_api_cfg.get("auth_mode")
-    if auth_mode != "bearer_token":
+    if auth_mode not in {"bearer_token", "bearer_token_inventory"}:
         remote_api_cfg["auth_mode"] = defaults["remote_api"]["auth_mode"]
         warnings.append("remote_api.auth_mode invalido; se restauro default.")
+    else:
+        remote_api_cfg["auth_mode"] = auth_mode
 
     token_env_var = remote_api_cfg.get("token_env_var")
     if not isinstance(token_env_var, str) or not token_env_var.strip():
@@ -373,6 +377,40 @@ def validate_and_fix(cfg: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
         warnings.append("remote_api.token_env_var invalido; se restauro default.")
     else:
         remote_api_cfg["token_env_var"] = token_env_var.strip()
+
+    raw_tokens = remote_api_cfg.get("tokens")
+    if not isinstance(raw_tokens, list):
+        remote_api_cfg["tokens"] = []
+        warnings.append("remote_api.tokens invalido; se uso lista vacia.")
+    else:
+        normalized_tokens: list[dict[str, str]] = []
+        invalid_entries = 0
+        for item in raw_tokens:
+            if not isinstance(item, dict):
+                invalid_entries += 1
+                continue
+            env_var = item.get("env_var")
+            role = item.get("role")
+            label = item.get("label")
+            if not isinstance(env_var, str) or not env_var.strip():
+                invalid_entries += 1
+                continue
+            if not isinstance(role, str) or role.strip() not in VALID_REMOTE_API_ROLES:
+                invalid_entries += 1
+                continue
+            normalized_item: dict[str, str] = {
+                "env_var": env_var.strip(),
+                "role": role.strip(),
+            }
+            if isinstance(label, str) and label.strip():
+                normalized_item["label"] = label.strip()
+            elif label is not None and not isinstance(label, str):
+                invalid_entries += 1
+                continue
+            normalized_tokens.append(normalized_item)
+        remote_api_cfg["tokens"] = normalized_tokens
+        if invalid_entries:
+            warnings.append("remote_api.tokens tenia entradas invalidas; fueron descartadas.")
 
     if not _is_bool(remote_api_cfg.get("audit_enabled")):
         remote_api_cfg["audit_enabled"] = defaults["remote_api"]["audit_enabled"]

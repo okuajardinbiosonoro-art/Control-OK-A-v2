@@ -39,6 +39,7 @@ from control_okua.services.control_transaction_service import (  # noqa: E402
     ControlTransactionFinalStatus,
     ControlTransactionResult,
 )
+from control_okua.services.remote_api_auth import build_remote_api_token_entry  # noqa: E402
 from control_okua.services.remote_api_contract import RemoteApiConfig  # noqa: E402
 from control_okua.services.remote_api_service import (  # noqa: E402
     RemoteApiService,
@@ -126,10 +127,18 @@ class _RuntimeStub:
 
 
 @pytest.fixture
-def remote_token_env(monkeypatch: pytest.MonkeyPatch) -> str:
-    env_name = "CKV2_REMOTE_API_TOKEN_TEST"
-    monkeypatch.setenv(env_name, "remote-test-token")
-    return env_name
+def remote_token_envs(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    envs = {
+        "observer_env": "CKV2_REMOTE_API_OBSERVER_TOKEN_TEST",
+        "tech_env": "CKV2_REMOTE_API_TECH_TOKEN_TEST",
+        "admin_env": "CKV2_REMOTE_API_ADMIN_TOKEN_TEST",
+        "legacy_env": "CKV2_REMOTE_API_TOKEN_TEST",
+    }
+    monkeypatch.setenv(envs["observer_env"], "observer-test-token")
+    monkeypatch.setenv(envs["tech_env"], "tech-test-token")
+    monkeypatch.setenv(envs["admin_env"], "admin-test-token")
+    monkeypatch.setenv(envs["legacy_env"], "legacy-test-token")
+    return envs
 
 
 def _request(
@@ -300,13 +309,30 @@ def _tx_result(
     )
 
 
-def _service_config(*, env_name: str, audit_folder: Path) -> RemoteApiConfig:
+def _service_config(*, envs: dict[str, str], audit_folder: Path) -> RemoteApiConfig:
     return RemoteApiConfig(
         enabled=True,
         bind_host="127.0.0.1",
         port=0,
-        auth_mode="bearer_token",
-        token_env_var=env_name,
+        auth_mode="bearer_token_inventory",
+        token_env_var=envs["legacy_env"],
+        tokens=(
+            build_remote_api_token_entry(
+                env_var=envs["observer_env"],
+                role="observador",
+                label="observer-main",
+            ),
+            build_remote_api_token_entry(
+                env_var=envs["tech_env"],
+                role="tecnico",
+                label="tech-main",
+            ),
+            build_remote_api_token_entry(
+                env_var=envs["admin_env"],
+                role="admin",
+                label="admin-main",
+            ),
+        ),
         audit_enabled=True,
         audit_folder=str(audit_folder),
     )
@@ -314,7 +340,7 @@ def _service_config(*, env_name: str, audit_folder: Path) -> RemoteApiConfig:
 
 def test_remote_api_health_requires_valid_token_and_writes_auth_audit(
     tmp_path: Path,
-    remote_token_env: str,
+    remote_token_envs: dict[str, str],
 ) -> None:
     runtime = _RuntimeStub(
         snapshot=_session_snapshot(SessionState.IDLE),
@@ -325,7 +351,7 @@ def test_remote_api_health_requires_valid_token_and_writes_auth_audit(
     )
     service = RemoteApiService(
         runtime_client=runtime,
-        config=_service_config(env_name=remote_token_env, audit_folder=tmp_path / "audit"),
+        config=_service_config(envs=remote_token_envs, audit_folder=tmp_path / "audit"),
     )
     service.start()
     try:
@@ -336,11 +362,18 @@ def test_remote_api_health_requires_valid_token_and_writes_auth_audit(
             path="/api/v1/health",
             token="wrong-token",
         )
+        status_forbidden, payload_forbidden = _request(
+            service.port,
+            method="POST",
+            path="/api/v1/nodes/11/actions/request-stat-now",
+            token="observer-test-token",
+            body={},
+        )
         status_ok, payload_ok = _request(
             service.port,
             method="GET",
             path="/api/v1/health",
-            token="remote-test-token",
+            token="observer-test-token",
         )
     finally:
         service.stop()
@@ -349,17 +382,21 @@ def test_remote_api_health_requires_valid_token_and_writes_auth_audit(
     assert payload_missing["error"]["code"] == "unauthorized"
     assert status_invalid == 401
     assert payload_invalid["error"]["code"] == "unauthorized"
+    assert status_forbidden == 403
+    assert payload_forbidden["error"]["code"] == "forbidden"
     assert status_ok == 200
     assert payload_ok["data"]["service"] == "ckv2-remote-site-service"
 
     audit_text = service.audit_path.read_text(encoding="utf-8")
     assert "wrong-token" not in audit_text
-    assert "remote-test-token" not in audit_text
+    assert "observer-test-token" not in audit_text
+    assert '"role": "observador"' in audit_text
+    assert '"authorization_result": "denied_forbidden_role"' in audit_text
 
 
 def test_remote_api_read_endpoints_return_runtime_data(
     tmp_path: Path,
-    remote_token_env: str,
+    remote_token_envs: dict[str, str],
 ) -> None:
     node = _node_snapshot(11)
     runtime = _RuntimeStub(
@@ -379,7 +416,7 @@ def test_remote_api_read_endpoints_return_runtime_data(
     )
     service = RemoteApiService(
         runtime_client=runtime,
-        config=_service_config(env_name=remote_token_env, audit_folder=tmp_path / "audit"),
+        config=_service_config(envs=remote_token_envs, audit_folder=tmp_path / "audit"),
     )
     service.start()
     try:
@@ -387,25 +424,25 @@ def test_remote_api_read_endpoints_return_runtime_data(
             service.port,
             method="GET",
             path="/api/v1/health",
-            token="remote-test-token",
+            token="observer-test-token",
         )
         summary_status, summary_payload = _request(
             service.port,
             method="GET",
             path="/api/v1/runtime/summary",
-            token="remote-test-token",
+            token="observer-test-token",
         )
         nodes_status, nodes_payload = _request(
             service.port,
             method="GET",
             path="/api/v1/nodes",
-            token="remote-test-token",
+            token="observer-test-token",
         )
         node_status, node_payload = _request(
             service.port,
             method="GET",
             path="/api/v1/nodes/11",
-            token="remote-test-token",
+            token="observer-test-token",
         )
     finally:
         service.stop()
@@ -422,7 +459,7 @@ def test_remote_api_read_endpoints_return_runtime_data(
 
 def test_remote_api_actions_delegate_to_runtime_and_map_errors(
     tmp_path: Path,
-    remote_token_env: str,
+    remote_token_envs: dict[str, str],
 ) -> None:
     node = _node_snapshot(11)
     runtime = _RuntimeStub(
@@ -448,7 +485,7 @@ def test_remote_api_actions_delegate_to_runtime_and_map_errors(
     )
     service = RemoteApiService(
         runtime_client=runtime,
-        config=_service_config(env_name=remote_token_env, audit_folder=tmp_path / "audit"),
+        config=_service_config(envs=remote_token_envs, audit_folder=tmp_path / "audit"),
     )
     service.start()
     try:
@@ -456,14 +493,21 @@ def test_remote_api_actions_delegate_to_runtime_and_map_errors(
             service.port,
             method="POST",
             path="/api/v1/nodes/11/actions/request-stat-now",
-            token="remote-test-token",
+            token="tech-test-token",
             body={},
+        )
+        forbidden_status, forbidden_payload = _request(
+            service.port,
+            method="POST",
+            path="/api/v1/nodes/11/actions/reboot",
+            token="tech-test-token",
+            body={"delay_ms": 250},
         )
         reboot_status, reboot_payload = _request(
             service.port,
             method="POST",
             path="/api/v1/nodes/11/actions/reboot",
-            token="remote-test-token",
+            token="admin-test-token",
             body={"delay_ms": 250},
         )
     finally:
@@ -472,6 +516,8 @@ def test_remote_api_actions_delegate_to_runtime_and_map_errors(
     assert stat_status == 200
     assert stat_payload["data"]["result"]["final_status"] == "ack_matched"
     assert runtime.request_stat_calls == [(11, "remote_api")]
+    assert forbidden_status == 403
+    assert forbidden_payload["error"]["code"] == "forbidden"
     assert reboot_status == 200
     assert reboot_payload["data"]["result"]["cmd_seq"] == 43
     assert runtime.reboot_calls == [(11, 250, "remote_api")]
@@ -479,7 +525,7 @@ def test_remote_api_actions_delegate_to_runtime_and_map_errors(
 
 def test_remote_api_actions_fail_cleanly_when_session_not_running_or_node_unresolved(
     tmp_path: Path,
-    remote_token_env: str,
+    remote_token_envs: dict[str, str],
 ) -> None:
     idle_runtime = _RuntimeStub(
         snapshot=_session_snapshot(SessionState.IDLE),
@@ -497,7 +543,7 @@ def test_remote_api_actions_fail_cleanly_when_session_not_running_or_node_unreso
     )
     idle_service = RemoteApiService(
         runtime_client=idle_runtime,
-        config=_service_config(env_name=remote_token_env, audit_folder=tmp_path / "audit_idle"),
+        config=_service_config(envs=remote_token_envs, audit_folder=tmp_path / "audit_idle"),
     )
     idle_service.start()
     try:
@@ -505,7 +551,7 @@ def test_remote_api_actions_fail_cleanly_when_session_not_running_or_node_unreso
             idle_service.port,
             method="POST",
             path="/api/v1/nodes/11/actions/request-stat-now",
-            token="remote-test-token",
+            token="tech-test-token",
             body={},
         )
     finally:
@@ -532,7 +578,7 @@ def test_remote_api_actions_fail_cleanly_when_session_not_running_or_node_unreso
     )
     unresolved_service = RemoteApiService(
         runtime_client=unresolved_runtime,
-        config=_service_config(env_name=remote_token_env, audit_folder=tmp_path / "audit_unresolved"),
+        config=_service_config(envs=remote_token_envs, audit_folder=tmp_path / "audit_unresolved"),
     )
     unresolved_service.start()
     try:
@@ -540,14 +586,14 @@ def test_remote_api_actions_fail_cleanly_when_session_not_running_or_node_unreso
             unresolved_service.port,
             method="POST",
             path="/api/v1/nodes/11/actions/request-stat-now",
-            token="remote-test-token",
+            token="tech-test-token",
             body={},
         )
         missing_status, missing_payload = _request(
             unresolved_service.port,
             method="GET",
             path="/api/v1/nodes/77",
-            token="remote-test-token",
+            token="observer-test-token",
         )
     finally:
         unresolved_service.stop()
@@ -562,7 +608,7 @@ def test_remote_api_actions_fail_cleanly_when_session_not_running_or_node_unreso
 
 def test_remote_api_service_handles_bind_failure_and_stops_cleanly(
     tmp_path: Path,
-    remote_token_env: str,
+    remote_token_envs: dict[str, str],
 ) -> None:
     runtime = _RuntimeStub(
         snapshot=_session_snapshot(SessionState.IDLE),
@@ -581,8 +627,22 @@ def test_remote_api_service_handles_bind_failure_and_stops_cleanly(
             enabled=True,
             bind_host="127.0.0.1",
             port=occupied_port,
-            auth_mode="bearer_token",
-            token_env_var=remote_token_env,
+            auth_mode="bearer_token_inventory",
+            token_env_var=remote_token_envs["legacy_env"],
+            tokens=(
+                build_remote_api_token_entry(
+                    env_var=remote_token_envs["observer_env"],
+                    role="observador",
+                ),
+                build_remote_api_token_entry(
+                    env_var=remote_token_envs["tech_env"],
+                    role="tecnico",
+                ),
+                build_remote_api_token_entry(
+                    env_var=remote_token_envs["admin_env"],
+                    role="admin",
+                ),
+            ),
             audit_enabled=True,
             audit_folder=str(tmp_path / "audit_bind"),
         ),
@@ -595,10 +655,50 @@ def test_remote_api_service_handles_bind_failure_and_stops_cleanly(
 
     service = RemoteApiService(
         runtime_client=runtime,
-        config=_service_config(env_name=remote_token_env, audit_folder=tmp_path / "audit_stop"),
+        config=_service_config(envs=remote_token_envs, audit_folder=tmp_path / "audit_stop"),
     )
     service.start()
     assert service.is_running is True
     service.stop()
     service.stop()
     assert service.is_running is False
+
+
+def test_remote_api_service_supports_legacy_single_token_as_admin(
+    tmp_path: Path,
+    remote_token_envs: dict[str, str],
+) -> None:
+    runtime = _RuntimeStub(
+        snapshot=_session_snapshot(SessionState.IDLE),
+        node_summary=None,
+        nodes={},
+        control_plane_snapshot=_control_plane_snapshot(available=False),
+        control_nodes={},
+    )
+    service = RemoteApiService(
+        runtime_client=runtime,
+        config=RemoteApiConfig(
+            enabled=True,
+            bind_host="127.0.0.1",
+            port=0,
+            auth_mode="bearer_token",
+            token_env_var=remote_token_envs["legacy_env"],
+            audit_enabled=True,
+            audit_folder=str(tmp_path / "audit_legacy"),
+        ),
+    )
+    service.start()
+    try:
+        status_ok, payload_ok = _request(
+            service.port,
+            method="GET",
+            path="/api/v1/health",
+            token="legacy-test-token",
+        )
+    finally:
+        service.stop()
+
+    assert status_ok == 200
+    assert payload_ok["ok"] is True
+    audit_text = service.audit_path.read_text(encoding="utf-8")
+    assert '"authorization_result": "granted_legacy_admin"' in audit_text

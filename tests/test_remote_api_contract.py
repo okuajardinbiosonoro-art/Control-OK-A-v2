@@ -32,8 +32,19 @@ def test_resolve_remote_api_config_reads_expected_defaults_and_overrides() -> No
             "enabled": True,
             "bind_host": "0.0.0.0",
             "port": 9999,
-            "auth_mode": "bearer_token",
+            "auth_mode": "bearer_token_inventory",
             "token_env_var": "CKV2_REMOTE_API_TOKEN",
+            "tokens": [
+                {
+                    "env_var": "CKV2_REMOTE_API_OBSERVER_TOKEN",
+                    "role": "observador",
+                    "label": "observer-main",
+                },
+                {
+                    "env_var": "CKV2_REMOTE_API_ADMIN_TOKEN",
+                    "role": "admin",
+                },
+            ],
             "audit_enabled": False,
             "audit_folder": "logs/custom_remote",
         }
@@ -44,7 +55,11 @@ def test_resolve_remote_api_config_reads_expected_defaults_and_overrides() -> No
     assert resolved.enabled is True
     assert resolved.bind_host == "0.0.0.0"
     assert resolved.port == 9999
+    assert resolved.auth_mode == "bearer_token_inventory"
     assert resolved.token_env_var == "CKV2_REMOTE_API_TOKEN"
+    assert len(resolved.tokens) == 2
+    assert resolved.tokens[0].role == "observador"
+    assert resolved.tokens[0].label == "observer-main"
     assert resolved.audit_enabled is False
     assert resolved.audit_folder == "logs/custom_remote"
 

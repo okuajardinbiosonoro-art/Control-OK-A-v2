@@ -34,9 +34,12 @@ from control_okua.services.remote_api_audit import (
 from control_okua.services.remote_api_auth import (
     RemoteApiAuthConfigError,
     RemoteApiAuthContext,
+    RemoteApiForbiddenError,
+    RemoteApiTokenBinding,
     RemoteApiUnauthorizedError,
     authenticate_bearer_request,
-    resolve_expected_bearer_token,
+    authorize_remote_api_action,
+    resolve_remote_api_token_bindings,
 )
 from control_okua.services.remote_api_contract import (
     RemoteApiConfig,
@@ -116,6 +119,9 @@ class _RequestAuditOutcome:
     node_id: int | None
     result: str
     status_code: int
+    role: str | None = None
+    authorization_result: str | None = None
+    token_label: str | None = None
     correlation_cmd_seq: int | None = None
     correlation_nonce: int | None = None
 
@@ -160,7 +166,7 @@ class RemoteApiService:
         self._logger = logger or logging.getLogger(__name__)
         self._server: _RemoteApiHttpServer | None = None
         self._thread: Thread | None = None
-        self._expected_token: str | None = None
+        self._token_bindings: tuple[RemoteApiTokenBinding, ...] = ()
         self._audit_writer = RemoteApiAuditWriter(
             folder=Path(config.audit_folder),
             enabled=config.audit_enabled,
@@ -191,7 +197,7 @@ class RemoteApiService:
     def start(self) -> None:
         if self.is_running:
             return
-        self._expected_token = self._load_expected_token()
+        self._token_bindings = self._load_token_bindings()
         try:
             server = _RemoteApiHttpServer(
                 (self._config.bind_host, int(self._config.port)),
@@ -213,6 +219,10 @@ class RemoteApiService:
             self._config.bind_host,
             self.port,
         )
+        if self._config.auth_mode == "bearer_token":
+            self._logger.warning(
+                "Servicio remoto en modo legado bearer_token; el token único se autoriza como admin."
+            )
 
     def stop(self) -> None:
         server = self._server
@@ -233,6 +243,9 @@ class RemoteApiService:
         raw_path = parsed.path or "/"
         actor_type = "anonymous"
         actor_id = "anonymous"
+        role: str | None = None
+        authorization_result: str | None = None
+        token_label: str | None = None
         action = _infer_action(method, raw_path)
         node_id: int | None = _infer_node_id(raw_path)
         result = "internal_error"
@@ -245,6 +258,16 @@ class RemoteApiService:
             auth_context = self._authenticate(handler.headers.get("Authorization"))
             actor_type = auth_context.actor_type
             actor_id = auth_context.actor_id
+            role = auth_context.role
+            authorization_result = auth_context.authorization_result
+            token_label = auth_context.token_label
+            authorize_remote_api_action(
+                role=auth_context.role,
+                action=action,
+                actor_type=auth_context.actor_type,
+                actor_id=auth_context.actor_id,
+                token_label=auth_context.token_label,
+            )
             status_code, payload, outcome = self._dispatch(
                 method=method,
                 path=raw_path,
@@ -259,14 +282,33 @@ class RemoteApiService:
             correlation_nonce = outcome.correlation_nonce
             actor_type = outcome.actor_type or actor_type
             actor_id = outcome.actor_id or actor_id
+            role = outcome.role or role
+            authorization_result = outcome.authorization_result or authorization_result
+            token_label = outcome.token_label or token_label
         except RemoteApiUnauthorizedError as exc:
             actor_type = exc.actor_type
             actor_id = exc.actor_id
+            role = exc.role
+            authorization_result = exc.authorization_result
+            token_label = exc.token_label
             result = "denied"
             status_code = 401
             payload = build_error_response(
                 code="unauthorized",
                 message=str(exc),
+                request_id=request_id,
+            )
+        except RemoteApiForbiddenError as exc:
+            actor_type = exc.actor_type
+            actor_id = exc.actor_id
+            role = exc.role
+            authorization_result = exc.authorization_result
+            token_label = exc.token_label
+            result = "forbidden"
+            status_code = 403
+            payload = build_error_response(
+                code="forbidden",
+                message="El rol autenticado no tiene permiso para esta operación.",
                 request_id=request_id,
             )
         except RemoteApiError as exc:
@@ -297,6 +339,9 @@ class RemoteApiService:
                 request_id=request_id,
                 actor_type=actor_type,
                 actor_id=actor_id,
+                role=role,
+                authorization_result=authorization_result,
+                token_label=token_label,
                 origin_remote_addr=_extract_remote_addr(handler.client_address),
                 origin_via=_classify_origin(handler.client_address),
                 http_method=method,
@@ -608,22 +653,17 @@ class RemoteApiService:
             )
 
     def _authenticate(self, authorization_header: str | None) -> RemoteApiAuthContext:
-        expected_token = self._expected_token
-        if expected_token is None:
-            raise RemoteApiAuthConfigError("Servicio remoto sin token cargado.")
+        if not self._token_bindings:
+            raise RemoteApiAuthConfigError("Servicio remoto sin inventario de tokens cargado.")
         return authenticate_bearer_request(
             authorization_header,
-            expected_token=expected_token,
+            token_bindings=self._token_bindings,
         )
 
-    def _load_expected_token(self) -> str:
-        if self._config.auth_mode != "bearer_token":
-            raise RemoteApiServiceError(
-                f"remote_api.auth_mode no soportado: {self._config.auth_mode!r}"
-            )
+    def _load_token_bindings(self) -> tuple[RemoteApiTokenBinding, ...]:
         try:
-            return resolve_expected_bearer_token(
-                self._config.token_env_var,
+            return resolve_remote_api_token_bindings(
+                self._config,
                 environ=os.environ,
             )
         except RemoteApiAuthConfigError as exc:

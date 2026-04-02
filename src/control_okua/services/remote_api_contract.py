@@ -12,12 +12,20 @@ from control_okua.services.control_transaction_service import ControlTransaction
 
 
 @dataclass(frozen=True)
+class RemoteApiTokenInventoryEntry:
+    env_var: str
+    role: str
+    label: str | None = None
+
+
+@dataclass(frozen=True)
 class RemoteApiConfig:
     enabled: bool = False
     bind_host: str = "127.0.0.1"
     port: int = 8788
     auth_mode: str = "bearer_token"
     token_env_var: str = "CKV2_REMOTE_API_TOKEN"
+    tokens: tuple[RemoteApiTokenInventoryEntry, ...] = ()
     audit_enabled: bool = True
     audit_folder: str = "logs/remote_api"
 
@@ -54,6 +62,7 @@ def resolve_remote_api_config(cfg: dict[str, Any]) -> RemoteApiConfig:
     auth_mode = raw.get("auth_mode")
     token_env_var = raw.get("token_env_var")
     audit_folder = raw.get("audit_folder")
+    tokens = _coerce_token_inventory(raw.get("tokens"))
     return RemoteApiConfig(
         enabled=bool(raw.get("enabled") is True),
         bind_host=bind_host.strip() if isinstance(bind_host, str) and bind_host.strip() else "127.0.0.1",
@@ -64,6 +73,7 @@ def resolve_remote_api_config(cfg: dict[str, Any]) -> RemoteApiConfig:
             if isinstance(token_env_var, str) and token_env_var.strip()
             else "CKV2_REMOTE_API_TOKEN"
         ),
+        tokens=tokens,
         audit_enabled=bool(raw.get("audit_enabled", True) is True),
         audit_folder=(
             audit_folder.strip()
@@ -280,6 +290,33 @@ def _coerce_port(value: object, *, fallback: int) -> int:
     if port < 0 or port > 65535:
         return fallback
     return port
+
+
+def _coerce_token_inventory(value: object) -> tuple[RemoteApiTokenInventoryEntry, ...]:
+    if not isinstance(value, list):
+        return ()
+    entries: list[RemoteApiTokenInventoryEntry] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        env_var = item.get("env_var")
+        role = item.get("role")
+        label = item.get("label")
+        if not isinstance(env_var, str) or not env_var.strip():
+            continue
+        if not isinstance(role, str) or not role.strip():
+            continue
+        normalized_label = None
+        if isinstance(label, str) and label.strip():
+            normalized_label = label.strip()
+        entries.append(
+            RemoteApiTokenInventoryEntry(
+                env_var=env_var.strip(),
+                role=role.strip(),
+                label=normalized_label,
+            )
+        )
+    return tuple(entries)
 
 
 def _coerce_int(value: object, default: int | None = None) -> int | None:

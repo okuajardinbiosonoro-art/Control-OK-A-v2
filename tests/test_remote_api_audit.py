@@ -22,6 +22,9 @@ def test_remote_api_audit_writer_persists_jsonl_with_expected_fields(tmp_path: P
         request_id="req_01",
         actor_type="technical_token",
         actor_id="remote_api_token:abcdef123456",
+        role="tecnico",
+        authorization_result="granted",
+        token_label="tech-main",
         origin_remote_addr="127.0.0.1",
         origin_via="local_lan",
         http_method="GET",
@@ -45,6 +48,9 @@ def test_remote_api_audit_writer_persists_jsonl_with_expected_fields(tmp_path: P
     payload = json.loads(lines[0])
     assert payload["request_id"] == "req_01"
     assert payload["actor_id"] == "remote_api_token:abcdef123456"
+    assert payload["role"] == "tecnico"
+    assert payload["authorization_result"] == "granted"
+    assert payload["token_label"] == "tech-main"
     assert payload["path"] == "/api/v1/health"
     assert payload["result"] == "ok"
     assert payload["correlation"]["cmd_seq"] == 42

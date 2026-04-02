@@ -13,6 +13,9 @@ class RemoteApiAuditEvent:
     request_id: str
     actor_type: str
     actor_id: str
+    role: str | None
+    authorization_result: str | None
+    token_label: str | None
     origin_remote_addr: str
     origin_via: str
     http_method: str
@@ -31,6 +34,9 @@ class RemoteApiAuditEvent:
             "request_id": self.request_id,
             "actor_type": self.actor_type,
             "actor_id": self.actor_id,
+            "role": self.role,
+            "authorization_result": self.authorization_result,
+            "token_label": self.token_label,
             "origin_remote_addr": self.origin_remote_addr,
             "origin_via": self.origin_via,
             "http_method": self.http_method,
@@ -85,6 +91,9 @@ def build_remote_api_audit_event(
     request_id: str,
     actor_type: str,
     actor_id: str,
+    role: str | None,
+    authorization_result: str | None,
+    token_label: str | None,
     origin_remote_addr: str,
     origin_via: str,
     http_method: str,
@@ -102,6 +111,9 @@ def build_remote_api_audit_event(
         request_id=str(request_id),
         actor_type=str(actor_type),
         actor_id=str(actor_id),
+        role=None if role is None else str(role),
+        authorization_result=None if authorization_result is None else str(authorization_result),
+        token_label=None if token_label is None else str(token_label),
         origin_remote_addr=str(origin_remote_addr),
         origin_via=str(origin_via),
         http_method=str(http_method),
