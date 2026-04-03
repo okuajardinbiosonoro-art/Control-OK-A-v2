@@ -75,6 +75,12 @@ Acciones y menú principal:
 - `Herramientas`: `Herramientas avanzadas`.
 - `Ayuda`: `Acerca de`.
 
+## Arquitectura congelada de la shell desktop (Ticket 32.0)
+
+- El contrato canonico de la futura shell operator-first vive en [docs/ui/desktop_shell_operator_first.md](docs/ui/desktop_shell_operator_first.md).
+- La semantica visual y la agregacion de estados para la Home guiada por mapa viven en [docs/ui/home_map_state_contract.md](docs/ui/home_map_state_contract.md).
+- La UI actual sigue siendo la shell transicional operativa; la migracion a la nueva Home basada en mapa queda preparada para tickets 32.1 en adelante.
+
 ## Flujo de sesion y readiness (Tickets 3.3 + 4.x)
 
 - La pestana `Operacion` esta conectada a `SessionController` real y muestra snapshot de sesion (`idle`, `starting`, `running`, `stopping`, `error`).

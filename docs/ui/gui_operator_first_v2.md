@@ -1,5 +1,7 @@
 # GUI Operator-First CKv2 v2
 
+> Nota: este documento queda como antecedente exploratorio. El contrato canonico congelado para Ticket 32.0 vive en [desktop_shell_operator_first.md](desktop_shell_operator_first.md).
+
 ## 1. Resumen ejecutivo
 
 La app local de CKv2 deja de tratarse como una suma de vistas técnicas separadas y pasa a organizarse como una superficie de operación principal guiada por mapa.

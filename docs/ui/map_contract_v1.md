@@ -1,5 +1,7 @@
 # Contrato del mapa operativo local v1
 
+> Nota: este documento queda como antecedente exploratorio. El contrato canonico congelado para Ticket 32.0 vive en [desktop_shell_operator_first.md](desktop_shell_operator_first.md) y [home_map_state_contract.md](home_map_state_contract.md).
+
 ## 1. Propósito
 
 Definir el contrato funcional y espacial del mapa principal de la app local de escritorio.
