@@ -34,6 +34,8 @@
     refreshAllButton: document.getElementById("refresh-all-button"),
     globalMessage: document.getElementById("global-message"),
     summaryGrid: document.getElementById("summary-grid"),
+    operationalMap: document.getElementById("operational-map"),
+    mapEmpty: document.getElementById("map-empty"),
     nodesList: document.getElementById("nodes-list"),
     nodesEmpty: document.getElementById("nodes-empty"),
     detailEmpty: document.getElementById("detail-empty"),
@@ -257,12 +259,24 @@
 
       const nodes = Array.isArray(nodesResponse.data?.nodes) ? nodesResponse.data.nodes : [];
       state.nodes = nodes;
+      if (
+        state.selectedNodeId !== null &&
+        !nodes.some((node) => Number(node.node_id) === Number(state.selectedNodeId))
+      ) {
+        state.selectedNodeId = null;
+      }
       renderSummary(healthResponse.data, summaryResponse.data);
+      renderOperationalMap(nodes);
       renderNodes(nodes);
       clearBanner(refs.globalMessage);
 
       if (state.selectedNodeId !== null) {
         await refreshSelectedNode();
+      } else {
+        refs.nodeDetail.classList.add("hidden");
+        refs.detailEmpty.classList.remove("hidden");
+        refs.detailEmpty.textContent = "Selecciona un nodo para ver su detalle técnico.";
+        syncActionButtons();
       }
       if (state.session?.role === "admin") {
         await loadUsers();
@@ -513,14 +527,15 @@
       .map((node) => {
         const isSelected = state.selectedNodeId === node.node_id;
         const actionLabel = isSelected ? "Detalle abierto" : "Ver detalle";
+        const statusClass = `status-${normalizeNodeStatus(node.status)}`;
         return `
-          <article class="node-card">
+          <article class="node-card ${isSelected ? "is-selected" : ""}">
             <header>
               <div>
                 <div class="node-title">${escapeHtml(node.label || `Nodo ${node.node_id}`)}</div>
                 <div class="fine-print">node_id ${escapeHtml(String(node.node_id))} · ${escapeHtml(node.box_label || "sin caja")}</div>
               </div>
-              <span class="node-status">${escapeHtml(node.status || "unknown")}</span>
+              <span class="node-status ${statusClass}">${escapeHtml(node.status || "unknown")}</span>
             </header>
             <div class="node-meta">
               <span>${escapeHtml(node.health_summary || "Sin health_summary")}</span>
@@ -539,9 +554,79 @@
     refs.nodesList.querySelectorAll("button[data-node-id]").forEach((button) => {
       button.addEventListener("click", () => {
         const nodeId = Number(button.getAttribute("data-node-id"));
-        state.selectedNodeId = Number.isFinite(nodeId) ? nodeId : null;
-        refs.detailEmpty.classList.add("hidden");
-        void refreshSelectedNode();
+        if (Number.isFinite(nodeId)) {
+          selectNode(nodeId);
+        }
+      });
+    });
+  }
+
+  function renderOperationalMap(nodes) {
+    if (!Array.isArray(nodes) || nodes.length === 0) {
+      refs.mapEmpty.textContent = isAuthenticated()
+        ? "No hay nodos visibles para dibujar el mapa operativo."
+        : "Inicia sesión para ver el mapa operativo del runtime actual.";
+      refs.mapEmpty.classList.remove("hidden");
+      refs.operationalMap.innerHTML = "";
+      return;
+    }
+
+    const groupedBoxes = groupNodesByBox(nodes);
+    refs.mapEmpty.classList.add("hidden");
+    refs.operationalMap.innerHTML = groupedBoxes
+      .map((group) => {
+        const counts = summarizeStatuses(group.nodes);
+        const countSummary = [
+          `${group.nodes.length} nodo${group.nodes.length === 1 ? "" : "s"}`,
+          `online ${counts.online}`,
+          `degraded ${counts.degraded}`,
+          `offline ${counts.offline}`,
+          `calibrating ${counts.calibrating}`,
+        ].join(" · ");
+        const nodeItems = group.nodes
+          .map((node) => {
+            const isSelected = Number(state.selectedNodeId) === Number(node.node_id);
+            const normalizedStatus = normalizeNodeStatus(node.status);
+            return `
+              <button
+                class="map-node status-${normalizedStatus} ${isSelected ? "is-selected" : ""}"
+                type="button"
+                data-node-id="${escapeHtml(String(node.node_id))}"
+              >
+                <span class="map-node-topline">
+                  <span class="map-node-label">${escapeHtml(node.label || `Nodo ${node.node_id}`)}</span>
+                  <span class="map-node-state">${escapeHtml(node.status || "unknown")}</span>
+                </span>
+                <span class="map-node-meta">
+                  node_id ${escapeHtml(String(node.node_id))} · ${escapeHtml(node.health_summary || "Sin health_summary")}
+                </span>
+              </button>
+            `;
+          })
+          .join("");
+
+        return `
+          <article class="map-box">
+            <header class="map-box-header">
+              <div>
+                <h3>${escapeHtml(group.boxLabel)}</h3>
+                <p>${escapeHtml(countSummary)}</p>
+              </div>
+            </header>
+            <div class="map-box-nodes">
+              ${nodeItems}
+            </div>
+          </article>
+        `;
+      })
+      .join("");
+
+    refs.operationalMap.querySelectorAll("button[data-node-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const nodeId = Number(button.getAttribute("data-node-id"));
+        if (Number.isFinite(nodeId)) {
+          selectNode(nodeId);
+        }
       });
     });
   }
@@ -584,6 +669,14 @@
       health_confirmed: detail.ota?.health_confirmed,
     });
     syncActionButtons();
+  }
+
+  function selectNode(nodeId) {
+    state.selectedNodeId = Number(nodeId);
+    refs.detailEmpty.classList.add("hidden");
+    renderOperationalMap(state.nodes);
+    renderNodes(state.nodes);
+    void refreshSelectedNode();
   }
 
   function renderUsers(users) {
@@ -726,10 +819,13 @@
 
   function renderLoggedOutState() {
     refs.summaryGrid.innerHTML = "";
+    refs.operationalMap.innerHTML = "";
     refs.nodesList.innerHTML = "";
     refs.nodeDetail.classList.add("hidden");
     refs.detailEmpty.classList.remove("hidden");
     refs.detailEmpty.textContent = "Selecciona un nodo para ver su detalle técnico.";
+    refs.mapEmpty.classList.remove("hidden");
+    refs.mapEmpty.textContent = "Inicia sesión para ver el mapa operativo del runtime actual.";
     refs.nodesEmpty.classList.remove("hidden");
     refs.nodesEmpty.textContent = "Inicia sesión para consultar la lista de nodos remotos.";
     hideUsersPanel();
@@ -817,5 +913,67 @@
 
   function isAuthenticated() {
     return Boolean(state.session && state.session.username && state.session.role);
+  }
+
+  function groupNodesByBox(nodes) {
+    const groups = new Map();
+    nodes.forEach((node) => {
+      const boxLabel = normalizeBoxLabel(node.box_label);
+      const existing = groups.get(boxLabel);
+      if (existing) {
+        existing.push(node);
+        return;
+      }
+      groups.set(boxLabel, [node]);
+    });
+    return Array.from(groups.entries())
+      .sort((left, right) => left[0].localeCompare(right[0], "es"))
+      .map(([boxLabel, groupedNodes]) => ({
+        boxLabel,
+        nodes: groupedNodes.slice().sort(compareNodeSummary),
+      }));
+  }
+
+  function summarizeStatuses(nodes) {
+    return nodes.reduce(
+      (acc, node) => {
+        const key = normalizeNodeStatus(node.status);
+        if (Object.prototype.hasOwnProperty.call(acc, key)) {
+          acc[key] += 1;
+        } else {
+          acc.unknown += 1;
+        }
+        return acc;
+      },
+      { online: 0, calibrating: 0, degraded: 0, offline: 0, unknown: 0 }
+    );
+  }
+
+  function compareNodeSummary(left, right) {
+    return Number(left.node_id || 0) - Number(right.node_id || 0);
+  }
+
+  function normalizeBoxLabel(rawValue) {
+    if (typeof rawValue === "string" && rawValue.trim()) {
+      return rawValue.trim();
+    }
+    return "Sin caja asignada";
+  }
+
+  function normalizeNodeStatus(rawStatus) {
+    const normalized = typeof rawStatus === "string" ? rawStatus.trim().toLowerCase() : "";
+    if (normalized === "online") {
+      return "online";
+    }
+    if (normalized === "calibrating") {
+      return "calibrating";
+    }
+    if (normalized === "degraded") {
+      return "degraded";
+    }
+    if (normalized === "offline") {
+      return "offline";
+    }
+    return "unknown";
   }
 })();

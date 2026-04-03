@@ -191,8 +191,8 @@ def test_remote_api_serves_assets_and_supports_legacy_bearer(tmp_path: Path, rem
     service.start()
     try:
         status_html, content_type_html, raw_html = _request_raw(service.port, path="/remote/")
-        status_js, content_type_js, _ = _request_raw(service.port, path="/remote/app.js")
-        status_css, content_type_css, _ = _request_raw(service.port, path="/remote/styles.css")
+        status_js, content_type_js, raw_js = _request_raw(service.port, path="/remote/app.js")
+        status_css, content_type_css, raw_css = _request_raw(service.port, path="/remote/styles.css")
         status_favicon, _, raw_favicon = _request_raw(service.port, path="/favicon.ico")
         status_health, payload_health, _ = _request(service.port, method="GET", path="/api/v1/health", token="observer-test-token")
     finally:
@@ -201,8 +201,14 @@ def test_remote_api_serves_assets_and_supports_legacy_bearer(tmp_path: Path, rem
     assert status_html == 200
     assert "text/html" in content_type_html
     assert "Bootstrap inicial" in raw_html
+    assert "Mapa operativo" in raw_html
+    assert 'id="operational-map"' in raw_html
     assert status_js == 200 and "javascript" in content_type_js
+    assert "renderOperationalMap" in raw_js
+    assert "groupNodesByBox" in raw_js
     assert status_css == 200 and "text/css" in content_type_css
+    assert ".operational-map" in raw_css
+    assert ".map-node" in raw_css
     assert status_favicon == 204
     assert raw_favicon == ""
     assert status_health == 200

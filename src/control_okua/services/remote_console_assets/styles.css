@@ -242,16 +242,102 @@ select {
 }
 
 .nodes-list,
-.users-list {
+.users-list,
+.operational-map {
   display: grid;
   gap: 0.75rem;
   margin-top: 0.9rem;
+}
+
+.operational-map {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
 .node-card {
   padding: 0.9rem;
   display: grid;
   gap: 0.65rem;
+}
+
+.map-box {
+  border: 1px solid #dfd7c6;
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fffdf8, #fbf7ee);
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.map-box-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 0.75rem;
+}
+
+.map-box-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.map-box-header p {
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.map-box-nodes {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.map-node {
+  width: 100%;
+  border-radius: 16px;
+  border: 1px solid #d9d0bc;
+  background: #fffdf8;
+  padding: 0.8rem;
+  text-align: left;
+  cursor: pointer;
+  display: grid;
+  gap: 0.35rem;
+  color: var(--text);
+}
+
+.map-node:hover,
+.map-node:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(13, 107, 99, 0.12);
+}
+
+.map-node-topline {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.map-node-label {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.map-node-state {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.map-node-meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.node-card.is-selected,
+.map-node.is-selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(13, 107, 99, 0.12);
 }
 
 .node-card header,
@@ -276,6 +362,51 @@ select {
   background: #e6efe7;
   color: #275237;
   font-size: 0.84rem;
+}
+
+.status-online {
+  background: #e6efe7;
+  color: #275237;
+}
+
+.status-calibrating {
+  background: #fff4db;
+  color: #8a5800;
+}
+
+.status-degraded {
+  background: #fbe8d8;
+  color: #945127;
+}
+
+.status-offline {
+  background: #f3e4e4;
+  color: #7d1b1d;
+}
+
+.status-unknown {
+  background: #e8ece9;
+  color: #42524e;
+}
+
+.map-node.status-online {
+  background: linear-gradient(180deg, #f7fcf8, #eef8f0);
+}
+
+.map-node.status-calibrating {
+  background: linear-gradient(180deg, #fffdf4, #fff5da);
+}
+
+.map-node.status-degraded {
+  background: linear-gradient(180deg, #fff9f4, #fbeadf);
+}
+
+.map-node.status-offline {
+  background: linear-gradient(180deg, #fff8f8, #f7eaea);
+}
+
+.map-node.status-unknown {
+  background: linear-gradient(180deg, #f9fbfa, #edf1ef);
 }
 
 .node-meta,
@@ -369,12 +500,17 @@ select {
   }
 
   .summary-panel,
+  .map-panel,
   .detail-panel,
   .users-panel {
     grid-column: 2;
   }
 
   .nodes-panel {
+    grid-column: 1 / -1;
+  }
+
+  .map-panel {
     grid-column: 1 / -1;
   }
 
