@@ -41,7 +41,7 @@ El ejecutable queda en `dist/Control Okua.exe`.
 La ventana principal usa una shell operator-first no modal y separa operación principal de superficies técnicas:
 
 - Superficies principales: `Home`, `Nodos`, `Diagnóstico`, `Firmware / OTA`, `Técnico`.
-- `Home` es la entrada principal y ya muestra una base espacial estática con cajas seleccionables.
+- `Home` es la entrada principal y ya muestra un mapa base con cajas seleccionables y estado agregado por caja.
 - `Nodos` sigue siendo la vista detallada técnico-operativa principal.
 - `Diagnóstico` mantiene observabilidad, readiness y troubleshooting.
 - `Firmware / OTA` da acceso visible y persistente al módulo de firmware existente.
@@ -84,7 +84,7 @@ Acciones y menú principal:
 
 - El contrato canonico de la futura shell operator-first vive en [docs/ui/desktop_shell_operator_first.md](docs/ui/desktop_shell_operator_first.md).
 - La semantica visual y la agregacion de estados para la Home guiada por mapa viven en [docs/ui/home_map_state_contract.md](docs/ui/home_map_state_contract.md).
-- La UI actual ya usa la shell principal con `Home` como entrada y una primera base espacial estática preparada para tickets 32.3 en adelante.
+- La UI actual ya usa la shell principal con `Home` como entrada y una primera base espacial con estado agregado por caja preparada para overlays posteriores.
 
 ## Flujo de sesion y readiness (Tickets 3.3 + 4.x)
 
@@ -466,7 +466,7 @@ Remove-Item Env:CKV2_AUTOCLOSE_MS
 
 1. Verificar que la primera pestaña sea `Home`.
 2. Confirmar estado inicial de sesion en `inactiva`.
-3. Verificar en `Home` los bloques `Preparacion de sesion`, `Actividad serial`, `Actividad UDP` y el mapa base estático.
+3. Verificar en `Home` los bloques `Preparacion de sesion`, `Actividad serial`, `Actividad UDP`, la leyenda y el mapa base con estado agregado por caja.
 4. Verificar en `Diagnostico` el bloque de preflight y los bloques de runtime serial/UDP.
 5. Abrir `Ver > Estado actual` y validar:
    - detalle navegable con scroll interno

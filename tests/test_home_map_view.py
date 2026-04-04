@@ -14,6 +14,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from control_okua.app_qt.contracts import DEFAULT_HOME_MAP_LAYOUT  # noqa: E402
+from control_okua.app_qt.viewmodels import HomeMapBoxViewModel  # noqa: E402
 from control_okua.app_qt.widgets.home_map_view import HomeMapView  # noqa: E402
 
 
@@ -64,5 +65,35 @@ def test_home_map_view_emits_selection_changes() -> None:
         widget.set_selected_box(5)
         assert widget.selected_box_id == 5
         assert seen == [5]
+    finally:
+        widget.close()
+
+
+def test_home_map_view_accepts_runtime_box_view_models() -> None:
+    _ensure_qapp()
+    widget = HomeMapView(DEFAULT_HOME_MAP_LAYOUT)
+    try:
+        widget.set_box_view_models(
+            {
+                1: HomeMapBoxViewModel(
+                    box_id=1,
+                    label="Caja 1",
+                    aggregate_status=None,
+                    status_label="Sin estado en vivo",
+                    status_summary="Sin estado en vivo todavía.",
+                    connected_nodes=0,
+                    expected_nodes=2,
+                    observed_nodes=0,
+                    fill_hex="#F6F7F4",
+                    border_hex="#7A857C",
+                    badge_hex="#5F6B66",
+                    badge_text="Sin datos",
+                )
+            }
+        )
+        view_model = widget.box_view_model(1)
+        assert view_model is not None
+        assert view_model.label == "Caja 1"
+        assert view_model.badge_text == "Sin datos"
     finally:
         widget.close()

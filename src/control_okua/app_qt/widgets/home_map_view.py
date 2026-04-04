@@ -7,6 +7,7 @@ from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from control_okua.app_qt.contracts import HomeMapBoxLayout, HomeMapLayout
+from control_okua.app_qt.viewmodels import HomeMapBoxViewModel
 
 
 class HomeMapView(QWidget):
@@ -17,6 +18,7 @@ class HomeMapView(QWidget):
         self._layout_contract = layout_contract
         self._selected_box_id = layout_contract.boxes[0].box_id if layout_contract.boxes else None
         self._background_pixmap = self._load_background_pixmap(layout_contract.background_asset)
+        self._box_view_models: dict[int, HomeMapBoxViewModel] = {}
         self.setMinimumHeight(360)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setMouseTracking(True)
@@ -39,6 +41,13 @@ class HomeMapView(QWidget):
 
     def has_background_asset(self) -> bool:
         return not self._background_pixmap.isNull()
+
+    def set_box_view_models(self, view_models: dict[int, HomeMapBoxViewModel]) -> None:
+        self._box_view_models = dict(view_models)
+        self.update()
+
+    def box_view_model(self, box_id: int) -> HomeMapBoxViewModel | None:
+        return self._box_view_models.get(int(box_id))
 
     def set_selected_box(self, box_id: int) -> None:
         normalized = int(box_id)
@@ -99,8 +108,15 @@ class HomeMapView(QWidget):
         for box in self._layout_contract.boxes:
             box_rect = self.box_rect(box.box_id)
             is_selected = box.box_id == self._selected_box_id
-            fill_color = QColor("#F8FBFF") if is_selected else QColor("#FBFBF8")
-            border_color = QColor("#2B6CB0") if is_selected else QColor("#5F6B66")
+            box_view_model = self._box_view_models.get(box.box_id)
+            fill_color = QColor(
+                box_view_model.fill_hex if box_view_model is not None else ("#F8FBFF" if is_selected else "#FBFBF8")
+            )
+            border_color = QColor(
+                "#184E91" if is_selected else (
+                    box_view_model.border_hex if box_view_model is not None else "#5F6B66"
+                )
+            )
             painter.setPen(QPen(border_color, 3 if is_selected else 2))
             painter.setBrush(fill_color)
             painter.drawRoundedRect(box_rect, 8, 8)
@@ -109,12 +125,29 @@ class HomeMapView(QWidget):
             painter.setPen(QPen(QColor("#8A8F85"), 1))
             painter.drawRoundedRect(inner_rect, 5, 5)
 
-            text_rect = box_rect.adjusted(4.0, 4.0, -4.0, -4.0)
+            text_rect = box_rect.adjusted(4.0, 4.0, -4.0, -22.0)
             painter.setPen(QColor("#23312B"))
             painter.drawText(
                 text_rect,
                 Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
                 box.label,
+            )
+
+            badge_rect = QRectF(
+                box_rect.left() + 4.0,
+                box_rect.bottom() - 20.0,
+                box_rect.width() - 8.0,
+                16.0,
+            )
+            badge_color = QColor(box_view_model.badge_hex if box_view_model is not None else "#5F6B66")
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(badge_color)
+            painter.drawRoundedRect(badge_rect, 6, 6)
+            painter.setPen(QColor("#FFFFFF"))
+            painter.drawText(
+                badge_rect,
+                Qt.AlignmentFlag.AlignCenter,
+                box_view_model.badge_text if box_view_model is not None else "Sin datos",
             )
 
         super().paintEvent(event)

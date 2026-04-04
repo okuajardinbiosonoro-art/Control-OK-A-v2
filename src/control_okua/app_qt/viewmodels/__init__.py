@@ -111,6 +111,15 @@ from control_okua.app_qt.viewmodels.ota_campaign_vm import (
     format_ota_campaign_node_outcome,
     format_ota_campaign_status,
 )
+from control_okua.app_qt.viewmodels.home_map_runtime_vm import (
+    HOME_MAP_LEGEND_ITEMS,
+    HomeMapBoxViewModel,
+    HomeMapLegendItem,
+    HomeMapStatusVisual,
+    build_home_map_box_status_summary,
+    build_home_map_box_view_models,
+    resolve_home_map_status_visual,
+)
 
 __all__ = [
     "build_profile_summary",
@@ -216,4 +225,11 @@ __all__ = [
     "format_ota_campaign_health_gate",
     "format_ota_campaign_node_outcome",
     "format_ota_campaign_status",
+    "HOME_MAP_LEGEND_ITEMS",
+    "HomeMapBoxViewModel",
+    "HomeMapLegendItem",
+    "HomeMapStatusVisual",
+    "build_home_map_box_status_summary",
+    "build_home_map_box_view_models",
+    "resolve_home_map_status_visual",
 ]
