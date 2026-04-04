@@ -34,7 +34,8 @@ def resolve_home_map_asset_path() -> Path:
 
 class HomeMapPanel(QWidget):
     boxSelectionChanged = Signal(object)
-    _MAP_INSET = 8.0
+    _MAP_FRAME_INSET = 3.0
+    _MAP_CONTENT_GAP = 4.0
     _STATUS_STYLE = {
         NodeStatus.ONLINE: {
             "accent": QColor("#2FAC66"),
@@ -163,49 +164,40 @@ class HomeMapPanel(QWidget):
         painter.setPen(QPen(QColor(BRAND_SAND), 0.8))
         painter.drawPath(panel_path)
 
-        map_rect = outer_rect.adjusted(
-            self._MAP_INSET,
-            self._MAP_INSET,
-            -self._MAP_INSET,
-            -self._MAP_INSET,
-        )
+        frame_rect = self._map_frame_rect()
+        content_rect = self._map_content_rect()
+        target_rect = self._resolved_map_target_rect()
+
+        frame_path = QPainterPath()
+        frame_path.addRoundedRect(frame_rect, 22.0, 22.0)
+        painter.fillPath(frame_path, QColor("#F4F7F0"))
+
         painter.save()
         clip_path = QPainterPath()
-        clip_path.addRoundedRect(map_rect, 22.0, 22.0)
+        clip_path.addRoundedRect(content_rect, 20.0, 20.0)
         painter.setClipPath(clip_path)
-        painter.fillRect(map_rect, QColor("#F4F7F0"))
+        painter.fillRect(content_rect, QColor("#F4F7F0"))
 
         if not self._map_pixmap.isNull():
             source_rect = self._map_source_rect if self._map_source_rect is not None else QRectF(self._map_pixmap.rect())
-            source_size = source_rect.size()
-            if source_size.width() > 0 and source_size.height() > 0:
-                scale = min(
-                    map_rect.width() / source_size.width(),
-                    map_rect.height() / source_size.height(),
-                )
-                target_width = source_size.width() * scale
-                target_height = source_size.height() * scale
-                target_rect = QRectF(
-                    map_rect.left() + (map_rect.width() - target_width) / 2.0,
-                    map_rect.top() + (map_rect.height() - target_height) / 2.0,
-                    target_width,
-                    target_height,
-                )
+            if target_rect is not None and source_rect.width() > 0 and source_rect.height() > 0:
                 painter.drawPixmap(target_rect, self._map_pixmap, source_rect)
         else:
-            painter.fillRect(map_rect, QColor("#F4F0E6"))
+            painter.fillRect(content_rect, QColor("#F4F0E6"))
             painter.setPen(QColor(BRAND_DEEP))
             painter.drawText(
-                map_rect,
+                content_rect,
                 Qt.AlignmentFlag.AlignCenter,
                 "Mapa no disponible",
             )
 
         painter.restore()
         painter.setPen(QPen(QColor(BRAND_ACCENT), 1.0))
-        painter.drawRoundedRect(map_rect, 22.0, 22.0)
-        self._draw_box_overlays(painter, map_rect)
-        self._draw_context_card(painter, map_rect)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRoundedRect(frame_rect, 22.0, 22.0)
+        if target_rect is not None:
+            self._draw_box_overlays(painter, target_rect)
+        self._draw_context_card(painter, frame_rect)
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton:
@@ -267,13 +259,7 @@ class HomeMapPanel(QWidget):
         return QRectF(left, top, right - left + 1, bottom - top + 1)
 
     def _resolved_map_target_rect(self) -> QRectF | None:
-        outer_rect = QRectF(self.rect()).adjusted(1.0, 1.0, -1.0, -1.0)
-        map_rect = outer_rect.adjusted(
-            self._MAP_INSET,
-            self._MAP_INSET,
-            -self._MAP_INSET,
-            -self._MAP_INSET,
-        )
+        map_rect = self._map_content_rect()
         if self._map_pixmap.isNull():
             return map_rect
 
@@ -292,6 +278,23 @@ class HomeMapPanel(QWidget):
             map_rect.top() + (map_rect.height() - target_height) / 2.0,
             target_width,
             target_height,
+        )
+
+    def _map_frame_rect(self) -> QRectF:
+        outer_rect = QRectF(self.rect()).adjusted(1.0, 1.0, -1.0, -1.0)
+        return outer_rect.adjusted(
+            self._MAP_FRAME_INSET,
+            self._MAP_FRAME_INSET,
+            -self._MAP_FRAME_INSET,
+            -self._MAP_FRAME_INSET,
+        )
+
+    def _map_content_rect(self) -> QRectF:
+        return self._map_frame_rect().adjusted(
+            self._MAP_CONTENT_GAP,
+            self._MAP_CONTENT_GAP,
+            -self._MAP_CONTENT_GAP,
+            -self._MAP_CONTENT_GAP,
         )
 
     def _marker_rect_for_spec(self, spec: HomeMapBoxSpec, map_rect: QRectF) -> QRectF:
@@ -319,70 +322,61 @@ class HomeMapPanel(QWidget):
             is_selected = spec.box_key == self._selected_box_key
             is_hovered = spec.box_key == self._hovered_box_key
             base_font = painter.font()
-            body_rect = marker_rect.adjusted(3.0, 3.0, -3.0, -2.0)
-            header_rect = QRectF(
-                body_rect.left() + 5.0,
-                body_rect.top() + 4.0,
-                body_rect.width() - 10.0,
-                11.5,
+            body_rect = marker_rect.adjusted(4.0, 4.0, -4.0, -4.0)
+            dot_diameter = 9.0 if is_selected else 8.0
+            dot_rect = QRectF(
+                body_rect.right() - dot_diameter - 5.0,
+                body_rect.top() + 5.0,
+                dot_diameter,
+                dot_diameter,
             )
             accent_rail_rect = QRectF(
-                body_rect.left() + 3.5,
+                body_rect.left() + 5.0,
                 body_rect.top() + 5.0,
-                4.0,
+                3.5,
                 body_rect.height() - 10.0,
             )
             number_rect = QRectF(
-                body_rect.left() + 9.5,
-                header_rect.bottom() + 0.5,
-                body_rect.width() - 15.5,
-                max(12.0, body_rect.bottom() - header_rect.bottom() - 4.5),
+                body_rect.left() + 10.0,
+                body_rect.top() + 4.0,
+                body_rect.width() - 20.0,
+                body_rect.height() - 8.0,
             )
 
             if is_selected or is_hovered:
                 glow_rect = body_rect.adjusted(-5.0, -5.0, 5.0, 5.0)
                 glow_fill = QColor(style["halo"])
-                glow_fill.setAlpha(84 if is_selected else 48)
+                glow_fill.setAlpha(82 if is_selected else 42)
                 glow_border = QColor(style["accent"])
-                glow_border.setAlpha(124 if is_selected else 66)
-                painter.setPen(QPen(glow_border, 1.8 if is_selected else 1.0))
+                glow_border.setAlpha(118 if is_selected else 52)
+                painter.setPen(QPen(glow_border, 1.6 if is_selected else 0.9))
                 painter.setBrush(glow_fill)
-                painter.drawRoundedRect(glow_rect, 13.0, 13.0)
+                painter.drawRoundedRect(glow_rect, 14.0, 14.0)
 
             shadow_rect = body_rect.translated(1.5, 2.0)
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(26, 37, 31, 18))
-            painter.drawRoundedRect(shadow_rect, 10.0, 10.0)
+            painter.drawRoundedRect(shadow_rect, 12.0, 12.0)
 
             marker_fill = QColor(style["fill"])
-            marker_fill.setAlpha(255 if is_selected else (248 if is_hovered else 242))
+            marker_fill.setAlpha(255 if is_selected else (249 if is_hovered else 244))
             painter.setBrush(marker_fill)
-            painter.setPen(QPen(QColor(style["accent"]), 1.9 if is_selected else 1.25))
-            painter.drawRoundedRect(body_rect, 10.0, 10.0)
+            painter.setPen(QPen(QColor(style["accent"]), 1.8 if is_selected else 1.15))
+            painter.drawRoundedRect(body_rect, 12.0, 12.0)
 
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(QColor(style["accent"]))
             painter.drawRoundedRect(accent_rail_rect, 2.0, 2.0)
 
-            header_fill = QColor(style["accent"])
-            header_fill.setAlpha(238 if is_selected else 225)
-            painter.setBrush(header_fill)
-            painter.drawRoundedRect(header_rect, 5.5, 5.5)
-
-            header_font = painter.font()
-            header_font.setBold(True)
-            header_font.setPointSize(max(7, header_font.pointSize() - 1))
-            painter.setFont(header_font)
-            painter.setPen(QColor(255, 255, 255, 232))
-            painter.drawText(
-                QRectF(header_rect.left() + 5.0, header_rect.top(), header_rect.width() - 10.0, header_rect.height()),
-                Qt.AlignmentFlag.AlignCenter,
-                state.badge_text if state is not None else "OFF",
-            )
+            painter.setBrush(QColor(style["accent"]))
+            painter.drawEllipse(dot_rect)
+            painter.setPen(QPen(QColor(255, 255, 255, 228), 1.0))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(dot_rect.adjusted(0.8, 0.8, -0.8, -0.8))
 
             number_font = painter.font()
             number_font.setBold(True)
-            number_font.setPointSize(max(9, number_font.pointSize() + 1))
+            number_font.setPointSize(max(9, number_font.pointSize() + 2))
             painter.setFont(number_font)
             painter.setPen(QColor(BRAND_DEEP))
             painter.drawText(
