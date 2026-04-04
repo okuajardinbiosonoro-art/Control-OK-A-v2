@@ -214,7 +214,7 @@ def run_app() -> int:
         on_apply_remote_settings=_apply_remote_api_settings,
     )
     window.set_remote_api_status(remote_runtime_status)
-    window.show()
+    window.showMaximized()
 
     # Permite validaciones automáticas sin afectar ejecución normal.
     auto_close_ms = os.getenv("CKV2_AUTOCLOSE_MS", "").strip()

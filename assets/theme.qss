@@ -50,8 +50,8 @@ QLabel#homeStatusChip {
     background-color: #E9F5EE;
     color: #0B3B27;
     border: 1px solid #C9DCCF;
-    border-radius: 14px;
-    padding: 6px 12px;
+    border-radius: 16px;
+    padding: 7px 14px;
     font-weight: 700;
 }
 
@@ -76,20 +76,22 @@ QLabel#dialogSubtleLabel {
 }
 
 QGroupBox {
-    background-color: #FFFDFC;
-    border: 1px solid #E1D5C2;
-    border-radius: 14px;
-    margin-top: 14px;
-    padding: 12px 14px 14px 14px;
+    background-color: #FFFEFC;
+    border: 1px solid #DDD2BE;
+    border-radius: 16px;
+    margin-top: 18px;
+    padding: 18px 14px 14px 14px;
 }
 
 QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    left: 12px;
-    padding: 0 6px;
+    left: 14px;
+    padding: 2px 10px;
     color: #0B3B27;
-    background-color: #FFFDFC;
+    background-color: #F6EFE1;
+    border: 1px solid #E1D5C2;
+    border-radius: 9px;
     font-weight: 700;
 }
 
@@ -305,8 +307,11 @@ QCheckBox::indicator:hover {
 }
 
 QTabWidget::pane {
-    border: none;
-    background-color: transparent;
+    background-color: #FFFDFC;
+    border: 1px solid #E1D5C2;
+    border-radius: 16px;
+    top: -1px;
+    margin-top: 8px;
 }
 
 QTabBar::tab {
@@ -314,14 +319,26 @@ QTabBar::tab {
     color: #0B3B27;
     border: 1px solid #DCCFB8;
     border-bottom: none;
-    border-top-left-radius: 10px;
-    border-top-right-radius: 10px;
-    padding: 8px 14px;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+    min-height: 18px;
+    padding: 9px 16px;
+    margin-right: 6px;
     font-weight: 600;
 }
 
 QTabBar::tab:selected {
     background-color: #FFFDFC;
+    border-color: #D5C7B1;
+    margin-bottom: -1px;
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: #F5EDDF;
+}
+
+QTabBar::tab:!selected {
+    margin-top: 4px;
 }
 
 QMenuBar {

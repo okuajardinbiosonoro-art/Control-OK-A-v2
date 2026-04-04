@@ -118,6 +118,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Control OKÚA v2")
         self.resize(1100, 700)
+        self._initial_maximize_pending = True
 
         self._operation_compact_labels: dict[str, QLabel] = {}
         self._details_summary_labels: dict[str, QLabel] = {}
@@ -313,17 +314,17 @@ class MainWindow(QMainWindow):
 
     def _build_operation_tab(self) -> QWidget:
         tab = QWidget(self)
+        tab.setObjectName("homeTab")
         tab_layout = QVBoxLayout(tab)
-        operation_scroll = QScrollArea(self)
-        operation_scroll.setWidgetResizable(True)
-        operation_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        tab_layout.setContentsMargins(0, 0, 0, 0)
+        tab_layout.setSpacing(0)
 
         operation_content = QWidget(self)
         operation_content.setObjectName("homeOperationContent")
         operation_content.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         layout = QVBoxLayout(operation_content)
-        layout.setContentsMargins(0, 0, 0, 6)
-        layout.setSpacing(10)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
 
         top_bar = QHBoxLayout()
         top_bar.setSpacing(14)
@@ -333,7 +334,7 @@ class MainWindow(QMainWindow):
         self.home_status_chip = QLabel("Sesión inactiva")
         self.home_status_chip.setObjectName("homeStatusChip")
         self.home_status_chip.setAlignment(Qt.AlignCenter)
-        self.home_status_chip.setMaximumWidth(190)
+        self.home_status_chip.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Fixed)
         intro_column.addWidget(self.home_status_chip, 0, Qt.AlignLeft)
 
         self.operation_subtitle_label = QLabel(
@@ -383,10 +384,7 @@ class MainWindow(QMainWindow):
         self.home_map_panel = HomeMapPanel(self)
         self.home_map_panel.setObjectName("homeMapPanel")
         layout.addWidget(self.home_map_panel, 1)
-        layout.addStretch(1)
-
-        operation_scroll.setWidget(operation_content)
-        tab_layout.addWidget(operation_scroll)
+        tab_layout.addWidget(operation_content, 1)
         return tab
 
     def _build_session_details_tab(self) -> QWidget:
@@ -662,7 +660,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(hint_label)
 
         self.technical_tabs = QTabWidget(self)
-        self.technical_tabs.setDocumentMode(True)
+        self.technical_tabs.setDocumentMode(False)
 
         overview_tab = QWidget(self)
         overview_layout = QVBoxLayout(overview_tab)
@@ -815,6 +813,12 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_toast_manager"):
             self._toast_manager.reposition_toasts()
 
+    def showEvent(self, event) -> None:  # type: ignore[override]
+        super().showEvent(event)
+        if self._initial_maximize_pending:
+            self._initial_maximize_pending = False
+            QTimer.singleShot(0, self.showMaximized)
+
     def _reflow_details_cards(self, *, force: bool = False) -> None:
         layout = self._details_cards_layout
         if layout is None:
@@ -924,7 +928,7 @@ class MainWindow(QMainWindow):
                 "Seleccione un perfil operativo para continuar."
             )
 
-        self.home_status_chip.setText(session_status_summary)
+        self._set_home_status_chip_text(session_status_summary)
         self.home_profile_label.setText(f"{profile_summary} · {general_summary}")
 
         self.start_session_button.setEnabled(session_action_state.can_start_session)
@@ -1471,6 +1475,12 @@ class MainWindow(QMainWindow):
             level=level,
             duration_ms=duration_ms,
         )
+
+    def _set_home_status_chip_text(self, text: str) -> None:
+        self.home_status_chip.setText(text)
+        font_metrics = self.home_status_chip.fontMetrics()
+        chip_width = max(196, min(font_metrics.horizontalAdvance(text) + 52, 460))
+        self.home_status_chip.setMinimumWidth(chip_width)
 
     def _on_preflight_toggle_button(self, checked: bool) -> None:
         self._set_preflight_panel_visible(checked)

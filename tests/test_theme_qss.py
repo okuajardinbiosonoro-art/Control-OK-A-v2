@@ -17,6 +17,8 @@ def test_theme_qss_uses_new_light_palette_and_removes_legacy_dark_colors() -> No
     assert "QWidget#navigationPanel QPushButton:checked" in qss
     assert "QLabel#dialogHeadlineLabel" in qss
     assert "QPlainTextEdit" in qss
+    assert "QTabWidget::pane" in qss
+    assert "QGroupBox::title" in qss
 
     assert "#252525" not in qss
     assert "#2D2D2D" not in qss

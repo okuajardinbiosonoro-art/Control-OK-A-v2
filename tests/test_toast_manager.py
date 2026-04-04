@@ -37,7 +37,7 @@ def test_toast_manager_creates_visible_toast_without_breaking_parent() -> None:
         toast = manager._toasts[0]
         assert toast.title_label.text() == "Servicio remoto"
         assert toast.message_label.text() == "Configuración aplicada."
-        assert toast.pos().x() >= 0
+        assert toast.pos().x() >= parent.width() - toast.width() - 24
         assert toast.pos().y() >= 0
     finally:
         parent.close()

@@ -238,7 +238,7 @@ class ControlPlanePanel(QWidget):
         group_layout.addWidget(actions_group)
 
         self.details_tabs = QTabWidget(self)
-        self.details_tabs.setDocumentMode(True)
+        self.details_tabs.setDocumentMode(False)
 
         self.summary_tab = QWidget(self)
         summary_layout = QVBoxLayout(self.summary_tab)

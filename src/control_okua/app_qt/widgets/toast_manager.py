@@ -23,9 +23,9 @@ class ToastPalette:
 
 _TOAST_PALETTES: dict[str, ToastPalette] = {
     "info": ToastPalette("#FFFDF9", "#DCCFB8", "#0B3B27", "#4F6259"),
-    "success": ToastPalette("#EEF8F1", "#B7DFC5", "#0B3B27", "#3F5E51"),
-    "warning": ToastPalette("#FFF5E6", "#E6C98F", "#432918", "#6A5139"),
-    "error": ToastPalette("#FFF0EE", "#E1A59C", "#7B2C20", "#7B2C20"),
+    "success": ToastPalette("#EFF8F1", "#ACD8BA", "#0B3B27", "#3F5E51"),
+    "warning": ToastPalette("#FFF6EA", "#E0C187", "#432918", "#6A5139"),
+    "error": ToastPalette("#FFF1EF", "#D9978B", "#7B2C20", "#7B2C20"),
 }
 
 
@@ -49,20 +49,20 @@ class ToastWidget(QFrame):
                 "QFrame#toastNotification {"
                 f"background-color: {palette.background};"
                 f"border: 1px solid {palette.border};"
-                "border-radius: 14px;"
+                "border-radius: 16px;"
                 "}"
                 "QLabel { background: transparent; }"
-                f"QLabel#toastTitle {{ color: {palette.title}; font-weight: 700; }}"
+                f"QLabel#toastTitle {{ color: {palette.title}; font-weight: 700; font-size: 10pt; }}"
                 f"QLabel#toastMessage {{ color: {palette.message}; }}"
             )
         )
 
         root = QHBoxLayout(self)
-        root.setContentsMargins(14, 12, 14, 12)
-        root.setSpacing(10)
+        root.setContentsMargins(16, 14, 16, 14)
+        root.setSpacing(12)
 
         accent = QFrame(self)
-        accent.setFixedWidth(4)
+        accent.setFixedWidth(5)
         accent.setObjectName("toastAccent")
         accent.setStyleSheet(
             "QFrame#toastAccent {"
@@ -96,12 +96,12 @@ class ToastWidget(QFrame):
         self._fade_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
 
         self._slide_animation = QPropertyAnimation(self, b"pos", self)
-        self._slide_animation.setDuration(220)
+        self._slide_animation.setDuration(240)
         self._slide_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._dismiss_callback = None
 
     def animate_in(self, end_pos: QPoint) -> None:
-        start_pos = QPoint(end_pos.x(), end_pos.y() + 18)
+        start_pos = QPoint(end_pos.x() + 18, end_pos.y() + 14)
         self.move(start_pos)
         self._slide_animation.stop()
         self._slide_animation.setStartValue(start_pos)
@@ -143,10 +143,10 @@ class ToastManager(QWidget):
         title: str,
         message: str,
         level: str = "info",
-        duration_ms: int = 3200,
+        duration_ms: int = 4200,
     ) -> None:
         toast = ToastWidget(title=title, message=message, level=level, parent=self.parentWidget())
-        toast.resize(360, toast.sizeHint().height())
+        toast.resize(380, toast.sizeHint().height())
         toast.show()
         self._toasts.append(toast)
         self.reposition_toasts()
@@ -164,7 +164,7 @@ class ToastManager(QWidget):
             width = min(max(toast.width(), 280), max(280, parent.width() - margin * 2))
             toast.resize(width, toast.sizeHint().height())
             current_y -= toast.height()
-            target = QPoint(margin, current_y)
+            target = QPoint(parent.width() - width - margin, current_y)
             if toast._has_entered:
                 toast.move(target)
             else:

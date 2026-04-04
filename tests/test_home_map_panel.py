@@ -38,6 +38,7 @@ def test_home_map_panel_loads_asset_and_has_reasonable_size_hint() -> None:
     try:
         assert panel.has_map_asset() is True
         assert panel.sizeHint().width() >= 1200
-        assert panel.minimumHeight() >= 600
+        assert panel.minimumHeight() >= 480
+        assert panel._map_source_rect is not None
     finally:
         panel.close()

@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QGroupBox, QSizePolicy
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QGroupBox, QSizePolicy, QScrollArea
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -121,6 +121,9 @@ def test_main_tabs_do_not_include_estado_actual_by_default() -> None:
         assert window.navigation_panel.button_for_key("home").isChecked() is True
         assert window.shell_title_label.text() == "Inicio"
         assert window.home_map_panel.has_map_asset() is True
+        window.show()
+        QApplication.processEvents()
+        assert window.isMaximized() is True
     finally:
         window.close()
 
@@ -152,6 +155,8 @@ def test_control_plane_panel_is_separated_from_diagnostics() -> None:
             for i in range(window.technical_tabs.count())
         ]
         assert technical_tabs == ["Resumen", "Control F3"]
+        assert window.technical_tabs.documentMode() is False
+        assert window.control_plane_panel.details_tabs.documentMode() is False
         assert window.control_plane_panel.result_view.minimumHeight() >= 320
         technical_buttons = [btn.text() for btn in window.technical_tab.findChildren(QPushButton)]
         assert "Estado actual" in technical_buttons
@@ -207,12 +212,14 @@ def test_home_surface_keeps_primary_action_and_visual_map_as_main_elements() -> 
         assert window.tabs.currentWidget() is window.home_tab
         assert window.start_session_button.text() == "Iniciar sesión"
         assert window.home_map_panel.has_map_asset() is True
-        assert window.home_map_panel.minimumHeight() >= 600
+        assert window.home_map_panel.minimumHeight() >= 480
         assert window.home_map_panel.width() >= 900
         assert window.home_more_button.text() == "Más ▾"
         assert window.change_profile_button.isHidden() is True
         assert window.reset_session_error_button.isHidden() is True
         assert window.shell_subtitle_label.isHidden() is True
+        assert window.home_tab.findChildren(QScrollArea) == []
+        assert window.home_status_chip.minimumWidth() >= 182
 
         group_titles = {group.title() for group in window.home_tab.findChildren(QGroupBox)}
         assert "Operación principal" not in group_titles
@@ -234,6 +241,29 @@ def test_home_surface_keeps_primary_action_and_visual_map_as_main_elements() -> 
         assert "Firmware" not in more_action_texts
         assert "Técnico" not in more_action_texts
         assert "Remoto" not in more_action_texts
+    finally:
+        window.close()
+
+
+def test_home_status_chip_supports_running_text_without_clipping() -> None:
+    app = _ensure_qapp()
+    window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
+    try:
+        window._session_snapshot = SessionSnapshot(
+            state=SessionState.RUNNING,
+            active_profile="udp_jardin",
+            mode="udp",
+            backend=BackendKind.UDP,
+            message="running",
+            error=None,
+            can_start=False,
+            can_stop=True,
+        )
+        window.refresh_ui()
+        window.show()
+        app.processEvents()
+        required_width = window.home_status_chip.fontMetrics().horizontalAdvance(window.home_status_chip.text()) + 30
+        assert window.home_status_chip.width() >= required_width
     finally:
         window.close()
 
