@@ -113,7 +113,9 @@ def test_main_tabs_do_not_include_estado_actual_by_default() -> None:
     window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
     try:
         tab_titles = [window.tabs.tabText(index) for index in range(window.tabs.count())]
-        assert tab_titles == ["Sesión", "Nodos en vivo", "Estado técnico", "Control F3"]
+        assert tab_titles == ["Inicio", "Nodos", "Diagnóstico", "Firmware", "Técnico", "Remoto"]
+        assert window.tabs.currentWidget() is window.home_tab
+        assert window.navigation_panel.button_for_key("home").isChecked() is True
     finally:
         window.close()
 
@@ -141,6 +143,22 @@ def test_control_plane_panel_is_separated_from_diagnostics() -> None:
         ]
         assert detail_tabs == ["Resumen", "Diagnóstico", "Bitácora"]
         assert window.control_plane_panel.result_view.minimumHeight() >= 320
+        technical_buttons = [btn.text() for btn in window.technical_tab.findChildren(QPushButton)]
+        assert "Estado actual" in technical_buttons
+        assert "Herramientas avanzadas" in technical_buttons
+    finally:
+        window.close()
+
+
+def test_firmware_and_remote_surfaces_are_visible_from_primary_shell() -> None:
+    _ensure_qapp()
+    window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
+    try:
+        assert window.open_firmware_manager_button.text() == "Abrir Firmware Manager"
+        assert "catalog" in window._firmware_summary_labels
+        assert "status" in window._remote_summary_labels
+        window.show_remote_tab()
+        assert window.tabs.currentWidget() is window.remote_tab
     finally:
         window.close()
 
