@@ -79,3 +79,22 @@ def test_resolve_control_secret_rejects_placeholder_from_auto_file(
     with pytest.raises(ControlSecretNotConfiguredError):
         resolve_control_secret()
 
+
+def test_resolve_control_secret_uses_exe_directory_when_frozen(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret_file = tmp_path / "control_plane_secret.txt"
+    secret_file.write_text("EXE_SECRET_789\n", encoding="utf-8")
+
+    monkeypatch.delenv(CONTROL_SECRET_ENV, raising=False)
+    monkeypatch.delenv(CONTROL_SECRET_FILE_ENV, raising=False)
+    monkeypatch.setattr("control_okua.core.control_plane.auth.sys.frozen", True, raising=False)
+    monkeypatch.setattr(
+        "control_okua.core.control_plane.auth.sys.executable",
+        str(tmp_path / "Control Okua.exe"),
+        raising=False,
+    )
+
+    resolved = resolve_control_secret()
+    assert resolved == b"EXE_SECRET_789"

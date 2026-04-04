@@ -5,6 +5,7 @@ import hmac
 import os
 from pathlib import Path
 import re
+import sys
 from typing import Final
 
 CONTROL_SECRET_ENV: Final[str] = "CKV2_CONTROL_SECRET"
@@ -138,12 +139,32 @@ def _extract_secret_from_header_text(text: str) -> str:
 
 
 def _iter_default_secret_candidates() -> tuple[Path, ...]:
+    runtime_root = _resolve_runtime_root()
     repo_root = _resolve_repo_root()
-    return (
+
+    candidates = [
+        runtime_root / ".control_plane_secret",
+        runtime_root / "control_plane_secret.txt",
+        runtime_root / "firmware" / "okua_node_udp_v1" / "okua_node_secrets.h",
+    ]
+
+    # En build frozen, los archivos operativos viven junto al .exe, pero
+    # conservamos fallback al árbol del bundle/repositorio por compatibilidad.
+    for candidate in (
         repo_root / ".control_plane_secret",
         repo_root / "control_plane_secret.txt",
         repo_root / "firmware" / "okua_node_udp_v1" / "okua_node_secrets.h",
-    )
+    ):
+        if candidate not in candidates:
+            candidates.append(candidate)
+
+    return tuple(candidates)
+
+
+def _resolve_runtime_root() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return _resolve_repo_root()
 
 
 def _resolve_repo_root() -> Path:
