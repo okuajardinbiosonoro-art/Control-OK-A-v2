@@ -36,7 +36,7 @@ No se debe usar `current`, `beta` u `obsolete` para estos bins de prueba salvo q
 ### 3.1 Cómo se construye hoy el firmware
 
 - Entorno por defecto: `okua_node_esp32dev`
-- Fuente principal: `firmware/okua_node_udp_v1/okua_node_udp_v1.ino`
+- Fuente principal: `firmware/okua_node_udp_v1/okua_node_udp_v1.cpp`
 - Identidad embebida:
   - `FW_VERSION_STR`
   - `FW_VERSION_CODE`

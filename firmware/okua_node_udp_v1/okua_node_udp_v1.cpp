@@ -28,6 +28,18 @@
  *   - Adafruit_NeoPixel (solo si LED_PROFILE != LED_DISABLED)
  ********************************************************************************************/
 
+#include <Arduino.h>
+
+// Local overrides can be provided in a non-tracked file:
+//   firmware/okua_node_udp_v1/okua_node_secrets.h
+// They are loaded before defaults so manual builds can override mode/sensor,
+// network and fruit-profile parameters without editing this file.
+#if defined(__has_include)
+#if __has_include("okua_node_secrets.h")
+#include "okua_node_secrets.h"
+#endif
+#endif
+
 /*============================================================================================
   ZONA 1 — SELECCION DE PERFIL GENERAL
 ============================================================================================*/
@@ -64,14 +76,6 @@
 /*============================================================================================
   ZONA 2 — IDENTIDAD DEL NODO / RED
 ============================================================================================*/
-
-// Local overrides can be provided in a non-tracked file:
-//   firmware/okua_node_udp_v1/okua_node_secrets.h
-#if defined(__has_include)
-#if __has_include("okua_node_secrets.h")
-#include "okua_node_secrets.h"
-#endif
-#endif
 
 #ifdef OKUA_BUILD_NODE_LABEL
 #ifdef NODE_LABEL
@@ -271,17 +275,105 @@ struct MidiRoute {
   uint8_t note;
 };
 
-// EJEMPLO EB1:
-// activa canales 1, 3, 4 y 5
-// Si quieres EC1, deja solo el canal 2.
+// Presets curados de fruta para Caja 1:
+// - EB1: canales 1, 3 y 5 (EB1 + ED1 + EF1)
+// - EC1: canales 2, 4 y 5 (EC1 + EE1 + EF1)
+// Se puede forzar un preset o sobreescribir cada ruta individualmente.
+#define FRUIT_ROUTE_PRESET_AUTO      0
+#define FRUIT_ROUTE_PRESET_EB_FANOUT 1
+#define FRUIT_ROUTE_PRESET_EC_FANOUT 2
+#define FRUIT_ROUTE_PRESET_CUSTOM    99
+
+#define OKUA_NODE_SLOT_IN_BOX (((NODE_ID) - 1) % 5)
+
+#ifndef FRUIT_ROUTE_PRESET
+#define FRUIT_ROUTE_PRESET FRUIT_ROUTE_PRESET_AUTO
+#endif
+
+#if FRUIT_ROUTE_PRESET == FRUIT_ROUTE_PRESET_AUTO
+  #if OKUA_NODE_SLOT_IN_BOX == 0
+    #define OKUA_ACTIVE_FRUIT_ROUTE_PRESET FRUIT_ROUTE_PRESET_EB_FANOUT
+  #elif OKUA_NODE_SLOT_IN_BOX == 1
+    #define OKUA_ACTIVE_FRUIT_ROUTE_PRESET FRUIT_ROUTE_PRESET_EC_FANOUT
+  #else
+    #define OKUA_ACTIVE_FRUIT_ROUTE_PRESET FRUIT_ROUTE_PRESET_CUSTOM
+  #endif
+#else
+  #define OKUA_ACTIVE_FRUIT_ROUTE_PRESET FRUIT_ROUTE_PRESET
+#endif
+
+#ifndef FRUIT_ROUTE_COUNT_CFG
+  #if OKUA_ACTIVE_FRUIT_ROUTE_PRESET == FRUIT_ROUTE_PRESET_EB_FANOUT
+    #define FRUIT_ROUTE_COUNT_CFG 3
+  #elif OKUA_ACTIVE_FRUIT_ROUTE_PRESET == FRUIT_ROUTE_PRESET_EC_FANOUT
+    #define FRUIT_ROUTE_COUNT_CFG 3
+  #else
+    #define FRUIT_ROUTE_COUNT_CFG 1
+  #endif
+#endif
+
+#ifndef FRUIT_ROUTE_1_BUS
+#define FRUIT_ROUTE_1_BUS 0
+#endif
+#ifndef FRUIT_ROUTE_1_CH
+  #if OKUA_ACTIVE_FRUIT_ROUTE_PRESET == FRUIT_ROUTE_PRESET_EC_FANOUT
+    #define FRUIT_ROUTE_1_CH 2
+  #else
+    #define FRUIT_ROUTE_1_CH 1
+  #endif
+#endif
+#ifndef FRUIT_ROUTE_1_NOTE
+#define FRUIT_ROUTE_1_NOTE 57
+#endif
+
+#ifndef FRUIT_ROUTE_2_BUS
+#define FRUIT_ROUTE_2_BUS 0
+#endif
+#ifndef FRUIT_ROUTE_2_CH
+  #if OKUA_ACTIVE_FRUIT_ROUTE_PRESET == FRUIT_ROUTE_PRESET_EC_FANOUT
+    #define FRUIT_ROUTE_2_CH 4
+  #else
+    #define FRUIT_ROUTE_2_CH 3
+  #endif
+#endif
+#ifndef FRUIT_ROUTE_2_NOTE
+#define FRUIT_ROUTE_2_NOTE 57
+#endif
+
+#ifndef FRUIT_ROUTE_3_BUS
+#define FRUIT_ROUTE_3_BUS 0
+#endif
+#ifndef FRUIT_ROUTE_3_CH
+#define FRUIT_ROUTE_3_CH 5
+#endif
+#ifndef FRUIT_ROUTE_3_NOTE
+#define FRUIT_ROUTE_3_NOTE 57
+#endif
+
+#ifndef FRUIT_ROUTE_4_BUS
+#define FRUIT_ROUTE_4_BUS 0
+#endif
+#ifndef FRUIT_ROUTE_4_CH
+#define FRUIT_ROUTE_4_CH 5
+#endif
+#ifndef FRUIT_ROUTE_4_NOTE
+#define FRUIT_ROUTE_4_NOTE 57
+#endif
+
 static const MidiRoute FRUIT_ROUTES[] = {
-  {0, 1, 57},
-  {0, 3, 57},
-  {0, 4, 57},
-  {0, 5, 57},
+  {(uint8_t)FRUIT_ROUTE_1_BUS, (uint8_t)FRUIT_ROUTE_1_CH, (uint8_t)FRUIT_ROUTE_1_NOTE},
+  {(uint8_t)FRUIT_ROUTE_2_BUS, (uint8_t)FRUIT_ROUTE_2_CH, (uint8_t)FRUIT_ROUTE_2_NOTE},
+  {(uint8_t)FRUIT_ROUTE_3_BUS, (uint8_t)FRUIT_ROUTE_3_CH, (uint8_t)FRUIT_ROUTE_3_NOTE},
+  {(uint8_t)FRUIT_ROUTE_4_BUS, (uint8_t)FRUIT_ROUTE_4_CH, (uint8_t)FRUIT_ROUTE_4_NOTE},
 };
 
-static const uint8_t FRUIT_ROUTE_COUNT = sizeof(FRUIT_ROUTES) / sizeof(FRUIT_ROUTES[0]);
+#if FRUIT_ROUTE_COUNT_CFG < 1
+static const uint8_t FRUIT_ROUTE_COUNT = 1;
+#elif FRUIT_ROUTE_COUNT_CFG > 4
+static const uint8_t FRUIT_ROUTE_COUNT = 4;
+#else
+static const uint8_t FRUIT_ROUTE_COUNT = FRUIT_ROUTE_COUNT_CFG;
+#endif
 
 // Keepalive de fruta: por defecto desactivado para no retriggerar
 #define FRUIT_KEEPALIVE_ENABLE 0
@@ -336,6 +428,30 @@ static const uint8_t FRUIT_ROUTE_COUNT = sizeof(FRUIT_ROUTES) / sizeof(FRUIT_ROU
 #define FRUIT_AUTOCAL_REFINE_MS 8000
 #define FRUIT_HARD_TIMEOUT_MS  60000
 #define FRUIT_RECOVERY_MS        250
+#ifndef FRUIT_FIXED_OFFSET_V
+  #define FRUIT_FIXED_OFFSET_V -1.0f
+#endif
+#ifndef FRUIT_FIXED_OFFSET_WINDOW_V
+  #if OKUA_NODE_SLOT_IN_BOX == 0
+    #define FRUIT_FIXED_OFFSET_WINDOW_V 0.25f
+  #else
+    #define FRUIT_FIXED_OFFSET_WINDOW_V 0.35f
+  #endif
+#endif
+#ifndef FRUIT_ENTER_MIN_SLOPE_ABS
+  #if OKUA_NODE_SLOT_IN_BOX == 0
+    #define FRUIT_ENTER_MIN_SLOPE_ABS 0.09f
+  #else
+    #define FRUIT_ENTER_MIN_SLOPE_ABS 0.05f
+  #endif
+#endif
+#ifndef FRUIT_REARM_HOLD_MS
+  #if OKUA_NODE_SLOT_IN_BOX == 0
+    #define FRUIT_REARM_HOLD_MS 320
+  #else
+    #define FRUIT_REARM_HOLD_MS 140
+  #endif
+#endif
 
 
 /*============================================================================================
@@ -373,6 +489,62 @@ enum ReplayDecision : uint8_t;
 struct ParsedCmdFrame;
 struct ControlSourceState;
 struct CachedCmdAck;
+
+// Explicit prototypes now that the sketch builds as standard C++ instead of relying on
+// Arduino's auto-generated declarations.
+float readV();
+float readVmed3();
+uint32_t noteToColor(uint8_t note);
+void ledInit();
+void ledOff();
+void ledShowNote(uint8_t note);
+bool computeHmacSha256(const uint8_t* msg, size_t msg_len, uint8_t out_digest[32]);
+bool computeCmdAuthTag32(const OkuaCmdPacket& cmd, uint32_t* out_tag32);
+bool computeAckAuthTag32(const OkuaAckPacket& ack, uint32_t* out_tag32);
+bool isCmdAuthTagValid(const OkuaCmdPacket& cmd);
+bool setAckAuthTag32(OkuaAckPacket* ack);
+ControlSourceState* getOrCreateControlSourceState(const IPAddress& src_ip, uint32_t now_ms);
+ReplayDecision evaluateAndRecordNonce(ControlSourceState* state, uint64_t nonce);
+void refillRateLimitTokens(ControlSourceState* state, uint32_t now_ms);
+bool consumeRateLimitToken(ControlSourceState* state, uint32_t now_ms, uint16_t* out_retry_after_ms);
+void applyAckFlagsForFrame(const ParsedCmdFrame& frame, OkuaAckPacket* ack);
+void cleanupExpiredAckCache(uint32_t now_ms);
+CachedCmdAck* findExactAckCacheEntry(const ParsedCmdFrame& frame, uint32_t now_ms);
+bool hasNonceSeqConflictInCache(const ParsedCmdFrame& frame, uint32_t now_ms);
+void storeAckCacheEntry(const ParsedCmdFrame& frame, const OkuaAckPacket& ack, uint32_t now_ms);
+void applyCommandSpecificAckPolicy(const ParsedCmdFrame& frame, OkuaAckPacket* ack);
+CmdParseResult parseIncomingCmdFrame(ParsedCmdFrame* frame);
+void fillAckForParseResult(const ParsedCmdFrame& frame, OkuaAckPacket* ack);
+void fillSecurityRejectionAck(const ParsedCmdFrame& frame, uint8_t status_code, uint16_t err_detail, uint16_t retry_after_ms, OkuaAckPacket* ack);
+bool buildAckForFrameWithSecurity(const ParsedCmdFrame& frame, OkuaAckPacket* ack);
+bool openUdpSocket();
+void connectWiFiBlocking();
+void ensureLink();
+bool sendUdpRawTo(const IPAddress& dst_ip, const uint8_t* data, size_t len, uint16_t port);
+bool sendUdpRaw(const uint8_t* data, size_t len, uint16_t port);
+bool sendOkuaAckTo(const IPAddress& dst_ip, const OkuaAckPacket& ack);
+void scheduleSoftReboot();
+void servicePendingControlActions();
+void dispatchAcceptedCommandMinimal(const ParsedCmdFrame& frame);
+void serviceControlPlaneIngress();
+bool sendOkuaEvt(uint8_t midi_bus, uint8_t midi_ch0, uint8_t note, uint8_t vel, uint8_t flags);
+bool sendOkuaStat(uint8_t state_flags);
+uint8_t plantMapNote(float v);
+uint8_t plantMapVel(float activity);
+uint8_t plantLimitJump(uint8_t n);
+bool plantSendNoteOn(uint8_t note, uint8_t vel, bool force = false);
+bool plantSendNoteOff(uint8_t note);
+void servicePlantField();
+void fruitSendAll(bool noteOn, uint8_t vel, uint8_t flags);
+void calibrateFruit2Phases(float vNow);
+void serviceFruitField();
+void testProbeInit();
+void testProbeToggleLed();
+void servicePlantTestProbe();
+void servicePlantTest();
+void serviceFruitTest();
+void setup();
+void loop();
 
 
 /*============================================================================================
@@ -1564,7 +1736,7 @@ uint8_t plantLimitJump(uint8_t n) {
   return n;
 }
 
-bool plantSendNoteOn(uint8_t note, uint8_t vel, bool force = false) {
+bool plantSendNoteOn(uint8_t note, uint8_t vel, bool force) {
   uint32_t now = millis();
   const uint32_t throttle_ms = (g_plantThrottleMs > 0) ? g_plantThrottleMs : (uint32_t)PLANT_THROTTLE_MS;
   if (!force && (now - g_plantLastSentMs < throttle_ms)) return false;
@@ -1706,10 +1878,12 @@ unsigned long g_fruitBootMs = 0;
 unsigned long g_fruitRefineStartMs = 0;
 
 float g_fruitBaselineV = 0.0f;
+float g_fruitBaselineAnchorV = 0.0f;
 float g_fruitFilteredV = 0.0f;
 float g_fruitPrevV = 0.0f;
 float g_fruitVarDv = 0.0f;
 float g_fruitSigma = 0.0f;
+bool  g_fruitBaselineAnchorSet = false;
 
 bool  g_fruitContactActive = false;
 int8_t g_fruitTouchSign = +1;
@@ -1720,6 +1894,8 @@ unsigned long g_fruitDownHoldStartMs = 0;
 unsigned long g_fruitLastEnergyOkMs = 0;
 unsigned long g_fruitRecoveryUntilMs = 0;
 unsigned long g_fruitLastKeepaliveMs = 0;
+unsigned long g_fruitNearBaselineStartMs = 0;
+bool g_fruitEnterArmed = false;
 
 void fruitSendAll(bool noteOn, uint8_t vel, uint8_t flags) {
   for (uint8_t i = 0; i < FRUIT_ROUTE_COUNT; ++i) {
@@ -1767,6 +1943,8 @@ void calibrateFruit2Phases(float vNow) {
 
       g_fruitCalFastDone = true;
       g_fruitRefineStartMs = now;
+      g_fruitBaselineAnchorV = g_fruitBaselineV;
+      g_fruitBaselineAnchorSet = true;
     }
     return;
   }
@@ -1776,6 +1954,8 @@ void calibrateFruit2Phases(float vNow) {
     if (fabsf(dv) < 0.12f) {
       g_fruitBaselineV += 0.01f * dv;
       if (g_fruitBaselineV < FRUIT_BASE_CLAMP_MIN) g_fruitBaselineV = FRUIT_BASE_CLAMP_MIN;
+      g_fruitBaselineAnchorV = g_fruitBaselineV;
+      g_fruitBaselineAnchorSet = true;
     }
 
     if ((now - g_fruitRefineStartMs) >= FRUIT_AUTOCAL_REFINE_MS) {
@@ -1794,6 +1974,17 @@ void serviceFruitField() {
 
   float vRaw = readVmed3();
   g_fruitFilteredV = FRUIT_FILTER_ALPHA * vRaw + (1.0f - FRUIT_FILTER_ALPHA) * g_fruitFilteredV;
+
+  // Offset fijo opcional (ej. EB1 ~1.5V) usado como semilla.
+  // No se bloquea el baseline por ciclo para evitar "contacto permanente"
+  // cuando el offset real en reposo no coincide exacto.
+  if (FRUIT_FIXED_OFFSET_V > 0.0f && !g_fruitCalFastDone) {
+    g_fruitBaselineV = fmaxf(FRUIT_FIXED_OFFSET_V, FRUIT_BASE_CLAMP_MIN);
+    g_fruitBaselineAnchorV = g_fruitBaselineV;
+    g_fruitBaselineAnchorSet = true;
+    g_fruitCalFastDone = true;
+    g_fruitCalRefineDone = true;
+  }
 
   if (!g_fruitCalFastDone || !g_fruitCalRefineDone) {
     calibrateFruit2Phases(g_fruitFilteredV);
@@ -1820,7 +2011,7 @@ void serviceFruitField() {
   float slope_proj = dv_dt * (float)signUse;
 
   if (!g_fruitContactActive && now >= g_fruitRecoveryUntilMs) {
-    g_fruitVarDv = (1.0f - 0.05f) * g_fruitVarDv + 0.05f * (dv * dv);
+    g_fruitVarDv = (1.0f - FRUIT_VAR_ALPHA) * g_fruitVarDv + FRUIT_VAR_ALPHA * (dv * dv);
     g_fruitSigma = sqrtf(fmaxf(g_fruitVarDv, 0.0f));
   }
 
@@ -1829,11 +2020,27 @@ void serviceFruitField() {
 
   float th_up   = fmaxf(FD.abs_min_up,   fmaxf(th_rel_up, FD.k_sigma_up * g_fruitSigma));
   float th_down = fmaxf(FD.abs_min_down, fmaxf(FD.rel_down_f * th_up, FD.k_sigma_down * g_fruitSigma));
+  bool nearBaseline = (fabsf(dv_proj) <= th_down);
+
+  if (!g_fruitContactActive && now >= g_fruitRecoveryUntilMs) {
+    if (nearBaseline) {
+      if (g_fruitNearBaselineStartMs == 0) g_fruitNearBaselineStartMs = now;
+      if (now - g_fruitNearBaselineStartMs >= FRUIT_REARM_HOLD_MS) {
+        g_fruitEnterArmed = true;
+      }
+    } else {
+      g_fruitNearBaselineStartMs = 0;
+      g_fruitEnterArmed = false;
+    }
+  } else {
+    g_fruitNearBaselineStartMs = 0;
+  }
 
   bool ampStrong = (dv_proj >= FD.abs_strong_up);
   bool ampGate   = (dv_proj >= th_up);
   bool slopeGate = (slope_proj >= FD.slope_min_strong);
-  bool enterCand = ampStrong || (ampGate && slopeGate);
+  bool motionAbsGate = (fabsf(dv_dt) >= FRUIT_ENTER_MIN_SLOPE_ABS);
+  bool enterCand = (ampStrong && motionAbsGate) || (ampGate && slopeGate);
 
   if (enterCand) {
     if (g_fruitUpHoldStartMs == 0) g_fruitUpHoldStartMs = now;
@@ -1842,7 +2049,7 @@ void serviceFruitField() {
   }
 
   bool refractory = (now - g_fruitLastReleaseMs < FD.refract_ms);
-  bool enterNow = (!refractory && !g_fruitContactActive &&
+  bool enterNow = (!refractory && !g_fruitContactActive && g_fruitEnterArmed &&
                    g_fruitUpHoldStartMs &&
                    (now - g_fruitUpHoldStartMs >= FD.on_hold_ms));
 
@@ -1853,6 +2060,8 @@ void serviceFruitField() {
     g_fruitLastEnergyOkMs = now;
     g_fruitDownHoldStartMs = 0;
     g_fruitLastKeepaliveMs = 0;
+    g_fruitNearBaselineStartMs = 0;
+    g_fruitEnterArmed = false;
 
     fruitSendAll(true, 100, EVT_FLAG_TOUCH);
   }
@@ -1896,13 +2105,23 @@ void serviceFruitField() {
     g_fruitUpHoldStartMs = 0;
     g_fruitDownHoldStartMs = 0;
     g_fruitRecoveryUntilMs = now + FRUIT_RECOVERY_MS;
+    g_fruitNearBaselineStartMs = 0;
+    g_fruitEnterArmed = false;
 
     fruitSendAll(false, 0, 0);
   }
 
   if (!g_fruitContactActive && now >= g_fruitRecoveryUntilMs) {
-    g_fruitBaselineV += FRUIT_BASE_A * (g_fruitFilteredV - g_fruitBaselineV);
-    if (g_fruitBaselineV < FRUIT_BASE_CLAMP_MIN) g_fruitBaselineV = FRUIT_BASE_CLAMP_MIN;
+    if (g_fruitBaselineAnchorSet && FRUIT_FIXED_OFFSET_WINDOW_V > 0.0f) {
+      float nextBase = g_fruitBaselineV + FRUIT_BASE_A * (g_fruitFilteredV - g_fruitBaselineV);
+      float baseLo = g_fruitBaselineAnchorV - FRUIT_FIXED_OFFSET_WINDOW_V;
+      float baseHi = g_fruitBaselineAnchorV + FRUIT_FIXED_OFFSET_WINDOW_V;
+      if (baseLo < FRUIT_BASE_CLAMP_MIN) baseLo = FRUIT_BASE_CLAMP_MIN;
+      g_fruitBaselineV = clampf(nextBase, baseLo, baseHi);
+    } else {
+      g_fruitBaselineV += FRUIT_BASE_A * (g_fruitFilteredV - g_fruitBaselineV);
+      if (g_fruitBaselineV < FRUIT_BASE_CLAMP_MIN) g_fruitBaselineV = FRUIT_BASE_CLAMP_MIN;
+    }
   }
 }
 
@@ -2028,6 +2247,13 @@ void setup() {
   g_fruitBootMs = millis();
   g_fruitFilteredV = readVmed3();
   g_fruitPrevV = g_fruitFilteredV;
+  if (FRUIT_FIXED_OFFSET_V > 0.0f) {
+    g_fruitBaselineV = fmaxf(FRUIT_FIXED_OFFSET_V, FRUIT_BASE_CLAMP_MIN);
+    g_fruitBaselineAnchorV = g_fruitBaselineV;
+    g_fruitBaselineAnchorSet = true;
+    g_fruitCalFastDone = true;
+    g_fruitCalRefineDone = true;
+  }
   g_plantSmoothV = readVmed3();
   g_plantLastRawV = g_plantSmoothV;
   okuaConfigureBuildInfo(kOkuaBuildInfoConfig);
@@ -2051,6 +2277,20 @@ void setup() {
   Serial.print("UDP_BIND_PORT : "); Serial.println(OKUA_NODE_BIND_PORT);
   Serial.print("MODE          : "); Serial.println((ACTIVE_MODE == MODE_TEST) ? "TEST" : "FIELD");
   Serial.print("SENSOR        : "); Serial.println((ACTIVE_SENSOR == SENSOR_PLANT) ? "PLANT" : "FRUIT");
+  if (ACTIVE_SENSOR == SENSOR_FRUIT) {
+    Serial.print("FRUIT_OFFSET  : "); Serial.println(FRUIT_FIXED_OFFSET_V, 3);
+    Serial.print("FRUIT_ROUTES  : "); Serial.println(FRUIT_ROUTE_COUNT);
+    for (uint8_t i = 0; i < FRUIT_ROUTE_COUNT; ++i) {
+      Serial.print("  ROUTE[");
+      Serial.print(i);
+      Serial.print("] bus=");
+      Serial.print(FRUIT_ROUTES[i].midi_bus);
+      Serial.print(" ch=");
+      Serial.print(FRUIT_ROUTES[i].midi_channel_1b);
+      Serial.print(" note=");
+      Serial.println(FRUIT_ROUTES[i].note);
+    }
+  }
   Serial.print("BOOT_MARKER4  : "); Serial.println(g_bootMarker4);
   Serial.print("FW_VERSION    : "); Serial.println(okuaBuildVersionStr());
   Serial.print("FW_VERSION_CD : "); Serial.println((unsigned long)okuaBuildVersionCode());

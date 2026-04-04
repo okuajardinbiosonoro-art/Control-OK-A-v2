@@ -24,7 +24,7 @@ Resultado del gate:
 Se revisó el estado real del repo en `2026-03-28` a partir de:
 
 - `platformio.ini`
-- `firmware/okua_node_udp_v1/okua_node_udp_v1.ino`
+- `firmware/okua_node_udp_v1/okua_node_udp_v1.cpp`
 - `firmware/okua_node_udp_v1/okua_control_plane.h`
 - `docs/firmware/firmware_profile_audit.md`
 - artefactos ya presentes en `.pio/build/okua_node_esp32dev/`

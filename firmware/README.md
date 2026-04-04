@@ -2,7 +2,7 @@
 
 This repository now tracks the node sketch used by CKv2 tickets under:
 
-- `firmware/okua_node_udp_v1/okua_node_udp_v1.ino`
+- `firmware/okua_node_udp_v1/okua_node_udp_v1.cpp`
 - `firmware/okua_node_udp_v1/okua_control_plane.h`
 
 Ticket 13.1 scope in this folder:

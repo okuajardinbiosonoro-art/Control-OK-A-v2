@@ -277,7 +277,7 @@ class ArtifactAgentService:
         )
         self._platformio_ini_path = self._repo_root / "platformio.ini"
         self._firmware_source_path = (
-            self._repo_root / "firmware" / "okua_node_udp_v1" / "okua_node_udp_v1.ino"
+            self._repo_root / "firmware" / "okua_node_udp_v1" / "okua_node_udp_v1.cpp"
         )
 
     @property
