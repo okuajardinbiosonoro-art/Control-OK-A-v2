@@ -3,10 +3,15 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QRectF, QSize, Qt
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QImage, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
+from control_okua.app_qt.contracts.home_map_layout_contract import (
+    DEFAULT_HOME_MAP_BOXES,
+    HomeMapBoxSpec,
+    resolve_home_map_box,
+)
 from control_okua.app_qt.navigation_shell import BRAND_ACCENT, BRAND_DEEP, BRAND_SAND
 
 
@@ -19,20 +24,51 @@ def resolve_home_map_asset_path() -> Path:
 
 
 class HomeMapPanel(QWidget):
+    boxSelectionChanged = Signal(object)
+
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._asset_path = resolve_home_map_asset_path()
         self._map_pixmap = self._load_pixmap(self._asset_path)
         self._map_source_rect = self._resolve_content_rect(self._map_pixmap.toImage())
+        self._box_specs = DEFAULT_HOME_MAP_BOXES
+        self._selected_box_key: str | None = None
+        self._hovered_box_key: str | None = None
         self.setMinimumHeight(480)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setMouseTracking(True)
 
     @property
     def asset_path(self) -> Path:
         return self._asset_path
 
+    def box_specs(self) -> tuple[HomeMapBoxSpec, ...]:
+        return self._box_specs
+
     def has_map_asset(self) -> bool:
         return not self._map_pixmap.isNull()
+
+    def selected_box(self) -> HomeMapBoxSpec | None:
+        if self._selected_box_key is None:
+            return None
+        return resolve_home_map_box(self._selected_box_key)
+
+    def select_box(self, box_key: str | None) -> None:
+        canonical_key = str(box_key).strip().lower() if isinstance(box_key, str) else None
+        if canonical_key == self._selected_box_key:
+            return
+        self._selected_box_key = canonical_key
+        self.boxSelectionChanged.emit(self.selected_box())
+        self.update()
+
+    def box_screen_rect(self, box_key: str) -> QRectF | None:
+        spec = resolve_home_map_box(box_key)
+        if spec is None:
+            return None
+        map_rect = self._resolved_map_target_rect()
+        if map_rect is None:
+            return None
+        return self._marker_rect_for_spec(spec, map_rect)
 
     def sizeHint(self) -> QSize:
         return QSize(1560, 920)
@@ -87,6 +123,36 @@ class HomeMapPanel(QWidget):
         painter.restore()
         painter.setPen(QPen(QColor(BRAND_ACCENT), 1.0))
         painter.drawRoundedRect(map_rect, 22.0, 22.0)
+        self._draw_box_overlays(painter, map_rect)
+        self._draw_context_card(painter, map_rect)
+
+    def mousePressEvent(self, event) -> None:  # type: ignore[override]
+        if event.button() == Qt.MouseButton.LeftButton:
+            hovered_spec = self._spec_at_position(event.position())
+            if hovered_spec is not None:
+                self.select_box(hovered_spec.box_key)
+                event.accept()
+                return
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:  # type: ignore[override]
+        hovered_spec = self._spec_at_position(event.position())
+        hovered_key = hovered_spec.box_key if hovered_spec is not None else None
+        if hovered_key != self._hovered_box_key:
+            self._hovered_box_key = hovered_key
+            self.setCursor(
+                Qt.CursorShape.PointingHandCursor
+                if hovered_key is not None
+                else Qt.CursorShape.ArrowCursor
+            )
+            self.update()
+        super().mouseMoveEvent(event)
+
+    def leaveEvent(self, event) -> None:  # type: ignore[override]
+        self._hovered_box_key = None
+        self.setCursor(Qt.CursorShape.ArrowCursor)
+        self.update()
+        super().leaveEvent(event)
 
     @staticmethod
     def _load_pixmap(asset_path: Path) -> QPixmap:
@@ -99,16 +165,16 @@ class HomeMapPanel(QWidget):
     def _resolve_content_rect(image: QImage) -> QRectF | None:
         if image.isNull():
             return None
-        if not image.hasAlphaChannel():
-            return QRectF(image.rect())
-
         left = image.width()
         top = image.height()
         right = -1
         bottom = -1
         for y in range(image.height()):
             for x in range(image.width()):
-                if QColor.fromRgba(image.pixel(x, y)).alpha() <= 8:
+                pixel = QColor.fromRgba(image.pixel(x, y))
+                if pixel.alpha() <= 8:
+                    continue
+                if pixel.red() >= 250 and pixel.green() >= 250 and pixel.blue() >= 250:
                     continue
                 left = min(left, x)
                 top = min(top, y)
@@ -118,3 +184,126 @@ class HomeMapPanel(QWidget):
         if right < left or bottom < top:
             return QRectF(image.rect())
         return QRectF(left, top, right - left + 1, bottom - top + 1)
+
+    def _resolved_map_target_rect(self) -> QRectF | None:
+        outer_rect = QRectF(self.rect()).adjusted(1.0, 1.0, -1.0, -1.0)
+        map_rect = outer_rect.adjusted(2.0, 2.0, -2.0, -2.0)
+        if self._map_pixmap.isNull():
+            return map_rect
+
+        source_rect = self._map_source_rect if self._map_source_rect is not None else QRectF(self._map_pixmap.rect())
+        source_size = source_rect.size()
+        if source_size.width() <= 0 or source_size.height() <= 0:
+            return map_rect
+        scale = min(
+            map_rect.width() / source_size.width(),
+            map_rect.height() / source_size.height(),
+        )
+        target_width = source_size.width() * scale
+        target_height = source_size.height() * scale
+        return QRectF(
+            map_rect.left() + (map_rect.width() - target_width) / 2.0,
+            map_rect.top() + (map_rect.height() - target_height) / 2.0,
+            target_width,
+            target_height,
+        )
+
+    def _marker_rect_for_spec(self, spec: HomeMapBoxSpec, map_rect: QRectF) -> QRectF:
+        width = max(36.0, map_rect.width() * spec.normalized_size[0] * 1.06)
+        height = max(34.0, map_rect.height() * spec.normalized_size[1] * 1.08)
+        center_x = map_rect.left() + (map_rect.width() * spec.normalized_center[0])
+        center_y = map_rect.top() + (map_rect.height() * spec.normalized_center[1])
+        return QRectF(center_x - (width / 2.0), center_y - (height / 2.0), width, height)
+
+    def _spec_at_position(self, position: QPointF) -> HomeMapBoxSpec | None:
+        map_rect = self._resolved_map_target_rect()
+        if map_rect is None:
+            return None
+        for spec in self._box_specs:
+            if self._marker_rect_for_spec(spec, map_rect).adjusted(-10.0, -10.0, 10.0, 10.0).contains(position):
+                return spec
+        return None
+
+    def _draw_box_overlays(self, painter: QPainter, map_rect: QRectF) -> None:
+        for spec in self._box_specs:
+            marker_rect = self._marker_rect_for_spec(spec, map_rect)
+            is_selected = spec.box_key == self._selected_box_key
+            is_hovered = spec.box_key == self._hovered_box_key
+
+            halo_rect = marker_rect.adjusted(-7.0, -7.0, 7.0, 7.0)
+            if is_selected:
+                halo_fill = QColor("#E6F6EC")
+                halo_border = QColor(BRAND_ACCENT)
+            elif is_hovered:
+                halo_fill = QColor("#F6EFE1")
+                halo_border = QColor("#BFA783")
+            else:
+                halo_fill = QColor(255, 255, 255, 180)
+                halo_border = QColor("#D6C9B3")
+
+            painter.setPen(QPen(halo_border, 1.5 if (is_selected or is_hovered) else 1.0))
+            painter.setBrush(halo_fill)
+            painter.drawEllipse(halo_rect)
+
+            marker_path = QPainterPath()
+            marker_path.addRoundedRect(marker_rect, 10.0, 10.0)
+            painter.fillPath(marker_path, QColor("#FFFEFB"))
+            painter.setPen(QPen(QColor(BRAND_ACCENT if is_selected else "#B89E73"), 1.6 if is_selected else 1.1))
+            painter.drawPath(marker_path)
+
+            painter.setPen(QColor(BRAND_DEEP))
+            painter.drawText(
+                marker_rect,
+                Qt.AlignmentFlag.AlignCenter,
+                str(spec.box_index),
+            )
+
+    def _draw_context_card(self, painter: QPainter, map_rect: QRectF) -> None:
+        selected_box = self.selected_box()
+        if selected_box is None:
+            card_rect = QRectF(
+                map_rect.left() + 18.0,
+                map_rect.bottom() - 56.0,
+                156.0,
+                38.0,
+            )
+            painter.setPen(QPen(QColor("#D6C9B3"), 1.0))
+            painter.setBrush(QColor(255, 254, 251, 235))
+            painter.drawRoundedRect(card_rect, 14.0, 14.0)
+            painter.setPen(QColor("#5B6F66"))
+            painter.drawText(card_rect.adjusted(12.0, 0.0, -12.0, 0.0), Qt.AlignmentFlag.AlignVCenter, "Seleccione una caja")
+            return
+
+        card_rect = QRectF(
+            map_rect.left() + 18.0,
+            map_rect.bottom() - 112.0,
+            min(292.0, map_rect.width() * 0.34),
+            92.0,
+        )
+        card_path = QPainterPath()
+        card_path.addRoundedRect(card_rect, 18.0, 18.0)
+        painter.fillPath(card_path, QColor(255, 253, 249, 242))
+        painter.setPen(QPen(QColor("#D6C9B3"), 1.0))
+        painter.drawPath(card_path)
+
+        painter.setPen(QColor(BRAND_DEEP))
+        title_rect = QRectF(card_rect.left() + 14.0, card_rect.top() + 10.0, card_rect.width() - 28.0, 22.0)
+        title_font = painter.font()
+        title_font.setBold(True)
+        painter.setFont(title_font)
+        painter.drawText(title_rect, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, selected_box.label)
+
+        body_font = painter.font()
+        body_font.setBold(False)
+        painter.setFont(body_font)
+        painter.setPen(QColor("#53685E"))
+        painter.drawText(
+            QRectF(card_rect.left() + 14.0, card_rect.top() + 34.0, card_rect.width() - 28.0, 20.0),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            f"Nodos esperados: {selected_box.expected_node_count}",
+        )
+        painter.drawText(
+            QRectF(card_rect.left() + 14.0, card_rect.top() + 54.0, card_rect.width() - 28.0, 24.0),
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            selected_box.detail_hint,
+        )
