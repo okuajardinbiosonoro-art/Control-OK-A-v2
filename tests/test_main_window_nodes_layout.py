@@ -4,6 +4,7 @@ import os
 import sys
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QGroupBox, QSizePolicy
 
 
@@ -200,9 +201,9 @@ def test_home_surface_keeps_primary_action_and_visual_map_as_main_elements() -> 
         assert window.tabs.currentWidget() is window.home_tab
         assert window.start_session_button.text() == "Iniciar sesión"
         assert window.home_map_panel.has_map_asset() is True
-        assert window.home_map_panel.minimumHeight() >= 560
+        assert window.home_map_panel.minimumHeight() >= 600
         assert window.home_map_panel.width() >= 900
-        assert window.home_more_button.text() == "Más"
+        assert window.home_more_button.text() == "Más ▾"
         assert window.change_profile_button.isHidden() is True
         assert window.reset_session_error_button.isHidden() is True
         assert window.shell_subtitle_label.isHidden() is True
@@ -219,6 +220,32 @@ def test_home_surface_keeps_primary_action_and_visual_map_as_main_elements() -> 
         assert "El detalle técnico vive en Diagnóstico y en Estado actual." not in home_texts
         assert "Home visual lista para cajas, overlays y estados 33.x" not in home_texts
         assert "Espacio reservado para alertas discretas y overlays futuros." not in home_texts
+
+        more_action_texts = [action.text() for action in window.home_more_menu.actions() if action.text().strip()]
+        assert "Diagnóstico" not in more_action_texts
+        assert "Nodos" not in more_action_texts
+        assert "Firmware" not in more_action_texts
+        assert "Técnico" not in more_action_texts
+        assert "Remoto" not in more_action_texts
+    finally:
+        window.close()
+
+
+def test_session_details_dialog_uses_light_surface_container() -> None:
+    _ensure_qapp()
+    window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
+    try:
+        dialog = window._details_dialog
+        assert dialog is not None
+        assert dialog.objectName() == "sessionDetailsDialog"
+        assert dialog.testAttribute(Qt.WidgetAttribute.WA_StyledBackground) is True
+        assert window._details_scroll_area is not None
+        assert window._details_scroll_area.objectName() == "sessionDetailsScrollArea"
+        assert window._details_scroll_area.viewport().objectName() == "sessionDetailsViewport"
+        assert (
+            window._details_scroll_area.viewport().testAttribute(Qt.WidgetAttribute.WA_StyledBackground)
+            is True
+        )
     finally:
         window.close()
 

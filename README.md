@@ -58,7 +58,7 @@ La ventana principal usa una shell no modal con navegación lateral persistente 
 Acciones y menú principal:
 
 - `Inicio` mantiene una acción primaria visible: `Iniciar sesión` o `Detener sesión`, según el estado real.
-- Las acciones secundarias (`Estado actual`, `Diagnóstico`, `Cambiar perfil`, `Reiniciar error`) quedan disponibles de forma discreta desde la propia Home.
+- Las acciones secundarias (`Estado actual`, `Cambiar perfil`, `Reiniciar error`) quedan disponibles de forma discreta desde `Más`, sin duplicar la navegación lateral.
 - Menú superior reducido:
   - `Aplicación`: `Cambiar perfil`, `Recargar configuración`, `Salir`
   - `Ayuda`: `Acerca de`

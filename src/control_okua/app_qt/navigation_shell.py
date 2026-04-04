@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
     QLabel,
@@ -72,6 +72,7 @@ class NavigationPanel(QWidget):
         self._buttons_by_key: dict[str, QPushButton] = {}
         self._button_group = QButtonGroup(self)
         self._button_group.setExclusive(True)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._build_ui()
 
     @property

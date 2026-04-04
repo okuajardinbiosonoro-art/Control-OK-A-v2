@@ -23,7 +23,7 @@ class HomeMapPanel(QWidget):
         super().__init__(parent)
         self._asset_path = resolve_home_map_asset_path()
         self._map_pixmap = self._load_pixmap(self._asset_path)
-        self.setMinimumHeight(560)
+        self.setMinimumHeight(600)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     @property
@@ -34,26 +34,26 @@ class HomeMapPanel(QWidget):
         return not self._map_pixmap.isNull()
 
     def sizeHint(self) -> QSize:
-        return QSize(1320, 820)
+        return QSize(1600, 980)
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 
-        outer_rect = QRectF(self.rect()).adjusted(6.0, 6.0, -6.0, -6.0)
-        painter.fillRect(outer_rect, QColor("#FBF8F2"))
+        outer_rect = QRectF(self.rect()).adjusted(1.5, 1.5, -1.5, -1.5)
+        painter.fillRect(outer_rect, QColor("#F7F4EC"))
 
         panel_path = QPainterPath()
-        panel_path.addRoundedRect(outer_rect, 24.0, 24.0)
+        panel_path.addRoundedRect(outer_rect, 22.0, 22.0)
         painter.fillPath(panel_path, QColor("#FFFEFB"))
-        painter.setPen(QPen(QColor(BRAND_SAND), 1.0))
+        painter.setPen(QPen(QColor(BRAND_SAND), 0.7))
         painter.drawPath(panel_path)
 
-        map_rect = outer_rect.adjusted(14.0, 14.0, -14.0, -14.0)
+        map_rect = outer_rect.adjusted(4.0, 4.0, -4.0, -4.0)
         painter.save()
         clip_path = QPainterPath()
-        clip_path.addRoundedRect(map_rect, 20.0, 20.0)
+        clip_path.addRoundedRect(map_rect, 18.0, 18.0)
         painter.setClipPath(clip_path)
         painter.fillRect(map_rect, QColor("#F4F7F0"))
 
@@ -76,8 +76,8 @@ class HomeMapPanel(QWidget):
             )
 
         painter.restore()
-        painter.setPen(QPen(QColor(BRAND_ACCENT), 1.2))
-        painter.drawRoundedRect(map_rect, 20.0, 20.0)
+        painter.setPen(QPen(QColor(BRAND_ACCENT), 1.0))
+        painter.drawRoundedRect(map_rect, 18.0, 18.0)
 
     @staticmethod
     def _load_pixmap(asset_path: Path) -> QPixmap:

@@ -179,15 +179,17 @@ class MainWindow(QMainWindow):
         shell_layout.setSpacing(0)
 
         self.navigation_panel = NavigationPanel(self._shell_nav_items, parent=self)
-        self.navigation_panel.setMinimumWidth(190)
+        self.navigation_panel.setMinimumWidth(172)
+        self.navigation_panel.setMaximumWidth(188)
         self.navigation_panel.section_requested.connect(self._on_navigation_requested)
         shell_layout.addWidget(self.navigation_panel, 0)
 
         content_host = QWidget(self)
         content_host.setObjectName("shellContentHost")
+        content_host.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         content_layout = QVBoxLayout(content_host)
-        content_layout.setContentsMargins(24, 18, 24, 18)
-        content_layout.setSpacing(8)
+        content_layout.setContentsMargins(18, 14, 18, 16)
+        content_layout.setSpacing(6)
 
         self.shell_title_label = QLabel("Inicio")
         self.shell_title_label.setObjectName("shellTitleLabel")
@@ -271,6 +273,8 @@ class MainWindow(QMainWindow):
 
     def _create_session_details_dialog(self) -> None:
         self._details_dialog = QDialog(self)
+        self._details_dialog.setObjectName("sessionDetailsDialog")
+        self._details_dialog.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._details_dialog.setWindowTitle("Estado actual")
         self._details_dialog.resize(900, 640)
         layout = QVBoxLayout(self._details_dialog)
@@ -311,15 +315,16 @@ class MainWindow(QMainWindow):
 
         operation_content = QWidget(self)
         operation_content.setObjectName("homeOperationContent")
+        operation_content.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         layout = QVBoxLayout(operation_content)
-        layout.setContentsMargins(4, 2, 4, 8)
-        layout.setSpacing(14)
+        layout.setContentsMargins(0, 0, 0, 6)
+        layout.setSpacing(10)
 
         top_bar = QHBoxLayout()
-        top_bar.setSpacing(16)
+        top_bar.setSpacing(14)
 
         intro_column = QVBoxLayout()
-        intro_column.setSpacing(6)
+        intro_column.setSpacing(4)
         self.home_status_chip = QLabel("Sesión inactiva")
         self.home_status_chip.setObjectName("homeStatusChip")
         self.home_status_chip.setAlignment(Qt.AlignCenter)
@@ -352,12 +357,11 @@ class MainWindow(QMainWindow):
 
         self.home_more_button = QToolButton(self)
         self.home_more_button.setObjectName("secondaryMenuButton")
-        self.home_more_button.setText("Más")
+        self.home_more_button.setText("Más ▾")
         self.home_more_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.home_more_menu = QMenu(self.home_more_button)
         self.home_more_button.setMenu(self.home_more_menu)
         self.home_more_menu.addAction(self.view_state_action)
-        self.home_more_menu.addAction(self.view_diagnostics_action)
         self.home_more_menu.addSeparator()
         self.change_profile_button = QPushButton("Cambiar perfil")
         self.change_profile_button.clicked.connect(self.change_profile)
@@ -383,6 +387,8 @@ class MainWindow(QMainWindow):
 
     def _build_session_details_tab(self) -> QWidget:
         tab = QWidget(self)
+        tab.setObjectName("sessionDetailsTab")
+        tab.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         layout = QVBoxLayout(tab)
 
         title_label = QLabel("Detalles de sesión")
@@ -400,8 +406,13 @@ class MainWindow(QMainWindow):
         layout.addWidget(hint_label)
 
         self._details_scroll_area = QScrollArea(self)
+        self._details_scroll_area.setObjectName("sessionDetailsScrollArea")
         self._details_scroll_area.setWidgetResizable(True)
+        self._details_scroll_area.viewport().setObjectName("sessionDetailsViewport")
+        self._details_scroll_area.viewport().setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         details_content = QWidget(self)
+        details_content.setObjectName("sessionDetailsContent")
+        details_content.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._details_cards_layout = QGridLayout(details_content)
         self._details_cards_layout.setContentsMargins(0, 0, 0, 0)
         self._details_cards_layout.setHorizontalSpacing(12)
