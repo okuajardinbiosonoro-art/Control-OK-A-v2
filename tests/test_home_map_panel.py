@@ -17,6 +17,7 @@ from control_okua.app_qt.widgets.home_map_panel import (  # noqa: E402
     HomeMapPanel,
     resolve_home_map_asset_path,
 )
+from control_okua.app_qt.viewmodels.home_map_detail_vm import build_home_map_box_detail_states  # noqa: E402
 from control_okua.app_qt.viewmodels.home_map_state_vm import build_home_map_box_states  # noqa: E402
 from control_okua.core.registry import NodeSnapshot, NodeStatus  # noqa: E402
 
@@ -120,5 +121,30 @@ def test_home_map_panel_exposes_aggregated_box_states() -> None:
         assert panel.selected_box_state() is not None
         assert panel.selected_box_state().aggregated_status is NodeStatus.DEGRADED
         assert panel.selected_box_state().badge_text == "DEG"
+    finally:
+        panel.close()
+
+
+def test_home_map_panel_exposes_selected_box_detail() -> None:
+    _ensure_qapp()
+    panel = HomeMapPanel()
+    try:
+        snapshots = [
+            _node_snapshot(node_id=11, status=NodeStatus.ONLINE),
+            _node_snapshot(node_id=12, status=NodeStatus.CALIBRATING),
+            _node_snapshot(node_id=13, status=NodeStatus.ONLINE),
+            _node_snapshot(node_id=14, status=NodeStatus.ONLINE),
+        ]
+        panel.set_box_states(build_home_map_box_states(snapshots))
+        panel.set_box_details(build_home_map_box_detail_states(snapshots))
+        panel.select_box("caja_3")
+
+        detail = panel.selected_box_detail()
+        assert detail is not None
+        assert detail.label == "Caja 3"
+        assert len(detail.nodes) == 5
+        assert detail.nodes[0].display_label == "EB3 · ID 11"
+        assert detail.nodes[1].status_label == "En calibración"
+        assert detail.nodes[-1].is_observed is False
     finally:
         panel.close()

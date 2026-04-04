@@ -296,6 +296,46 @@ def test_home_map_panel_receives_runtime_aggregated_box_states() -> None:
         window.close()
 
 
+def test_home_map_panel_receives_compact_node_detail_for_selected_box() -> None:
+    app = _ensure_qapp()
+    window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
+    try:
+        window._session_snapshot = SessionSnapshot(
+            state=SessionState.RUNNING,
+            active_profile="udp_jardin",
+            mode="udp",
+            backend=BackendKind.UDP,
+            message="running",
+            error=None,
+            can_start=False,
+            can_stop=True,
+        )
+        snapshots = [
+            _node_snapshot(node_id=11, status=NodeStatus.ONLINE),
+            _node_snapshot(node_id=12, status=NodeStatus.CALIBRATING),
+            _node_snapshot(node_id=13, status=NodeStatus.DEGRADED),
+            _node_snapshot(node_id=14, status=NodeStatus.ONLINE),
+        ]
+        window.session_controller.get_node_snapshots = lambda now=None: snapshots  # type: ignore[method-assign]
+
+        window.refresh_ui()
+        window.show()
+        app.processEvents()
+        window.home_map_panel.select_box("caja_3")
+
+        detail = window.home_map_panel.selected_box_detail()
+        assert detail is not None
+        assert detail.label == "Caja 3"
+        assert detail.aggregated_status is NodeStatus.DEGRADED
+        assert len(detail.nodes) == 5
+        assert detail.nodes[0].node_label == "EB3"
+        assert detail.nodes[1].status_label == "En calibración"
+        assert detail.nodes[2].badge_text == "DEG"
+        assert detail.nodes[4].is_observed is False
+    finally:
+        window.close()
+
+
 def test_home_status_chip_supports_running_text_without_clipping() -> None:
     app = _ensure_qapp()
     window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])

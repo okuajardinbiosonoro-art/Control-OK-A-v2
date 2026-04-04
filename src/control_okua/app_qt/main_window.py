@@ -56,6 +56,7 @@ from control_okua.app_qt.viewmodels import (
     build_general_status_summary,
     build_diagnostic_serial_rows,
     build_diagnostic_udp_rows,
+    build_home_map_box_detail_states,
     build_home_map_box_states,
     build_logging_summary,
     build_midi_summary,
@@ -1655,8 +1656,10 @@ class MainWindow(QMainWindow):
 
     def _refresh_home_map_states(self, *, now_monotonic: float) -> None:
         node_snapshots = self.session_controller.get_node_snapshots(now=now_monotonic)
-        self.home_map_panel.set_box_states(
-            build_home_map_box_states(node_snapshots)
+        box_states = build_home_map_box_states(node_snapshots)
+        self.home_map_panel.set_box_states(box_states)
+        self.home_map_panel.set_box_details(
+            build_home_map_box_detail_states(node_snapshots, box_states=box_states)
         )
 
     def _refresh_nodes_tree(self, snapshots: list[object], *, now_monotonic: float) -> None:

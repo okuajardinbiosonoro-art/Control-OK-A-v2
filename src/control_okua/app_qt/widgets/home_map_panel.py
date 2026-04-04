@@ -17,6 +17,10 @@ from control_okua.app_qt.viewmodels.home_map_state_vm import (
     HomeMapBoxState,
     build_home_map_box_states,
 )
+from control_okua.app_qt.viewmodels.home_map_detail_vm import (
+    HomeMapBoxDetailState,
+    build_home_map_box_detail_states,
+)
 from control_okua.core.registry import NodeStatus
 
 
@@ -65,6 +69,8 @@ class HomeMapPanel(QWidget):
         self._box_specs = DEFAULT_HOME_MAP_BOXES
         self._box_states = build_home_map_box_states(node_snapshots=None, box_specs=self._box_specs)
         self._box_states_by_key = {state.box_key: state for state in self._box_states}
+        self._box_details = build_home_map_box_detail_states(node_snapshots=None, box_specs=self._box_specs)
+        self._box_details_by_key = {detail.box_key: detail for detail in self._box_details}
         self._selected_box_key: str | None = None
         self._hovered_box_key: str | None = None
         self.setMinimumHeight(480)
@@ -98,6 +104,11 @@ class HomeMapPanel(QWidget):
             return None
         return self._box_states_by_key.get(self._selected_box_key)
 
+    def selected_box_detail(self) -> HomeMapBoxDetailState | None:
+        if self._selected_box_key is None:
+            return None
+        return self._box_details_by_key.get(self._selected_box_key)
+
     def select_box(self, box_key: str | None) -> None:
         canonical_key = str(box_key).strip().lower() if isinstance(box_key, str) else None
         if canonical_key == self._selected_box_key:
@@ -112,6 +123,17 @@ class HomeMapPanel(QWidget):
             return
         self._box_states = resolved_states
         self._box_states_by_key = {state.box_key: state for state in resolved_states}
+        self.update()
+
+    def set_box_details(
+        self,
+        box_details: tuple[HomeMapBoxDetailState, ...] | list[HomeMapBoxDetailState] | None,
+    ) -> None:
+        resolved_details = tuple(box_details or ())
+        if resolved_details == self._box_details:
+            return
+        self._box_details = resolved_details
+        self._box_details_by_key = {detail.box_key: detail for detail in resolved_details}
         self.update()
 
     def box_screen_rect(self, box_key: str) -> QRectF | None:
@@ -348,6 +370,7 @@ class HomeMapPanel(QWidget):
     def _draw_context_card(self, painter: QPainter, map_rect: QRectF) -> None:
         selected_box = self.selected_box()
         selected_state = self.selected_box_state()
+        selected_detail = self.selected_box_detail()
         if selected_box is None:
             card_rect = QRectF(
                 map_rect.left() + 18.0,
@@ -364,9 +387,9 @@ class HomeMapPanel(QWidget):
 
         card_rect = QRectF(
             map_rect.left() + 18.0,
-            map_rect.bottom() - 124.0,
-            min(316.0, map_rect.width() * 0.36),
-            106.0,
+            map_rect.bottom() - 254.0,
+            min(348.0, map_rect.width() * 0.38),
+            236.0,
         )
         card_path = QPainterPath()
         card_path.addRoundedRect(card_rect, 18.0, 18.0)
@@ -412,3 +435,61 @@ class HomeMapPanel(QWidget):
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
             selected_box.detail_hint if selected_state is None else selected_state.summary_text,
         )
+        if selected_detail is None:
+            return
+
+        divider_y = card_rect.top() + 107.0
+        painter.setPen(QPen(QColor("#E4D9C5"), 1.0))
+        painter.drawLine(
+            QPointF(card_rect.left() + 14.0, divider_y),
+            QPointF(card_rect.right() - 14.0, divider_y),
+        )
+
+        list_title_rect = QRectF(card_rect.left() + 14.0, divider_y + 6.0, card_rect.width() - 28.0, 16.0)
+        list_title_font = painter.font()
+        list_title_font.setBold(True)
+        list_title_font.setPointSize(max(8, list_title_font.pointSize() - 1))
+        painter.setFont(list_title_font)
+        painter.setPen(QColor("#5B6F66"))
+        painter.drawText(
+            list_title_rect,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            "Nodos de la caja",
+        )
+
+        row_top = divider_y + 26.0
+        row_height = 19.0
+        list_body_font = painter.font()
+        list_body_font.setBold(False)
+        list_body_font.setPointSize(max(8, list_body_font.pointSize() - 1))
+        painter.setFont(list_body_font)
+        for index, node in enumerate(selected_detail.nodes[:5]):
+            row_rect = QRectF(
+                card_rect.left() + 12.0,
+                row_top + (index * row_height),
+                card_rect.width() - 24.0,
+                17.0,
+            )
+            status_style = self._STATUS_STYLE[node.status]
+            dot_rect = QRectF(row_rect.left() + 2.0, row_rect.top() + 4.0, 8.0, 8.0)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(status_style["accent"]))
+            painter.drawEllipse(dot_rect)
+
+            painter.setPen(QColor(BRAND_DEEP))
+            painter.drawText(
+                QRectF(row_rect.left() + 16.0, row_rect.top(), row_rect.width() - 98.0, row_rect.height()),
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+                node.display_label,
+            )
+
+            badge_rect = QRectF(row_rect.right() - 56.0, row_rect.top() + 1.0, 54.0, 15.0)
+            painter.setPen(QPen(QColor(status_style["accent"]), 1.0))
+            painter.setBrush(QColor(status_style["badge_fill"]))
+            painter.drawRoundedRect(badge_rect, 7.0, 7.0)
+            painter.setPen(QColor(status_style["accent"]))
+            painter.drawText(
+                badge_rect,
+                Qt.AlignmentFlag.AlignCenter,
+                node.badge_text,
+            )
