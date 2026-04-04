@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from control_okua.app_qt.widgets import MidiOutputsWidget
+from control_okua.app_qt.widgets.midi_outputs_widget import MidiOutputsWidget
 
 
 class AdvancedToolsDialog(QDialog):
