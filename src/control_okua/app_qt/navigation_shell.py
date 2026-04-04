@@ -11,6 +11,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+BRAND_ACCENT = "#2FAC66"
+BRAND_DEEP = "#0B3B27"
+BRAND_EARTH = "#432918"
+BRAND_SAND = "#CBBBA0"
+
 
 @dataclass(frozen=True)
 class ShellNavItem:
@@ -85,6 +90,36 @@ class NavigationPanel(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
+        self.setObjectName("navigationPanel")
+        self.setStyleSheet(
+            """
+            QWidget#navigationPanel {
+                background-color: #F5F1E8;
+                border-right: 1px solid #CBBBA0;
+            }
+            QWidget#navigationPanel QLabel {
+                color: #0B3B27;
+            }
+            QWidget#navigationPanel QPushButton {
+                text-align: left;
+                padding: 10px 12px;
+                border-radius: 10px;
+                border: 1px solid transparent;
+                background-color: transparent;
+                color: #0B3B27;
+                font-weight: 600;
+            }
+            QWidget#navigationPanel QPushButton:hover {
+                background-color: #EFE6D5;
+                border-color: #CBBBA0;
+            }
+            QWidget#navigationPanel QPushButton:checked {
+                background-color: #2FAC66;
+                color: white;
+                border-color: #0B3B27;
+            }
+            """
+        )
 
         brand_label = QLabel("CKv2")
         brand_font = brand_label.font()

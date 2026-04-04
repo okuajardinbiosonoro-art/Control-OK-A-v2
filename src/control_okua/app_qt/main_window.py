@@ -36,7 +36,14 @@ from PySide6.QtWidgets import (
 from control_okua.app_qt.advanced_tools_dialog import AdvancedToolsDialog
 from control_okua.app_qt.control_plane_panel import ControlPlanePanel
 from control_okua.app_qt.firmware_manager_dialog import FirmwareManagerDialog
-from control_okua.app_qt.navigation_shell import NavigationPanel, ShellNavItem, build_primary_shell_items
+from control_okua.app_qt.navigation_shell import (
+    BRAND_ACCENT,
+    BRAND_DEEP,
+    BRAND_SAND,
+    NavigationPanel,
+    ShellNavItem,
+    build_primary_shell_items,
+)
 from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
 from control_okua.app_qt.widgets.config_view_dialog import ConfigViewDialog
 from control_okua.app_qt.viewmodels import (
@@ -222,6 +229,7 @@ class MainWindow(QMainWindow):
         shell_layout.addWidget(content_host, 1)
         root_layout.addWidget(shell_body, 1)
         self._create_session_details_dialog()
+        self._apply_shell_branding()
         self._sync_shell_navigation()
 
     def _build_menu_bar(self) -> None:
@@ -294,6 +302,24 @@ class MainWindow(QMainWindow):
     def _register_page(self, key: str, widget: QWidget) -> None:
         self._page_key_to_widget[str(key)] = widget
         self._widget_to_page_key[widget] = str(key)
+
+    def _apply_shell_branding(self) -> None:
+        if hasattr(self, "shell_title_label"):
+            self.shell_title_label.setStyleSheet(f"color: {BRAND_DEEP};")
+        if hasattr(self, "shell_subtitle_label"):
+            self.shell_subtitle_label.setStyleSheet(f"color: {BRAND_DEEP};")
+        if hasattr(self, "start_session_button"):
+            self.start_session_button.setStyleSheet(
+                f"background-color: {BRAND_ACCENT}; color: white; font-weight: 700; padding: 8px 14px;"
+            )
+        if hasattr(self, "home_visual_placeholder"):
+            self.home_visual_placeholder.setStyleSheet(
+                "border: 1px solid {sand}; border-radius: 12px; padding: 24px; "
+                "background-color: #F7F4EC; color: {deep};".format(
+                    sand=BRAND_SAND,
+                    deep=BRAND_DEEP,
+                )
+            )
 
     def _on_navigation_requested(self, key: str) -> None:
         target = self._page_key_to_widget.get(str(key))

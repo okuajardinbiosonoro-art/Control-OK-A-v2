@@ -115,7 +115,10 @@ def test_main_tabs_do_not_include_estado_actual_by_default() -> None:
         tab_titles = [window.tabs.tabText(index) for index in range(window.tabs.count())]
         assert tab_titles == ["Inicio", "Nodos", "Diagnóstico", "Firmware", "Técnico", "Remoto"]
         assert window.tabs.currentWidget() is window.home_tab
+        assert window.tabs.tabBar().isHidden() is True
+        assert window.navigation_panel is not None
         assert window.navigation_panel.button_for_key("home").isChecked() is True
+        assert window.shell_title_label.text() == "Inicio"
     finally:
         window.close()
 
@@ -159,6 +162,28 @@ def test_firmware_and_remote_surfaces_are_visible_from_primary_shell() -> None:
         assert "status" in window._remote_summary_labels
         window.show_remote_tab()
         assert window.tabs.currentWidget() is window.remote_tab
+        assert window.shell_title_label.text() == "Remoto"
+    finally:
+        window.close()
+
+
+def test_navigation_panel_changes_real_view_and_keeps_selection_in_sync() -> None:
+    app = _ensure_qapp()
+    window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
+    try:
+        window.show()
+        app.processEvents()
+        window.navigation_panel.button_for_key("nodes").click()
+        app.processEvents()
+        assert window.tabs.currentWidget() is window.nodes_tab
+        assert window.navigation_panel.button_for_key("nodes").isChecked() is True
+        assert window.shell_title_label.text() == "Nodos"
+
+        window.navigation_panel.button_for_key("remote").click()
+        app.processEvents()
+        assert window.tabs.currentWidget() is window.remote_tab
+        assert window.navigation_panel.button_for_key("remote").isChecked() is True
+        assert window.shell_title_label.text() == "Remoto"
     finally:
         window.close()
 

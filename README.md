@@ -38,7 +38,7 @@ El ejecutable queda en `dist/Control Okua.exe`.
 
 ## Estado actual de la app (UX)
 
-La ventana principal usa una shell operator-first no modal y separa la Home de las superficies técnicas:
+La ventana principal usa una shell operator-first no modal con navegación lateral persistente y un stack interno con tabs ocultas:
 
 - Superficies principales: `Inicio`, `Nodos`, `Diagnóstico`, `Firmware`, `Técnico`, `Remoto`.
 - Vista `Estado actual` disponible bajo demanda desde `Ver > Estado actual` (ya no es pestaña fija).
@@ -47,7 +47,7 @@ La ventana principal usa una shell operator-first no modal y separa la Home de l
 - `Diagnóstico` concentra resumen técnico, advertencias y panel de preflight desplegable.
 - `Técnico` integra `Control F3` y herramientas avanzadas.
 - `Firmware` deja visible el acceso al `Firmware Manager`.
-- `Remoto` expone el estado del servicio remoto y su control rápido.
+- `Remoto` queda confirmado como superficie principal de primer nivel porque ya expone estado y control rápido del servicio remoto sin depender del diálogo avanzado.
 
 En `Inicio` aparece el bloque `Preparación`, que resume:
 
