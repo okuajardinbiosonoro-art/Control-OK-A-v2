@@ -43,11 +43,11 @@ def _build_box_spec(
 
 
 DEFAULT_HOME_MAP_BOXES: tuple[HomeMapBoxSpec, ...] = (
-    _build_box_spec(box_index=1, center_x=0.2313, center_y=0.0614, width=0.0688, height=0.0438),
-    _build_box_spec(box_index=2, center_x=0.0445, center_y=0.4568, width=0.0672, height=0.0470),
-    _build_box_spec(box_index=3, center_x=0.0422, center_y=0.7220, width=0.0625, height=0.0416),
-    _build_box_spec(box_index=4, center_x=0.8477, center_y=0.7487, width=0.0672, height=0.0459),
-    _build_box_spec(box_index=5, center_x=0.4859, center_y=0.6275, width=0.0531, height=0.0363),
+    _build_box_spec(box_index=1, center_x=0.4859, center_y=0.6275, width=0.0531, height=0.0363),
+    _build_box_spec(box_index=2, center_x=0.0422, center_y=0.7220, width=0.0625, height=0.0416),
+    _build_box_spec(box_index=3, center_x=0.0445, center_y=0.4568, width=0.0672, height=0.0470),
+    _build_box_spec(box_index=4, center_x=0.2313, center_y=0.0614, width=0.0688, height=0.0438),
+    _build_box_spec(box_index=5, center_x=0.8477, center_y=0.7487, width=0.0672, height=0.0459),
 )
 
 
