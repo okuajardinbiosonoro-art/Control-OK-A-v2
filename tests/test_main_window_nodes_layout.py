@@ -39,7 +39,7 @@ def _build_cfg() -> dict[str, object]:
     }
 
 
-def _node_snapshot(*, node_id: int) -> NodeSnapshot:
+def _node_snapshot(*, node_id: int, status: NodeStatus = NodeStatus.ONLINE) -> NodeSnapshot:
     return NodeSnapshot(
         node_id=node_id,
         label=None,
@@ -59,7 +59,7 @@ def _node_snapshot(*, node_id: int) -> NodeSnapshot:
         last_state_flags=1,
         last_uptime_s=10,
         reported_pps_x10=10,
-        status=NodeStatus.ONLINE,
+        status=status,
     )
 
 
@@ -242,6 +242,56 @@ def test_home_surface_keeps_primary_action_and_visual_map_as_main_elements() -> 
         assert "Firmware" not in more_action_texts
         assert "Técnico" not in more_action_texts
         assert "Remoto" not in more_action_texts
+    finally:
+        window.close()
+
+
+def test_home_map_panel_receives_runtime_aggregated_box_states() -> None:
+    app = _ensure_qapp()
+    window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
+    try:
+        window._session_snapshot = SessionSnapshot(
+            state=SessionState.RUNNING,
+            active_profile="udp_jardin",
+            mode="udp",
+            backend=BackendKind.UDP,
+            message="running",
+            error=None,
+            can_start=False,
+            can_stop=True,
+        )
+        snapshots = [
+            _node_snapshot(node_id=1),
+            _node_snapshot(node_id=2),
+            _node_snapshot(node_id=3),
+            _node_snapshot(node_id=4),
+            _node_snapshot(node_id=5),
+            _node_snapshot(node_id=6),
+            _node_snapshot(node_id=7),
+            _node_snapshot(node_id=8),
+            _node_snapshot(node_id=9),
+            _node_snapshot(node_id=10, status=NodeStatus.CALIBRATING),
+            _node_snapshot(node_id=11),
+            _node_snapshot(node_id=12),
+            _node_snapshot(node_id=13),
+            _node_snapshot(node_id=14),
+            _node_snapshot(node_id=20, status=NodeStatus.OFFLINE),
+        ]
+        window.session_controller.get_node_snapshots = lambda now=None: snapshots  # type: ignore[method-assign]
+
+        window.refresh_ui()
+        window.show()
+        app.processEvents()
+        window.home_map_panel.select_box("caja_4")
+
+        box_states = {state.box_key: state for state in window.home_map_panel.box_states()}
+        assert box_states["caja_1"].aggregated_status is NodeStatus.ONLINE
+        assert box_states["caja_2"].aggregated_status is NodeStatus.CALIBRATING
+        assert box_states["caja_3"].aggregated_status is NodeStatus.DEGRADED
+        assert box_states["caja_4"].aggregated_status is NodeStatus.OFFLINE
+        assert box_states["caja_5"].aggregated_status is NodeStatus.OFFLINE
+        assert window.home_map_panel.selected_box_state() is not None
+        assert window.home_map_panel.selected_box_state().status_label == "Fuera de línea"
     finally:
         window.close()
 

@@ -13,6 +13,11 @@ from control_okua.app_qt.contracts.home_map_layout_contract import (
     resolve_home_map_box,
 )
 from control_okua.app_qt.navigation_shell import BRAND_ACCENT, BRAND_DEEP, BRAND_SAND
+from control_okua.app_qt.viewmodels.home_map_state_vm import (
+    HomeMapBoxState,
+    build_home_map_box_states,
+)
+from control_okua.core.registry import NodeStatus
 
 
 def resolve_home_map_asset_path() -> Path:
@@ -25,6 +30,32 @@ def resolve_home_map_asset_path() -> Path:
 
 class HomeMapPanel(QWidget):
     boxSelectionChanged = Signal(object)
+    _STATUS_STYLE = {
+        NodeStatus.ONLINE: {
+            "accent": QColor("#2FAC66"),
+            "halo": QColor(47, 172, 102, 42),
+            "fill": QColor(246, 253, 249, 242),
+            "badge_fill": QColor(238, 250, 243, 244),
+        },
+        NodeStatus.CALIBRATING: {
+            "accent": QColor("#2F7ED8"),
+            "halo": QColor(47, 126, 216, 40),
+            "fill": QColor(246, 250, 255, 242),
+            "badge_fill": QColor(239, 246, 255, 244),
+        },
+        NodeStatus.DEGRADED: {
+            "accent": QColor("#DD8A12"),
+            "halo": QColor(221, 138, 18, 42),
+            "fill": QColor(255, 250, 244, 242),
+            "badge_fill": QColor(255, 246, 235, 244),
+        },
+        NodeStatus.OFFLINE: {
+            "accent": QColor("#C45245"),
+            "halo": QColor(196, 82, 69, 42),
+            "fill": QColor(255, 248, 247, 242),
+            "badge_fill": QColor(255, 239, 237, 244),
+        },
+    }
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -32,6 +63,8 @@ class HomeMapPanel(QWidget):
         self._map_pixmap = self._load_pixmap(self._asset_path)
         self._map_source_rect = self._resolve_content_rect(self._map_pixmap.toImage())
         self._box_specs = DEFAULT_HOME_MAP_BOXES
+        self._box_states = build_home_map_box_states(node_snapshots=None, box_specs=self._box_specs)
+        self._box_states_by_key = {state.box_key: state for state in self._box_states}
         self._selected_box_key: str | None = None
         self._hovered_box_key: str | None = None
         self.setMinimumHeight(480)
@@ -45,6 +78,13 @@ class HomeMapPanel(QWidget):
     def box_specs(self) -> tuple[HomeMapBoxSpec, ...]:
         return self._box_specs
 
+    def box_states(self) -> tuple[HomeMapBoxState, ...]:
+        return self._box_states
+
+    def box_state(self, box_key: str) -> HomeMapBoxState | None:
+        canonical_key = str(box_key).strip().lower()
+        return self._box_states_by_key.get(canonical_key)
+
     def has_map_asset(self) -> bool:
         return not self._map_pixmap.isNull()
 
@@ -53,12 +93,25 @@ class HomeMapPanel(QWidget):
             return None
         return resolve_home_map_box(self._selected_box_key)
 
+    def selected_box_state(self) -> HomeMapBoxState | None:
+        if self._selected_box_key is None:
+            return None
+        return self._box_states_by_key.get(self._selected_box_key)
+
     def select_box(self, box_key: str | None) -> None:
         canonical_key = str(box_key).strip().lower() if isinstance(box_key, str) else None
         if canonical_key == self._selected_box_key:
             return
         self._selected_box_key = canonical_key
         self.boxSelectionChanged.emit(self.selected_box())
+        self.update()
+
+    def set_box_states(self, box_states: tuple[HomeMapBoxState, ...] | list[HomeMapBoxState] | None) -> None:
+        resolved_states = tuple(box_states or ())
+        if resolved_states == self._box_states:
+            return
+        self._box_states = resolved_states
+        self._box_states_by_key = {state.box_key: state for state in resolved_states}
         self.update()
 
     def box_screen_rect(self, box_key: str) -> QRectF | None:
@@ -227,29 +280,38 @@ class HomeMapPanel(QWidget):
     def _draw_box_overlays(self, painter: QPainter, map_rect: QRectF) -> None:
         for spec in self._box_specs:
             marker_rect = self._marker_rect_for_spec(spec, map_rect)
+            state = self._box_states_by_key.get(spec.box_key)
+            status = NodeStatus.OFFLINE if state is None else state.aggregated_status
+            style = self._STATUS_STYLE[status]
             is_selected = spec.box_key == self._selected_box_key
             is_hovered = spec.box_key == self._hovered_box_key
 
             halo_rect = marker_rect.adjusted(-7.0, -7.0, 7.0, 7.0)
+            halo_fill = QColor(style["halo"])
             if is_selected:
-                halo_fill = QColor("#E6F6EC")
-                halo_border = QColor(BRAND_ACCENT)
+                halo_fill.setAlpha(76)
             elif is_hovered:
-                halo_fill = QColor("#F6EFE1")
-                halo_border = QColor("#BFA783")
-            else:
-                halo_fill = QColor(255, 255, 255, 180)
-                halo_border = QColor("#D6C9B3")
-
-            painter.setPen(QPen(halo_border, 1.5 if (is_selected or is_hovered) else 1.0))
+                halo_fill.setAlpha(56)
+            halo_border = QColor(style["accent"])
+            painter.setPen(QPen(halo_border, 1.8 if (is_selected or is_hovered) else 1.2))
             painter.setBrush(halo_fill)
             painter.drawEllipse(halo_rect)
 
             marker_path = QPainterPath()
             marker_path.addRoundedRect(marker_rect, 10.0, 10.0)
-            painter.fillPath(marker_path, QColor("#FFFEFB"))
-            painter.setPen(QPen(QColor(BRAND_ACCENT if is_selected else "#B89E73"), 1.6 if is_selected else 1.1))
+            marker_fill = QColor(style["fill"])
+            if is_selected:
+                marker_fill.setAlpha(255)
+            elif is_hovered:
+                marker_fill.setAlpha(248)
+            painter.fillPath(marker_path, marker_fill)
+            painter.setPen(QPen(QColor(style["accent"]), 1.8 if is_selected else 1.25))
             painter.drawPath(marker_path)
+
+            status_dot_rect = QRectF(marker_rect.right() - 10.0, marker_rect.top() - 2.0, 10.0, 10.0)
+            painter.setPen(QPen(QColor("#FFFEFB"), 1.2))
+            painter.setBrush(QColor(style["accent"]))
+            painter.drawEllipse(status_dot_rect)
 
             painter.setPen(QColor(BRAND_DEEP))
             painter.drawText(
@@ -258,8 +320,34 @@ class HomeMapPanel(QWidget):
                 str(spec.box_index),
             )
 
+            if state is not None:
+                base_font = painter.font()
+                badge_rect = QRectF(
+                    marker_rect.center().x() - 19.0,
+                    marker_rect.bottom() + 5.0,
+                    38.0,
+                    16.0,
+                )
+                if badge_rect.bottom() > map_rect.bottom() - 4.0:
+                    badge_rect.moveTop(marker_rect.top() - 20.0)
+                painter.setPen(QPen(QColor(style["accent"]), 1.0))
+                painter.setBrush(QColor(style["badge_fill"]))
+                painter.drawRoundedRect(badge_rect, 8.0, 8.0)
+                badge_font = painter.font()
+                badge_font.setPointSize(max(7, badge_font.pointSize() - 1))
+                badge_font.setBold(True)
+                painter.setFont(badge_font)
+                painter.setPen(QColor(style["accent"]))
+                painter.drawText(
+                    badge_rect,
+                    Qt.AlignmentFlag.AlignCenter,
+                    state.badge_text,
+                )
+                painter.setFont(base_font)
+
     def _draw_context_card(self, painter: QPainter, map_rect: QRectF) -> None:
         selected_box = self.selected_box()
+        selected_state = self.selected_box_state()
         if selected_box is None:
             card_rect = QRectF(
                 map_rect.left() + 18.0,
@@ -276,9 +364,9 @@ class HomeMapPanel(QWidget):
 
         card_rect = QRectF(
             map_rect.left() + 18.0,
-            map_rect.bottom() - 112.0,
-            min(292.0, map_rect.width() * 0.34),
-            92.0,
+            map_rect.bottom() - 124.0,
+            min(316.0, map_rect.width() * 0.36),
+            106.0,
         )
         card_path = QPainterPath()
         card_path.addRoundedRect(card_rect, 18.0, 18.0)
@@ -296,14 +384,31 @@ class HomeMapPanel(QWidget):
         body_font = painter.font()
         body_font.setBold(False)
         painter.setFont(body_font)
+        if selected_state is not None:
+            state_style = self._STATUS_STYLE[selected_state.aggregated_status]
+            status_rect = QRectF(card_rect.left() + 14.0, card_rect.top() + 36.0, 126.0, 22.0)
+            painter.setPen(QPen(QColor(state_style["accent"]), 1.0))
+            painter.setBrush(QColor(state_style["badge_fill"]))
+            painter.drawRoundedRect(status_rect, 11.0, 11.0)
+            painter.setPen(QColor(state_style["accent"]))
+            painter.drawText(
+                status_rect,
+                Qt.AlignmentFlag.AlignCenter,
+                selected_state.status_label,
+            )
+
         painter.setPen(QColor("#53685E"))
         painter.drawText(
-            QRectF(card_rect.left() + 14.0, card_rect.top() + 34.0, card_rect.width() - 28.0, 20.0),
+            QRectF(card_rect.left() + 14.0, card_rect.top() + 62.0, card_rect.width() - 28.0, 18.0),
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-            f"Nodos esperados: {selected_box.expected_node_count}",
+            (
+                f"Nodos esperados: {selected_box.expected_node_count}"
+                if selected_state is None
+                else selected_state.counts_text
+            ),
         )
         painter.drawText(
-            QRectF(card_rect.left() + 14.0, card_rect.top() + 54.0, card_rect.width() - 28.0, 24.0),
+            QRectF(card_rect.left() + 14.0, card_rect.top() + 80.0, card_rect.width() - 28.0, 18.0),
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-            selected_box.detail_hint,
+            selected_box.detail_hint if selected_state is None else selected_state.summary_text,
         )

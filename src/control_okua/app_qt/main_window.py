@@ -56,6 +56,7 @@ from control_okua.app_qt.viewmodels import (
     build_general_status_summary,
     build_diagnostic_serial_rows,
     build_diagnostic_udp_rows,
+    build_home_map_box_states,
     build_logging_summary,
     build_midi_summary,
     build_mode_summary,
@@ -851,6 +852,7 @@ class MainWindow(QMainWindow):
         self._details_columns = columns
 
     def refresh_ui(self) -> None:
+        now_monotonic = time.monotonic()
         profile_summary = build_profile_summary(self.cfg)
         profile_mode_summary = build_profile_mode_summary(self.cfg)
         operation_summary = build_operation_summary(self.cfg)
@@ -930,6 +932,7 @@ class MainWindow(QMainWindow):
 
         self._set_home_status_chip_text(session_status_summary)
         self.home_profile_label.setText(f"{profile_summary} · {general_summary}")
+        self._refresh_home_map_states(now_monotonic=now_monotonic)
 
         self.start_session_button.setEnabled(session_action_state.can_start_session)
         self.stop_session_button.setEnabled(session_action_state.can_stop_session)
@@ -1393,9 +1396,11 @@ class MainWindow(QMainWindow):
         self.refresh_ui()
 
     def _on_runtime_refresh_tick(self) -> None:
+        now_monotonic = time.monotonic()
         if self._session_snapshot.state is SessionState.RUNNING:
             runtime_snapshot = self.session_controller.get_backend_runtime_snapshot()
             self._refresh_runtime_views(runtime_snapshot)
+            self._refresh_home_map_states(now_monotonic=now_monotonic)
             if self._is_nodes_view_visible():
                 self._refresh_nodes_views()
         if self.tabs.currentWidget() is self.remote_tab:
@@ -1415,6 +1420,7 @@ class MainWindow(QMainWindow):
         if self._is_runtime_view_visible():
             runtime_snapshot = self.session_controller.get_backend_runtime_snapshot()
             self._refresh_runtime_views(runtime_snapshot, force=True)
+            self._refresh_home_map_states(now_monotonic=time.monotonic())
 
     def show_session_details_dialog(self) -> None:
         if self._details_dialog is None:
@@ -1646,6 +1652,12 @@ class MainWindow(QMainWindow):
 
         self._refresh_nodes_tree(snapshots, now_monotonic=now_monotonic)
         self._apply_nodes_view_state(view_state)
+
+    def _refresh_home_map_states(self, *, now_monotonic: float) -> None:
+        node_snapshots = self.session_controller.get_node_snapshots(now=now_monotonic)
+        self.home_map_panel.set_box_states(
+            build_home_map_box_states(node_snapshots)
+        )
 
     def _refresh_nodes_tree(self, snapshots: list[object], *, now_monotonic: float) -> None:
         box_expanded_state = self._capture_node_box_expanded_state()

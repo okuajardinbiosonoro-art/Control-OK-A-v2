@@ -82,6 +82,13 @@ from control_okua.app_qt.viewmodels.node_presentation import (
     resolve_node_label,
     resolve_node_sort_key,
 )
+from control_okua.app_qt.viewmodels.home_map_state_vm import (
+    HomeMapBoxState,
+    aggregate_home_map_box_status,
+    build_home_map_box_state,
+    build_home_map_box_states,
+    format_home_map_box_status,
+)
 from control_okua.app_qt.viewmodels.ota_deploy_vm import (
     OtaDeployArtifactOption,
     OtaDeployNodeOption,
@@ -169,6 +176,11 @@ __all__ = [
     "resolve_node_label",
     "resolve_node_box_label",
     "resolve_node_sort_key",
+    "HomeMapBoxState",
+    "aggregate_home_map_box_status",
+    "build_home_map_box_state",
+    "build_home_map_box_states",
+    "format_home_map_box_status",
     "ALL_FIRMWARE_FILTER",
     "FirmwareArtifactDetail",
     "FirmwareCatalogRow",
