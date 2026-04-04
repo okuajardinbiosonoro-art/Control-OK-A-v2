@@ -13,6 +13,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from control_okua.app_qt.advanced_tools_dialog import AdvancedToolsDialog  # noqa: E402
+from control_okua.app_qt.widgets.home_map_view import HomeMapView  # noqa: E402
 from control_okua.app_qt.main_window import MainWindow  # noqa: E402
 from control_okua.app_qt.viewmodels import NodesTabViewState  # noqa: E402
 from control_okua.core.registry import NodeSnapshot, NodeStatus  # noqa: E402
@@ -115,6 +116,8 @@ def test_main_shell_uses_home_and_visible_primary_surfaces() -> None:
         tab_titles = [window.tabs.tabText(index) for index in range(window.tabs.count())]
         assert tab_titles == ["Home", "Nodos", "Diagnóstico", "Firmware / OTA", "Técnico"]
         assert window.tabs.currentWidget() is window.home_tab
+        assert isinstance(window.home_map_view, HomeMapView)
+        assert window.home_map_selection_group.title() == "Caja seleccionada"
     finally:
         window.close()
 
@@ -156,6 +159,19 @@ def test_firmware_surface_is_visible_and_actionable_from_shell() -> None:
         assert window.open_firmware_manager_button.text() == "Abrir Firmware Manager"
         assert "catalog" in window._firmware_summary_labels
         assert window.tabs.indexOf(window.firmware_tab) >= 0
+    finally:
+        window.close()
+
+
+def test_home_map_selection_updates_context_panel() -> None:
+    _ensure_qapp()
+    window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
+    try:
+        window._on_home_map_box_selected(1)
+        assert window._home_map_detail_labels["label"].text() == "Caja 1"
+        assert "Caja 1" in window._home_map_detail_labels["box_id"].text()
+        assert "EB1" in window._home_map_detail_labels["nodes"].text()
+        assert "siguiente ticket" in window._home_map_detail_labels["status"].text().lower()
     finally:
         window.close()
 

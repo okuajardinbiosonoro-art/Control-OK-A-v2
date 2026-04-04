@@ -32,10 +32,11 @@ from PySide6.QtWidgets import (
 )
 
 from control_okua.app_qt.advanced_tools_dialog import AdvancedToolsDialog
+from control_okua.app_qt.contracts import get_default_home_map_layout
 from control_okua.app_qt.control_plane_panel import ControlPlanePanel
 from control_okua.app_qt.firmware_manager_dialog import FirmwareManagerDialog
 from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
-from control_okua.app_qt.widgets import ConfigViewDialog
+from control_okua.app_qt.widgets import ConfigViewDialog, HomeMapView
 from control_okua.app_qt.viewmodels import (
     build_nodes_tab_view_state,
     NodesTabViewState,
@@ -128,6 +129,7 @@ class MainWindow(QMainWindow):
         self._firmware_catalog_store = FirmwareCatalogStore()
         self._firmware_summary_labels: dict[str, QLabel] = {}
         self._technical_summary_labels: dict[str, QLabel] = {}
+        self._home_map_detail_labels: dict[str, QLabel] = {}
         self.session_controller = session_controller or SessionController(
             self._session_cfg_provider,
             parent=self,
@@ -337,25 +339,45 @@ class MainWindow(QMainWindow):
         map_group = QGroupBox("Mapa operativo")
         map_layout = QVBoxLayout(map_group)
         map_intro_label = QLabel(
-            "Esta área reserva la futura Home guiada por mapa. "
-            "En este ticket se consolida la shell principal; el mapa vivo llegará en el siguiente paso."
+            "Base espacial estática de la Home. "
+            "Las cajas ya pueden seleccionarse; el estado agregado y los overlays vivos llegarán en el siguiente ticket."
         )
         map_intro_label.setWordWrap(True)
         map_layout.addWidget(map_intro_label)
-        self.home_map_placeholder_label = QLabel(
-            "Vista espacial reservada\n\n"
-            "Aquí aparecerá el plano operativo principal con lectura por caja y acceso contextual a detalle."
-        )
-        self.home_map_placeholder_label.setAlignment(Qt.AlignCenter)
-        self.home_map_placeholder_label.setMinimumHeight(260)
-        self.home_map_placeholder_label.setStyleSheet(
-            "border: 1px dashed #7a8a99; border-radius: 12px; padding: 24px; "
-            "background-color: rgba(255, 255, 255, 0.04);"
-        )
-        self.home_map_placeholder_label.setWordWrap(True)
-        map_layout.addWidget(self.home_map_placeholder_label, 1)
+
+        map_content = QWidget(self)
+        map_content_layout = QHBoxLayout(map_content)
+        map_content_layout.setContentsMargins(0, 0, 0, 0)
+        map_content_layout.setSpacing(12)
+
+        self.home_map_view = HomeMapView(get_default_home_map_layout(), parent=self)
+        self.home_map_view.box_selected.connect(self._on_home_map_box_selected)
+        map_content_layout.addWidget(self.home_map_view, 3)
+
+        self.home_map_selection_group = QGroupBox("Caja seleccionada")
+        self.home_map_selection_group.setMinimumWidth(260)
+        home_map_selection_layout = QFormLayout(self.home_map_selection_group)
+        selection_fields = [
+            ("label", "Nombre"),
+            ("box_id", "Identificación"),
+            ("nodes", "Nodos esperados"),
+            ("description", "Contexto"),
+            ("status", "Estado agregado"),
+            ("asset", "Plano base"),
+        ]
+        for key, field_name in selection_fields:
+            label = QLabel("-")
+            label.setWordWrap(True)
+            home_map_selection_layout.addRow(field_name, label)
+            self._home_map_detail_labels[key] = label
+        self.home_map_open_nodes_button = QPushButton("Ir a Nodos")
+        self.home_map_open_nodes_button.clicked.connect(self.show_nodes_tab)
+        home_map_selection_layout.addRow("", self.home_map_open_nodes_button)
+        map_content_layout.addWidget(self.home_map_selection_group, 2)
+
+        map_layout.addWidget(map_content, 1)
         self.home_map_hint_label = QLabel(
-            "El detalle técnico sigue disponible desde Nodos, Diagnóstico, Firmware / OTA y Técnico."
+            "Home ofrece lectura espacial rápida. Nodos sigue siendo la vista detallada técnico-operativa."
         )
         self.home_map_hint_label.setWordWrap(True)
         map_layout.addWidget(self.home_map_hint_label)
@@ -403,6 +425,7 @@ class MainWindow(QMainWindow):
 
         operation_scroll.setWidget(operation_content)
         tab_layout.addWidget(operation_scroll)
+        self._refresh_home_map_selection_summary()
         return tab
 
     def _build_session_details_tab(self) -> QWidget:
@@ -908,6 +931,7 @@ class MainWindow(QMainWindow):
             self._refresh_nodes_views()
         self._refresh_firmware_shell_summary()
         self._refresh_technical_shell_summary()
+        self._refresh_home_map_selection_summary()
 
         self.statusBar().showMessage(
             f"{preflight_status} | {session_status_summary} | {self._session_snapshot.message}"
@@ -1181,6 +1205,37 @@ class MainWindow(QMainWindow):
         details_label = self._details_summary_labels.get(key)
         if details_label is not None:
             details_label.setText(text)
+
+    def _on_home_map_box_selected(self, box_id: int) -> None:
+        try:
+            self.home_map_view.set_selected_box(box_id)
+        except KeyError:
+            return
+        self._refresh_home_map_selection_summary()
+
+    def _refresh_home_map_selection_summary(self) -> None:
+        if not self._home_map_detail_labels:
+            return
+        selected = self.home_map_view.selected_box() if hasattr(self, "home_map_view") else None
+        if selected is None:
+            for label in self._home_map_detail_labels.values():
+                label.setText("-")
+            return
+
+        nodes_text = ", ".join(selected.expected_node_labels)
+        if not nodes_text:
+            nodes_text = "Sin nodos definidos"
+        asset_text = (
+            "Asset configurado" if self.home_map_view.has_background_asset() else "Fallback estático activo"
+        )
+        self._home_map_detail_labels["label"].setText(selected.label)
+        self._home_map_detail_labels["box_id"].setText(
+            f"Caja {selected.box_id} | slot={selected.position_slot}"
+        )
+        self._home_map_detail_labels["nodes"].setText(nodes_text)
+        self._home_map_detail_labels["description"].setText(selected.description)
+        self._home_map_detail_labels["status"].setText(selected.future_status_hint)
+        self._home_map_detail_labels["asset"].setText(asset_text)
 
     def _on_session_state_changed(self, _state_value: str) -> None:
         self.refresh_ui()

@@ -41,7 +41,7 @@ El ejecutable queda en `dist/Control Okua.exe`.
 La ventana principal usa una shell operator-first no modal y separa operación principal de superficies técnicas:
 
 - Superficies principales: `Home`, `Nodos`, `Diagnóstico`, `Firmware / OTA`, `Técnico`.
-- `Home` es la entrada principal y reserva el espacio para la futura vista guiada por mapa.
+- `Home` es la entrada principal y ya muestra una base espacial estática con cajas seleccionables.
 - `Nodos` sigue siendo la vista detallada técnico-operativa principal.
 - `Diagnóstico` mantiene observabilidad, readiness y troubleshooting.
 - `Firmware / OTA` da acceso visible y persistente al módulo de firmware existente.
@@ -51,21 +51,21 @@ La ventana principal usa una shell operator-first no modal y separa operación p
 - Vista `Diagnóstico` con resumen técnico, advertencias y panel de preflight desplegable.
 - `Control F3` vive dentro de `Técnico` para acciones manuales por `node_id`.
 
-En `Operacion` tambien aparece el bloque `Preparacion de sesion`, que resume:
+En `Home` tambien aparece el bloque `Preparacion de sesion`, que resume:
 
 - readiness actual (`Lista`, `Lista con advertencias`, `No lista`)
 - resumen corto del ultimo preflight
 - conteo de bloqueos/advertencias
 - motivo principal y nota de separacion entre readiness/config y runtime/backend
 
-En `Operacion` tambien aparece el bloque `Actividad serial`, con resumen compacto de:
+En `Home` tambien aparece el bloque `Actividad serial`, con resumen compacto de:
 
 - estado serial (`Activo`, `Sin actividad reciente`, `Con error`, `No disponible`)
 - puerto actual (si aplica)
 - mensajes procesados
 - ultimo error y actividad reciente
 
-En `Operacion` tambien aparece el bloque `Actividad UDP`, con resumen compacto de:
+En `Home` tambien aparece el bloque `Actividad UDP`, con resumen compacto de:
 
 - estado UDP (`Activo`, `Sin actividad reciente`, `Con error`, `No disponible`)
 - bind y puertos EVT/STAT
@@ -84,15 +84,15 @@ Acciones y menú principal:
 
 - El contrato canonico de la futura shell operator-first vive en [docs/ui/desktop_shell_operator_first.md](docs/ui/desktop_shell_operator_first.md).
 - La semantica visual y la agregacion de estados para la Home guiada por mapa viven en [docs/ui/home_map_state_contract.md](docs/ui/home_map_state_contract.md).
-- La UI actual sigue siendo la shell transicional operativa; la migracion a la nueva Home basada en mapa queda preparada para tickets 32.1 en adelante.
+- La UI actual ya usa la shell principal con `Home` como entrada y una primera base espacial estática preparada para tickets 32.3 en adelante.
 
 ## Flujo de sesion y readiness (Tickets 3.3 + 4.x)
 
-- La pestana `Operacion` esta conectada a `SessionController` real y muestra snapshot de sesion (`idle`, `starting`, `running`, `stopping`, `error`).
+- La Home esta conectada a `SessionController` real y muestra snapshot de sesion (`idle`, `starting`, `running`, `stopping`, `error`).
 - Antes de intentar backend, `SessionController` ejecuta preflight/readiness puro.
 - Si readiness esta `blocked`, no intenta backend y la sesion pasa a `error` controlado con motivo de configuracion.
 - Si readiness esta `ready` o `ready_with_warnings`, se intenta backend.
-- `Operacion` muestra el resumen de readiness y `Diagnostico` muestra findings (severidad, codigo, mensaje, detalle).
+- `Home` muestra el resumen de readiness y `Diagnostico` muestra findings (severidad, codigo, mensaje, detalle).
 - La UI distingue fallo por readiness/configuracion vs fallo posterior de backend/runtime.
 - `Reiniciar error` devuelve la sesion a estado inactivo y refresca readiness visible.
 - Mientras la sesion esta en `starting`, `running` o `stopping`, la UI bloquea cambios de perfil y recarga de config para evitar inconsistencias.
@@ -104,7 +104,7 @@ Acciones y menú principal:
 - El backend serial real se integra en el lifecycle de sesion via `SessionBackendFactory` + `SessionController`.
 - El flujo en arquitectura es: `Serial -> parser -> backend serial -> MidiRouter`.
 - `SessionController` solo deja la sesion en `running` si el backend serial arranca realmente.
-- `Operacion` muestra actividad serial resumida y `Diagnostico` muestra detalle tecnico de runtime serial.
+- `Home` muestra actividad serial resumida y `Diagnostico` muestra detalle tecnico de runtime serial.
 
 ## Flujo UDP runtime y NodeRegistry (Tickets 6.x + 7.x)
 
@@ -116,10 +116,10 @@ Acciones y menú principal:
 - El backend UDP alimenta `NodeRegistry` por paquete parseado (`EVT -> observe_evt`, `STAT -> observe_stat`) sin duplicar parser ni dominio.
 - `SessionController` expone `get_node_snapshots()` y `get_node_registry_summary()` para consumo UI.
 - La pestaña `Nodos` usa esos snapshots como fuente de verdad (sin recalcular estado/pps/perdida en UI).
-- La UI distingue estado de runtime UDP (Operacion/Diagnostico) vs estado por nodo (pestaña Nodos).
+- La UI distingue estado de runtime UDP (Home/Diagnostico) vs estado por nodo (pestaña Nodos).
 - La pestaña `Nodos` no inventa datos en no-UDP: muestra mensaje de no aplicacion. En UDP corriendo sin trafico, muestra estado vacio coherente.
-- `Operacion` muestra actividad UDP resumida y `Diagnostico` muestra detalle tecnico de runtime UDP.
-- `Estado actual` concentra el detalle largo de sesion de forma responsive para evitar saturar `Operacion`.
+- `Home` muestra actividad UDP resumida y `Diagnostico` muestra detalle tecnico de runtime UDP.
+- `Estado actual` concentra el detalle largo de sesion de forma responsive para evitar saturar `Home`.
 - `NodeRegistry` se reinicia por sesion UDP, evitando nodos fantasmas entre stop/restart.
 
 ## Identidad de nodos y ruteo MIDI
@@ -219,7 +219,7 @@ Campos principales:
 
 ## Control Plane F3 (Ticket 14.4)
 
-- Existe un panel mínimo en `Plano de control` para ejecutar transacciones F3 sin usar consola.
+- Existe un panel mínimo en `Técnico > Control F3` para ejecutar transacciones F3 sin usar consola.
 - La UI expone solo:
   - `PING`
   - `REQUEST_STAT_NOW`
@@ -253,7 +253,7 @@ Campos principales:
   - `SessionController.get_control_plane_node_snapshots()`
   - `SessionController.get_control_plane_node_snapshot(node_id)`
 - El estado canónico por nodo distingue `resolved/stale/unresolved` e incluye último resultado F3 + resumen de verificación de reboot.
-- El panel técnico `Plano de control` consume la API integrada de `SessionController` (sin instancias privadas de runtime en widgets).
+- El panel técnico `Técnico > Control F3` consume la API integrada de `SessionController` (sin instancias privadas de runtime en widgets).
 
 ## Firmware catalog, artifacts y OTA local
 
@@ -400,7 +400,7 @@ Compatibilidad:
 
 ## Cambiar perfil desde la app
 
-- En `Operacion`, usar `Cambiar perfil`.
+- En `Home`, usar `Cambiar perfil`.
 - El cambio se guarda en `config.json` y refresca la vista.
 - El modo tecnico (`mode`) se deriva automaticamente desde el perfil seleccionado.
 
@@ -464,9 +464,9 @@ Remove-Item Env:CKV2_AUTOCLOSE_MS
 
 ### Smoke manual basico
 
-1. Verificar que la primera pestaña sea `Operacion`.
+1. Verificar que la primera pestaña sea `Home`.
 2. Confirmar estado inicial de sesion en `inactiva`.
-3. Verificar en `Operacion` los bloques `Preparacion de sesion`, `Actividad serial` y `Actividad UDP`.
+3. Verificar en `Home` los bloques `Preparacion de sesion`, `Actividad serial`, `Actividad UDP` y el mapa base estático.
 4. Verificar en `Diagnostico` el bloque de preflight y los bloques de runtime serial/UDP.
 5. Abrir `Ver > Estado actual` y validar:
    - detalle navegable con scroll interno
