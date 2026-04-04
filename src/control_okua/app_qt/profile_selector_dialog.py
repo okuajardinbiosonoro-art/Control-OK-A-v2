@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QButtonGroup,
     QDialog,
@@ -30,6 +31,9 @@ def build_profile_selection_copy(definition: ProfileDefinition) -> str:
 class ProfileSelectorDialog(QDialog):
     def __init__(self, current_profile_id: str | None = None, parent=None) -> None:
         super().__init__(parent)
+        self.setObjectName("profileSelectorDialog")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet("QDialog#profileSelectorDialog { background-color: #F7F4EC; }")
         self.setWindowTitle("Seleccionar perfil operativo")
         self.setModal(True)
         self.resize(620, 460)
@@ -42,13 +46,20 @@ class ProfileSelectorDialog(QDialog):
 
     def _build_ui(self, current_profile_id: str | None) -> None:
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(14)
 
         title = QLabel(
-            "Elija cómo desea operar Control OKÚA v2.\n"
-            "Puede cambiar este perfil en cualquier momento desde la app."
+            "Elija cómo desea operar Control OKÚA v2."
         )
+        title.setObjectName("dialogHeadlineLabel")
         title.setWordWrap(True)
         layout.addWidget(title)
+
+        hint = QLabel("Puede cambiar este perfil más adelante desde Aplicación.")
+        hint.setObjectName("dialogSubtleLabel")
+        hint.setWordWrap(True)
+        layout.addWidget(hint)
 
         first_radio: QRadioButton | None = None
         for definition in list_available_profiles():

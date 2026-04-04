@@ -147,10 +147,16 @@ def test_control_plane_panel_is_separated_from_diagnostics() -> None:
             for i in range(window.control_plane_panel.details_tabs.count())
         ]
         assert detail_tabs == ["Resumen", "Diagnóstico", "Bitácora"]
+        technical_tabs = [
+            window.technical_tabs.tabText(i)
+            for i in range(window.technical_tabs.count())
+        ]
+        assert technical_tabs == ["Resumen", "Control F3"]
         assert window.control_plane_panel.result_view.minimumHeight() >= 320
         technical_buttons = [btn.text() for btn in window.technical_tab.findChildren(QPushButton)]
         assert "Estado actual" in technical_buttons
         assert "Herramientas avanzadas" in technical_buttons
+        assert window.control_plane_panel.node_search_edit.placeholderText() == "Buscar por ID o alias"
     finally:
         window.close()
 
@@ -222,6 +228,7 @@ def test_home_surface_keeps_primary_action_and_visual_map_as_main_elements() -> 
         assert "Espacio reservado para alertas discretas y overlays futuros." not in home_texts
 
         more_action_texts = [action.text() for action in window.home_more_menu.actions() if action.text().strip()]
+        assert "Cambiar perfil" not in more_action_texts
         assert "Diagnóstico" not in more_action_texts
         assert "Nodos" not in more_action_texts
         assert "Firmware" not in more_action_texts
@@ -343,14 +350,12 @@ def test_advanced_tools_dialog_surfaces_remote_api_runtime_status(monkeypatch) -
     )
     window.set_remote_api_status(remote_status)
 
-    def _fake_exec(self) -> int:
-        return 0
-
-    monkeypatch.setattr("control_okua.app_qt.advanced_tools_dialog.AdvancedToolsDialog.exec", _fake_exec)
     try:
         window.open_advanced_tools()
         dialog = window._advanced_dialog
         assert dialog is not None
+        assert dialog.isModal() is False
+        assert dialog.isVisible() is True
         assert dialog.remote_status_label.text() == "running"
         assert dialog.remote_exposure_mode_label.text() == "tailscale_only"
         assert dialog.remote_bind_label.text() == "100.88.127.119"
@@ -385,7 +390,7 @@ def test_advanced_tools_dialog_applies_remote_settings_from_ui(monkeypatch) -> N
         )
     }
     captured: dict[str, object] = {}
-    info_box: dict[str, str] = {}
+    notifications: list[dict[str, str]] = []
 
     def _apply_remote_settings(enabled: bool, exposure_mode: str) -> tuple[object, str]:
         captured["enabled"] = enabled
@@ -406,21 +411,13 @@ def test_advanced_tools_dialog_applies_remote_settings_from_ui(monkeypatch) -> N
         )
         return status_holder["status"], "Servicio remoto actualizado."
 
-    def _fake_info(_parent, title: str, text: str) -> None:
-        info_box["title"] = title
-        info_box["text"] = text
-
-    monkeypatch.setattr(
-        "control_okua.app_qt.advanced_tools_dialog.QMessageBox.information",
-        _fake_info,
-    )
-
     dialog = AdvancedToolsDialog(
         on_open_folder=lambda: None,
         on_view_config=lambda: None,
         on_reload_config=lambda: None,
         on_apply_remote_settings=_apply_remote_settings,
         on_open_firmware_manager=lambda: None,
+        on_notify=lambda **payload: notifications.append(payload),
         state_provider=lambda: (cfg, Path("config.json"), []),
         remote_status_provider=lambda: status_holder["status"],
     )
@@ -432,7 +429,7 @@ def test_advanced_tools_dialog_applies_remote_settings_from_ui(monkeypatch) -> N
 
         assert captured == {"enabled": True, "exposure_mode": "tailscale_only"}
         assert dialog.remote_remote_url_label.text() == "http://100.88.127.119:8788/remote/"
-        assert info_box["title"] == "Servicio remoto"
-        assert "actualizado" in info_box["text"].lower()
+        assert notifications[-1]["title"] == "Servicio remoto"
+        assert "actualizado" in notifications[-1]["message"].lower()
     finally:
         dialog.close()

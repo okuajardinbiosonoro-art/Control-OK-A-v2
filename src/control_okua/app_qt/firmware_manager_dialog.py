@@ -59,15 +59,20 @@ class FirmwareManagerDialog(QDialog):
         catalog_store: FirmwareCatalogStore | None = None,
         ingest_service: FirmwareIngestService | None = None,
         session_controller: "SessionController" | None = None,
+        on_notify=None,
         parent=None,
     ) -> None:
         super().__init__(parent)
+        self.setObjectName("firmwareManagerDialog")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet("QDialog#firmwareManagerDialog { background-color: #F7F4EC; }")
         self.setWindowTitle("Firmware Manager")
         self.resize(1240, 760)
 
         self._catalog_store = catalog_store or FirmwareCatalogStore()
         self._ingest_service = ingest_service or FirmwareIngestService(self._catalog_store)
         self._session_controller = session_controller
+        self._on_notify = on_notify
         self._all_rows: list[FirmwareCatalogRow] = []
         self._current_selection_artifact_id: str | None = None
         self._detail_labels: dict[str, QLabel] = {}
@@ -352,10 +357,10 @@ class FirmwareManagerDialog(QDialog):
             return
         request = dialog.selected_request()
         if request is None:
-            QMessageBox.warning(
-                self,
+            self._notify(
                 "Importación inválida",
                 "No se pudo construir una solicitud de importación válida.",
+                level="warning",
             )
             return
 
@@ -370,19 +375,19 @@ class FirmwareManagerDialog(QDialog):
         if feedback.severity == "error":
             QMessageBox.critical(self, feedback.title, text)
         elif feedback.severity == "warning":
-            QMessageBox.warning(self, feedback.title, text)
+            self._notify(feedback.title, text, level="warning")
         else:
-            QMessageBox.information(self, feedback.title, text)
+            self._notify(feedback.title, text, level="success")
 
     def _on_mark_current_clicked(self) -> None:
         artifact = self._selected_artifact()
         if artifact is None:
             return
         if artifact.is_current:
-            QMessageBox.information(
-                self,
+            self._notify(
                 "Firmware current",
                 "El artefacto seleccionado ya es current para su target.",
+                level="info",
             )
             return
 
@@ -399,10 +404,10 @@ class FirmwareManagerDialog(QDialog):
         updated_artifact = self._catalog_store.set_current(artifact.artifact_id)
         self._catalog_store.save()
         self.refresh_catalog(select_artifact_id=updated_artifact.artifact_id)
-        QMessageBox.information(
-            self,
+        self._notify(
             "Current actualizado",
             "El firmware seleccionado ahora es current para su target.",
+            level="success",
         )
 
     def _on_delete_clicked(self) -> None:
@@ -431,10 +436,10 @@ class FirmwareManagerDialog(QDialog):
         if result.success:
             self.refresh_catalog()
             details = "\n".join(result.warnings) if result.warnings else "Sin advertencias."
-            QMessageBox.information(
-                self,
+            self._notify(
                 "Firmware eliminado",
                 f"{result.message}\n\n{details}",
+                level="success",
             )
             return
 
@@ -450,10 +455,10 @@ class FirmwareManagerDialog(QDialog):
 
     def _on_ota_deploy_clicked(self) -> None:
         if self._session_controller is None:
-            QMessageBox.warning(
-                self,
+            self._notify(
                 "OTA Deploy no disponible",
                 "Esta instancia de Firmware Manager no tiene SessionController asociado.",
+                level="warning",
             )
             return
 
@@ -467,10 +472,10 @@ class FirmwareManagerDialog(QDialog):
 
     def _on_ota_campaign_clicked(self) -> None:
         if self._session_controller is None:
-            QMessageBox.warning(
-                self,
+            self._notify(
                 "OTA Campaign no disponible",
                 "Esta instancia de Firmware Manager no tiene SessionController asociado.",
+                level="warning",
             )
             return
 
@@ -486,3 +491,12 @@ class FirmwareManagerDialog(QDialog):
         managed_dir = self._ingest_service.managed_store_dir
         managed_dir.mkdir(parents=True, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(managed_dir).resolve())))
+
+    def _notify(self, title: str, message: str, *, level: str) -> None:
+        if callable(self._on_notify):
+            self._on_notify(title=title, message=message, level=level)
+            return
+        if level == "warning":
+            QMessageBox.warning(self, title, message)
+            return
+        QMessageBox.information(self, title, message)

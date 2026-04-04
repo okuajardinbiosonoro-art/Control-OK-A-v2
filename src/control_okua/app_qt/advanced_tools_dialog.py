@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -27,11 +28,15 @@ class AdvancedToolsDialog(QDialog):
         on_reload_config: Callable[[], None],
         on_apply_remote_settings: Callable[[bool, str], tuple[Any, str]],
         on_open_firmware_manager: Callable[[], None],
+        on_notify: Callable[..., None] | None,
         state_provider: Callable[[], tuple[dict[str, Any], Path, list[str]]],
         remote_status_provider: Callable[[], Any | None],
         parent=None,
     ) -> None:
         super().__init__(parent)
+        self.setObjectName("advancedToolsDialog")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setStyleSheet("QDialog#advancedToolsDialog { background-color: #F7F4EC; }")
         self.setWindowTitle("Herramientas avanzadas")
         self.resize(980, 680)
 
@@ -40,6 +45,7 @@ class AdvancedToolsDialog(QDialog):
         self._on_reload_config = on_reload_config
         self._on_apply_remote_settings = on_apply_remote_settings
         self._on_open_firmware_manager = on_open_firmware_manager
+        self._on_notify = on_notify
         self._state_provider = state_provider
         self._remote_status_provider = remote_status_provider
 
@@ -239,8 +245,8 @@ class AdvancedToolsDialog(QDialog):
 
         cfg, config_path, warnings = self._state_provider()
         self.set_state(cfg, config_path, warnings)
-        QMessageBox.information(self, "Servicio remoto", message)
+        if callable(self._on_notify):
+            self._on_notify(title="Servicio remoto", message=message, level="success")
 
     def _handle_open_firmware_manager_clicked(self) -> None:
-        self.accept()
         self._on_open_firmware_manager()

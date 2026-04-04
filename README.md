@@ -58,7 +58,8 @@ La ventana principal usa una shell no modal con navegación lateral persistente 
 Acciones y menú principal:
 
 - `Inicio` mantiene una acción primaria visible: `Iniciar sesión` o `Detener sesión`, según el estado real.
-- Las acciones secundarias (`Estado actual`, `Cambiar perfil`, `Reiniciar error`) quedan disponibles de forma discreta desde `Más`, sin duplicar la navegación lateral.
+- Las acciones secundarias de la Home se reducen a `Estado actual` y `Reiniciar error` dentro de `Más`.
+- `Cambiar perfil` queda como ruta única bajo `Aplicación`.
 - Menú superior reducido:
   - `Aplicación`: `Cambiar perfil`, `Recargar configuración`, `Salir`
   - `Ayuda`: `Acerca de`
@@ -377,7 +378,7 @@ Compatibilidad:
 
 ## Cambiar perfil desde la app
 
-- En `Inicio`, usar `Cambiar perfil`.
+- Usar `Aplicación > Cambiar perfil`.
 - El cambio se guarda en `config.json` y refresca la vista.
 - El modo tecnico (`mode`) se deriva automaticamente desde el perfil seleccionado.
 

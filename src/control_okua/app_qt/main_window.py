@@ -46,6 +46,7 @@ from control_okua.app_qt.navigation_shell import (
 from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
 from control_okua.app_qt.widgets.config_view_dialog import ConfigViewDialog
 from control_okua.app_qt.widgets.home_map_panel import HomeMapPanel
+from control_okua.app_qt.widgets.toast_manager import ToastManager
 from control_okua.app_qt.viewmodels import (
     build_nodes_tab_view_state,
     NodesTabViewState,
@@ -131,6 +132,7 @@ class MainWindow(QMainWindow):
         self._advanced_dialog: AdvancedToolsDialog | None = None
         self._firmware_manager_dialog: FirmwareManagerDialog | None = None
         self._details_dialog: QDialog | None = None
+        self._config_view_dialog: ConfigViewDialog | None = None
         self._node_box_expanded: dict[int, bool] = {}
         self._preflight_panel_visible = False
         self._remote_api_status: Any | None = None
@@ -156,6 +158,7 @@ class MainWindow(QMainWindow):
         self._serial_runtime_refresh_timer.start()
 
         self._build_ui()
+        self._toast_manager = ToastManager(self)
         self.refresh_ui()
 
     def _connect_session_signals(self) -> None:
@@ -275,10 +278,12 @@ class MainWindow(QMainWindow):
         self._details_dialog = QDialog(self)
         self._details_dialog.setObjectName("sessionDetailsDialog")
         self._details_dialog.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self._details_dialog.setModal(False)
         self._details_dialog.setWindowTitle("Estado actual")
-        self._details_dialog.resize(900, 640)
+        self._details_dialog.setMinimumSize(880, 620)
+        self._details_dialog.resize(980, 700)
         layout = QVBoxLayout(self._details_dialog)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(14, 14, 14, 14)
         layout.addWidget(self._build_session_details_tab())
 
     def _register_page(self, key: str, widget: QWidget) -> None:
@@ -366,7 +371,6 @@ class MainWindow(QMainWindow):
         self.change_profile_button = QPushButton("Cambiar perfil")
         self.change_profile_button.clicked.connect(self.change_profile)
         self.change_profile_button.hide()
-        self.home_more_menu.addAction(self.change_profile_action)
         self.reset_session_error_button = QPushButton("Reiniciar error")
         self.reset_session_error_button.clicked.connect(self.reset_session_error)
         self.reset_session_error_button.hide()
@@ -390,6 +394,8 @@ class MainWindow(QMainWindow):
         tab.setObjectName("sessionDetailsTab")
         tab.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
 
         title_label = QLabel("Detalles de sesión")
         title_font = title_label.font()
@@ -399,8 +405,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(title_label)
 
         hint_label = QLabel(
-            "Resumen técnico completo del estado actual. "
-            "Esta vista se adapta automáticamente y mantiene scroll interno."
+            "Resumen actual con scroll interno y secciones que se reordenan automáticamente según el ancho disponible."
         )
         hint_label.setWordWrap(True)
         layout.addWidget(hint_label)
@@ -652,23 +657,39 @@ class MainWindow(QMainWindow):
         title_label.setFont(title_font)
         layout.addWidget(title_label)
 
-        hint_label = QLabel(
-            "Aquí viven el control F3 y las herramientas avanzadas. "
-            "La Home queda libre del detalle delicado."
-        )
+        hint_label = QLabel("Lectura, mantenimiento y acciones delicadas del sistema.")
         hint_label.setWordWrap(True)
         layout.addWidget(hint_label)
 
-        actions_group = QGroupBox("Accesos técnicos")
-        actions_layout = QHBoxLayout(actions_group)
+        self.technical_tabs = QTabWidget(self)
+        self.technical_tabs.setDocumentMode(True)
+
+        overview_tab = QWidget(self)
+        overview_layout = QVBoxLayout(overview_tab)
+        overview_layout.setContentsMargins(0, 0, 0, 0)
+        overview_layout.setSpacing(12)
+
+        reading_group = QGroupBox("Lectura técnica")
+        reading_layout = QVBoxLayout(reading_group)
+        reading_hint = QLabel("Revise el estado operativo completo sin salir de la shell principal.")
+        reading_hint.setWordWrap(True)
+        reading_layout.addWidget(reading_hint)
         self.technical_state_button = QPushButton("Estado actual")
         self.technical_state_button.clicked.connect(self.show_session_details_dialog)
-        actions_layout.addWidget(self.technical_state_button)
+        reading_layout.addWidget(self.technical_state_button, 0, Qt.AlignLeft)
+        overview_layout.addWidget(reading_group)
+
+        tools_group = QGroupBox("Mantenimiento")
+        tools_layout = QVBoxLayout(tools_group)
+        tools_hint = QLabel("Abra herramientas auxiliares cuando necesite revisar configuración, remoto o firmware.")
+        tools_hint.setWordWrap(True)
+        tools_layout.addWidget(tools_hint)
         self.technical_tools_button = QPushButton("Herramientas avanzadas")
         self.technical_tools_button.clicked.connect(self.open_advanced_tools)
-        actions_layout.addWidget(self.technical_tools_button)
-        actions_layout.addStretch(1)
-        layout.addWidget(actions_group)
+        tools_layout.addWidget(self.technical_tools_button, 0, Qt.AlignLeft)
+        overview_layout.addWidget(tools_group)
+        overview_layout.addStretch(1)
+        self.technical_tabs.addTab(overview_tab, "Resumen")
 
         self.control_plane_panel = ControlPlanePanel(
             send_ping=self._send_control_ping_from_ui,
@@ -679,10 +700,12 @@ class MainWindow(QMainWindow):
             available_node_ids_provider=self._available_control_node_ids_from_runtime,
             node_snapshot_provider=self._control_node_snapshot_from_runtime,
             reboot_verification_reporter=self._record_control_reboot_verification_from_ui,
+            on_notify=self._show_toast,
             default_node_id=1,
             parent=self,
         )
-        layout.addWidget(self.control_plane_panel, 1)
+        self.technical_tabs.addTab(self.control_plane_panel, "Control F3")
+        layout.addWidget(self.technical_tabs, 1)
         return tab
 
     def _build_firmware_tab(self) -> QWidget:
@@ -789,6 +812,8 @@ class MainWindow(QMainWindow):
         super().resizeEvent(event)
         self._reflow_details_cards()
         self._adjust_nodes_tree_columns()
+        if hasattr(self, "_toast_manager"):
+            self._toast_manager.reposition_toasts()
 
     def _reflow_details_cards(self, *, force: bool = False) -> None:
         layout = self._details_cards_layout
@@ -802,7 +827,7 @@ class MainWindow(QMainWindow):
             viewport_width = self.tabs.width()
         if viewport_width <= 0:
             viewport_width = self.width()
-        columns = 2 if viewport_width >= 900 else 1
+        columns = 2 if viewport_width >= 1080 else 1
         if not force and columns == self._details_columns:
             return
 
@@ -971,6 +996,11 @@ class MainWindow(QMainWindow):
         save_config(self.cfg, self.config_path)
         self.warnings = [f"Perfil actualizado desde UI a '{selected_profile}'."]
         self.session_controller.reload_config(self._session_cfg_provider)
+        self._show_toast(
+            title="Perfil actualizado",
+            message="La app ya quedó alineada con el perfil operativo seleccionado.",
+            level="success",
+        )
 
     def reload_config(self) -> None:
         if not self._ensure_configuration_change_allowed():
@@ -981,6 +1011,11 @@ class MainWindow(QMainWindow):
         self.warnings = warnings
         self.config_path = config_path
         self.session_controller.reload_config(self._session_cfg_provider)
+        self._show_toast(
+            title="Configuración recargada",
+            message="Se aplicó nuevamente la configuración guardada.",
+            level="info",
+        )
 
     def start_session(self) -> None:
         self.session_controller.start_session()
@@ -999,10 +1034,12 @@ class MainWindow(QMainWindow):
                 on_reload_config=self.reload_config,
                 on_apply_remote_settings=self.apply_remote_settings,
                 on_open_firmware_manager=self.open_firmware_manager,
+                on_notify=self._show_toast,
                 state_provider=self._advanced_state,
                 remote_status_provider=self._remote_api_status_provider,
                 parent=self,
             )
+            self._advanced_dialog.setModal(False)
 
         self._advanced_dialog.set_state(self.cfg, self.config_path, self.warnings)
         self._advanced_dialog.reload_button.setEnabled(
@@ -1011,14 +1048,18 @@ class MainWindow(QMainWindow):
         self._advanced_dialog.remote_apply_button.setEnabled(
             build_session_action_state(self._session_snapshot).can_edit_configuration
         )
-        self._advanced_dialog.exec()
+        self._advanced_dialog.show()
+        self._advanced_dialog.raise_()
+        self._advanced_dialog.activateWindow()
 
     def open_firmware_manager(self) -> None:
         if self._firmware_manager_dialog is None:
             self._firmware_manager_dialog = FirmwareManagerDialog(
                 session_controller=self.session_controller,
+                on_notify=self._show_toast,
                 parent=self,
             )
+            self._firmware_manager_dialog.setModal(False)
 
         self._firmware_manager_dialog.refresh_catalog()
         self._firmware_manager_dialog.show()
@@ -1062,7 +1103,11 @@ class MainWindow(QMainWindow):
                 f"No se pudo actualizar el servicio remoto: {exc}",
             )
             return
-        QMessageBox.information(self, "Servicio remoto", message)
+        self._show_toast(
+            title="Servicio remoto",
+            message=message,
+            level="success",
+        )
 
     def _refresh_firmware_shell_summary(self) -> None:
         if not self._firmware_summary_labels:
@@ -1152,8 +1197,11 @@ class MainWindow(QMainWindow):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.config_path.parent)))
 
     def view_config(self) -> None:
-        dialog = ConfigViewDialog(self._config_pretty_text(), parent=self)
-        dialog.exec()
+        self._config_view_dialog = ConfigViewDialog(self._config_pretty_text(), parent=self)
+        self._config_view_dialog.setModal(False)
+        self._config_view_dialog.show()
+        self._config_view_dialog.raise_()
+        self._config_view_dialog.activateWindow()
 
     def _config_pretty_text(self) -> str:
         return json.dumps(self.cfg, indent=2, ensure_ascii=False)
@@ -1388,6 +1436,8 @@ class MainWindow(QMainWindow):
 
     def show_control_plane_tab(self) -> None:
         self.tabs.setCurrentWidget(self.technical_tab)
+        if hasattr(self, "technical_tabs"):
+            self.technical_tabs.setCurrentWidget(self.control_plane_panel)
         self.control_plane_panel.on_section_activated()
 
     def show_remote_tab(self) -> None:
@@ -1405,6 +1455,21 @@ class MainWindow(QMainWindow):
                 "Aplicación de operación para monitoreo de nodos OKÚA,\n"
                 "control de sesión serial/UDP y ruteo MIDI por caja."
             ),
+        )
+
+    def _show_toast(
+        self,
+        *,
+        title: str,
+        message: str,
+        level: str = "info",
+        duration_ms: int = 3200,
+    ) -> None:
+        self._toast_manager.show_toast(
+            title=title,
+            message=message,
+            level=level,
+            duration_ms=duration_ms,
         )
 
     def _on_preflight_toggle_button(self, checked: bool) -> None:

@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QTabWidget,
@@ -97,6 +98,7 @@ class ControlPlanePanel(QWidget):
         available_node_ids_provider: Callable[[], list[int]] | None = None,
         node_snapshot_provider: Callable[[int], object | None] | None = None,
         reboot_verification_reporter: Callable[[int, str, str], None] | None = None,
+        on_notify: Callable[..., None] | None = None,
         default_node_id: int = 1,
         parent: QWidget | None = None,
     ) -> None:
@@ -109,8 +111,10 @@ class ControlPlanePanel(QWidget):
         self._available_node_ids_provider = available_node_ids_provider
         self._node_snapshot_provider = node_snapshot_provider
         self._reboot_verification_reporter = reboot_verification_reporter
+        self._on_notify = on_notify
         self._default_node_id = max(1, int(default_node_id))
         self._node_options: tuple[ControlPlaneNodeOption, ...] = tuple()
+        self._filtered_node_options: tuple[ControlPlaneNodeOption, ...] = tuple()
         self._active_thread: QThread | None = None
         self._active_worker: _TransactionWorker | None = None
         self._active_command_name: str = ""
@@ -146,6 +150,10 @@ class ControlPlanePanel(QWidget):
 
         target_group = QGroupBox("Nodo seleccionado", self)
         target_layout = QFormLayout(target_group)
+        self.node_search_edit = QLineEdit(self)
+        self.node_search_edit.setPlaceholderText("Buscar por ID o alias")
+        self.node_search_edit.textChanged.connect(self._on_node_filter_changed)
+        target_layout.addRow("Buscar", self.node_search_edit)
         target_row = QHBoxLayout()
         self.node_selector_combo = QComboBox(self)
         self.node_selector_combo.currentIndexChanged.connect(self._on_node_selection_changed)
@@ -159,10 +167,10 @@ class ControlPlanePanel(QWidget):
         target_layout.addRow("Identidad", self.node_id_label)
 
         self.target_help_label = QLabel(
-            "Catálogo EB1..EF5. Los nodos activos se marcan automáticamente."
+            "Filtra por alias o ID. Los nodos detectados se priorizan automáticamente."
         )
         self.target_help_label.setWordWrap(True)
-        target_layout.addRow("Referencia", self.target_help_label)
+        target_layout.addRow("Ayuda rápida", self.target_help_label)
         group_layout.addWidget(target_group)
 
         self._build_snapshot_groups()
@@ -357,6 +365,14 @@ class ControlPlanePanel(QWidget):
             f"[{self._now_hms()}] Aviso: Control F3 envía comandos reales "
             "(PING/STAT/THROTTLE/STAT_RATE/REBOOT). Reinicio suave puede cortar conectividad temporalmente."
         )
+        if callable(self._on_notify):
+            self._on_notify(
+                title="Control F3",
+                message="Este panel envía comandos reales. Use reboot, throttle y STAT rate con criterio.",
+                level="warning",
+                duration_ms=4200,
+            )
+            return
         QMessageBox.information(
             self,
             "Control F3",
@@ -733,6 +749,17 @@ class ControlPlanePanel(QWidget):
         options = build_control_plane_node_options(available_ids, max_boxes=5)
         current_id = self._selected_node_id()
         self._node_options = options
+        self._rebuild_node_selector(current_id=current_id)
+        self._refresh_selected_snapshot_view()
+
+    @Slot(str)
+    def _on_node_filter_changed(self, _text: str) -> None:
+        self._rebuild_node_selector(current_id=self._selected_node_id())
+        self._refresh_selected_snapshot_view()
+
+    def _rebuild_node_selector(self, *, current_id: int) -> None:
+        options = self._filtered_options()
+        self._filtered_node_options = options
         self.node_selector_combo.blockSignals(True)
         self.node_selector_combo.clear()
         selected_index = -1
@@ -753,7 +780,17 @@ class ControlPlanePanel(QWidget):
             self.node_selector_combo.setCurrentIndex(selected_index)
         self.node_selector_combo.blockSignals(False)
         self._update_selected_node_label()
-        self._refresh_selected_snapshot_view()
+
+    def _filtered_options(self) -> tuple[ControlPlaneNodeOption, ...]:
+        search_text = self.node_search_edit.text().strip().lower()
+        if not search_text:
+            return self._node_options
+        filtered: list[ControlPlaneNodeOption] = []
+        for option in self._node_options:
+            haystack = f"{option.node_id} {option.node_label} {option.display_text}".lower()
+            if search_text in haystack:
+                filtered.append(option)
+        return tuple(filtered)
 
     def _selected_node_id(self) -> int:
         if self.node_selector_combo.count() <= 0:
@@ -786,8 +823,10 @@ class ControlPlanePanel(QWidget):
         return _SET_THROTTLE_PRESETS_PERCENT[0]
 
     def _selected_node_option(self) -> ControlPlaneNodeOption | None:
+        if self.node_selector_combo.count() <= 0:
+            return None
         node_id = self._selected_node_id()
-        for option in self._node_options:
+        for option in self._filtered_node_options or self._node_options:
             if option.node_id == node_id:
                 return option
         return None
@@ -795,10 +834,10 @@ class ControlPlanePanel(QWidget):
     def _update_selected_node_label(self) -> None:
         selected = self._selected_node_option()
         if selected is None:
-            self.node_id_label.setText(str(self._selected_node_id()))
+            self.node_id_label.setText("Sin coincidencias" if self.node_selector_combo.count() <= 0 else f"ID {self._selected_node_id()}")
             return
         status = "detectado" if selected.is_available else "no detectado"
-        self.node_id_label.setText(f"{selected.node_id} ({selected.node_label}, {status})")
+        self.node_id_label.setText(f"{selected.node_label} · ID {selected.node_id} · {status}")
 
     @Slot(int)
     def _on_node_selection_changed(self, _index: int) -> None:

@@ -65,6 +65,16 @@ QLabel#homeMetaLabel {
     color: #5A695F;
 }
 
+QLabel#dialogHeadlineLabel {
+    color: #0B3B27;
+    font-size: 15px;
+    font-weight: 700;
+}
+
+QLabel#dialogSubtleLabel {
+    color: #5B6F66;
+}
+
 QGroupBox {
     background-color: #FFFDFC;
     border: 1px solid #E1D5C2;
@@ -240,6 +250,7 @@ QSpinBox::down-button {
 }
 
 QTextEdit,
+QPlainTextEdit,
 QListWidget,
 QTreeWidget,
 QTableWidget {

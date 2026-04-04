@@ -294,6 +294,83 @@ def test_section_warning_is_shown_only_once(monkeypatch) -> None:
         panel.close()
 
 
+def test_section_warning_uses_notify_callback_when_available() -> None:
+    _ensure_qapp()
+    notifications: list[dict[str, object]] = []
+    panel = ControlPlanePanel(
+        send_ping=lambda *_: _tx_result(
+            command_name="PING",
+            cmd_id=0x01,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
+        send_request_stat_now=lambda *_: _tx_result(
+            command_name="REQUEST_STAT_NOW",
+            cmd_id=0x07,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
+        send_reboot_soft=lambda *_: _tx_result(
+            command_name="REBOOT_SOFT",
+            cmd_id=0x02,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
+        send_set_stat_rate=lambda *_: _tx_result(
+            command_name="SET_STAT_RATE",
+            cmd_id=0x05,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
+        available_node_ids_provider=lambda: [1],
+        on_notify=lambda **payload: notifications.append(payload),
+        default_node_id=1,
+    )
+    try:
+        panel.on_section_activated()
+        assert notifications
+        assert notifications[-1]["title"] == "Control F3"
+        assert notifications[-1]["level"] == "warning"
+    finally:
+        panel.close()
+
+
+def test_node_selector_supports_search_filtering() -> None:
+    _ensure_qapp()
+    panel = ControlPlanePanel(
+        send_ping=lambda *_: _tx_result(
+            command_name="PING",
+            cmd_id=0x01,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
+        send_request_stat_now=lambda *_: _tx_result(
+            command_name="REQUEST_STAT_NOW",
+            cmd_id=0x07,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
+        send_reboot_soft=lambda *_: _tx_result(
+            command_name="REBOOT_SOFT",
+            cmd_id=0x02,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
+        send_set_stat_rate=lambda *_: _tx_result(
+            command_name="SET_STAT_RATE",
+            cmd_id=0x05,
+            final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+        ),
+        available_node_ids_provider=lambda: [1, 7, 12],
+        default_node_id=1,
+    )
+    try:
+        baseline_count = panel.node_selector_combo.count()
+        panel.node_search_edit.setText("12")
+        assert panel.node_selector_combo.count() < baseline_count
+        assert panel._selected_node_id() == 12
+        assert "ID 12" in panel.node_id_label.text()
+
+        panel.node_search_edit.setText("sin-coincidencia")
+        assert panel.node_selector_combo.count() == 0
+        assert panel.node_id_label.text() == "Sin coincidencias"
+    finally:
+        panel.close()
+
+
 def test_run_transaction_logs_when_command_is_ignored() -> None:
     _ensure_qapp()
     panel = ControlPlanePanel(
