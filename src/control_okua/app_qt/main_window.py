@@ -39,9 +39,6 @@ from control_okua.app_qt.advanced_tools_dialog import AdvancedToolsDialog
 from control_okua.app_qt.control_plane_panel import ControlPlanePanel
 from control_okua.app_qt.firmware_manager_dialog import FirmwareManagerDialog
 from control_okua.app_qt.navigation_shell import (
-    BRAND_ACCENT,
-    BRAND_DEEP,
-    BRAND_SAND,
     NavigationPanel,
     ShellNavItem,
     build_primary_shell_items,
@@ -187,21 +184,25 @@ class MainWindow(QMainWindow):
         shell_layout.addWidget(self.navigation_panel, 0)
 
         content_host = QWidget(self)
+        content_host.setObjectName("shellContentHost")
         content_layout = QVBoxLayout(content_host)
-        content_layout.setContentsMargins(18, 18, 18, 18)
-        content_layout.setSpacing(12)
+        content_layout.setContentsMargins(24, 18, 24, 18)
+        content_layout.setSpacing(8)
 
         self.shell_title_label = QLabel("Inicio")
+        self.shell_title_label.setObjectName("shellTitleLabel")
         shell_title_font = self.shell_title_label.font()
         shell_title_font.setBold(True)
-        shell_title_font.setPointSize(shell_title_font.pointSize() + 6)
+        shell_title_font.setPointSize(shell_title_font.pointSize() + 4)
         self.shell_title_label.setFont(shell_title_font)
         content_layout.addWidget(self.shell_title_label)
 
         self.shell_subtitle_label = QLabel(
-            "Entrada principal operator-first para navegar el sistema sin depender de diálogos."
+            ""
         )
+        self.shell_subtitle_label.setObjectName("shellSubtitleLabel")
         self.shell_subtitle_label.setWordWrap(True)
+        self.shell_subtitle_label.hide()
         content_layout.addWidget(self.shell_subtitle_label)
 
         self.tabs = QTabWidget(self)
@@ -237,57 +238,31 @@ class MainWindow(QMainWindow):
 
     def _build_menu_bar(self) -> None:
         menu_bar = self.menuBar()
+        menu_bar.setNativeMenuBar(False)
 
-        file_menu = menu_bar.addMenu("Archivo")
+        app_menu = menu_bar.addMenu("Aplicación")
+        self.change_profile_action = QAction("Cambiar perfil", self)
+        self.change_profile_action.triggered.connect(self.change_profile)
+        app_menu.addAction(self.change_profile_action)
         self.reload_action = QAction("Recargar configuración", self)
         self.reload_action.triggered.connect(self.reload_config)
-        file_menu.addAction(self.reload_action)
-        file_menu.addSeparator()
+        app_menu.addAction(self.reload_action)
+        app_menu.addSeparator()
         self.exit_action = QAction("Salir", self)
         self.exit_action.triggered.connect(self.close)
-        file_menu.addAction(self.exit_action)
-
-        view_menu = menu_bar.addMenu("Ver")
-        self.view_home_action = QAction("Inicio", self)
-        self.view_home_action.triggered.connect(self.show_home_tab)
-        view_menu.addAction(self.view_home_action)
-
-        self.view_nodes_action = QAction("Nodos", self)
-        self.view_nodes_action.triggered.connect(self.show_nodes_tab)
-        view_menu.addAction(self.view_nodes_action)
+        app_menu.addAction(self.exit_action)
 
         self.view_state_action = QAction("Estado actual", self)
         self.view_state_action.triggered.connect(self.show_session_details_dialog)
-        view_menu.addAction(self.view_state_action)
-
         self.view_diagnostics_action = QAction("Diagnóstico", self)
         self.view_diagnostics_action.triggered.connect(self.show_diagnostics_tab)
-        view_menu.addAction(self.view_diagnostics_action)
-
-        self.view_firmware_action = QAction("Firmware / OTA", self)
-        self.view_firmware_action.triggered.connect(self.show_firmware_tab)
-        view_menu.addAction(self.view_firmware_action)
-
-        self.view_control_plane_action = QAction("Técnico", self)
-        self.view_control_plane_action.triggered.connect(self.show_control_plane_tab)
-        view_menu.addAction(self.view_control_plane_action)
-
-        self.view_remote_action = QAction("Remoto", self)
-        self.view_remote_action.triggered.connect(self.show_remote_tab)
-        view_menu.addAction(self.view_remote_action)
-
         self.toggle_preflight_action = QAction("Chequeos previos", self)
         self.toggle_preflight_action.setCheckable(True)
         self.toggle_preflight_action.toggled.connect(self._on_preflight_toggle_action)
-        view_menu.addAction(self.toggle_preflight_action)
-
-        tools_menu = menu_bar.addMenu("Herramientas")
         self.firmware_manager_action = QAction("Firmware Manager", self)
         self.firmware_manager_action.triggered.connect(self.open_firmware_manager)
-        tools_menu.addAction(self.firmware_manager_action)
         self.advanced_tools_action = QAction("Herramientas avanzadas", self)
         self.advanced_tools_action.triggered.connect(self.open_advanced_tools)
-        tools_menu.addAction(self.advanced_tools_action)
 
         help_menu = menu_bar.addMenu("Ayuda")
         self.about_action = QAction("Acerca de", self)
@@ -307,42 +282,7 @@ class MainWindow(QMainWindow):
         self._widget_to_page_key[widget] = str(key)
 
     def _apply_shell_branding(self) -> None:
-        if hasattr(self, "shell_title_label"):
-            self.shell_title_label.setStyleSheet(f"color: {BRAND_DEEP};")
-        if hasattr(self, "shell_subtitle_label"):
-            self.shell_subtitle_label.setStyleSheet(f"color: {BRAND_DEEP};")
-        if hasattr(self, "start_session_button"):
-            self.start_session_button.setStyleSheet(
-                f"background-color: {BRAND_ACCENT}; color: white; font-weight: 700; "
-                "padding: 10px 16px; border-radius: 12px;"
-            )
-        if hasattr(self, "stop_session_button"):
-            self.stop_session_button.setStyleSheet(
-                f"background-color: {BRAND_ACCENT}; color: white; font-weight: 700; "
-                "padding: 10px 16px; border-radius: 12px;"
-            )
-        if hasattr(self, "home_status_chip"):
-            self.home_status_chip.setStyleSheet(
-                "background-color: #EAF5EE; color: {deep}; border: 1px solid {sand}; "
-                "border-radius: 12px; padding: 5px 10px; font-weight: 700;".format(
-                    deep=BRAND_DEEP,
-                    sand=BRAND_SAND,
-                )
-            )
-        if hasattr(self, "home_profile_label"):
-            self.home_profile_label.setStyleSheet(f"color: {BRAND_DEEP};")
-        if hasattr(self, "operation_subtitle_label"):
-            self.operation_subtitle_label.setStyleSheet(f"color: {BRAND_DEEP};")
-        if hasattr(self, "home_detail_hint_label"):
-            self.home_detail_hint_label.setStyleSheet(f"color: {BRAND_DEEP};")
-        if hasattr(self, "home_more_button"):
-            self.home_more_button.setStyleSheet(
-                "padding: 8px 12px; border-radius: 10px; border: 1px solid {sand}; "
-                "background-color: #F8F5EE; color: {deep}; font-weight: 600;".format(
-                    sand=BRAND_SAND,
-                    deep=BRAND_DEEP,
-                )
-            )
+        return
 
     def _on_navigation_requested(self, key: str) -> None:
         target = self._page_key_to_widget.get(str(key))
@@ -370,75 +310,70 @@ class MainWindow(QMainWindow):
         operation_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
 
         operation_content = QWidget(self)
+        operation_content.setObjectName("homeOperationContent")
         layout = QVBoxLayout(operation_content)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(18)
+        layout.setContentsMargins(4, 2, 4, 8)
+        layout.setSpacing(14)
 
         top_bar = QHBoxLayout()
         top_bar.setSpacing(16)
 
         intro_column = QVBoxLayout()
-        intro_column.setSpacing(8)
+        intro_column.setSpacing(6)
         self.home_status_chip = QLabel("Sesión inactiva")
+        self.home_status_chip.setObjectName("homeStatusChip")
         self.home_status_chip.setAlignment(Qt.AlignCenter)
-        self.home_status_chip.setMaximumWidth(180)
+        self.home_status_chip.setMaximumWidth(190)
         intro_column.addWidget(self.home_status_chip, 0, Qt.AlignLeft)
 
         self.operation_subtitle_label = QLabel(
-            "Portada principal de operación local."
+            "Lista para operar."
         )
+        self.operation_subtitle_label.setObjectName("homeStatusLine")
         self.operation_subtitle_label.setWordWrap(True)
         intro_column.addWidget(self.operation_subtitle_label)
 
         self.home_profile_label = QLabel("Perfil pendiente")
+        self.home_profile_label.setObjectName("homeMetaLabel")
         self.home_profile_label.setWordWrap(True)
         intro_column.addWidget(self.home_profile_label)
         top_bar.addLayout(intro_column, 1)
 
-        actions_column = QVBoxLayout()
-        actions_column.setSpacing(8)
         quick_actions_row = QHBoxLayout()
         quick_actions_row.setSpacing(10)
         self.start_session_button = QPushButton("Iniciar sesión")
+        self.start_session_button.setObjectName("primarySessionButton")
         self.start_session_button.clicked.connect(self.start_session)
         quick_actions_row.addWidget(self.start_session_button)
         self.stop_session_button = QPushButton("Detener sesión")
+        self.stop_session_button.setObjectName("primarySessionButton")
         self.stop_session_button.clicked.connect(self.stop_session)
         quick_actions_row.addWidget(self.stop_session_button)
 
         self.home_more_button = QToolButton(self)
+        self.home_more_button.setObjectName("secondaryMenuButton")
         self.home_more_button.setText("Más")
         self.home_more_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.home_more_menu = QMenu(self.home_more_button)
         self.home_more_button.setMenu(self.home_more_menu)
-        self.home_details_action = self.home_more_menu.addAction("Estado actual")
-        self.home_details_action.triggered.connect(self.show_session_details_dialog)
-        self.home_diagnostics_action = self.home_more_menu.addAction("Diagnóstico")
-        self.home_diagnostics_action.triggered.connect(self.show_diagnostics_tab)
+        self.home_more_menu.addAction(self.view_state_action)
+        self.home_more_menu.addAction(self.view_diagnostics_action)
         self.home_more_menu.addSeparator()
         self.change_profile_button = QPushButton("Cambiar perfil")
         self.change_profile_button.clicked.connect(self.change_profile)
         self.change_profile_button.hide()
-        self.home_change_profile_action = self.home_more_menu.addAction("Cambiar perfil")
-        self.home_change_profile_action.triggered.connect(self.change_profile)
+        self.home_more_menu.addAction(self.change_profile_action)
         self.reset_session_error_button = QPushButton("Reiniciar error")
         self.reset_session_error_button.clicked.connect(self.reset_session_error)
         self.reset_session_error_button.hide()
         self.home_reset_error_action = self.home_more_menu.addAction("Reiniciar error")
         self.home_reset_error_action.triggered.connect(self.reset_session_error)
         quick_actions_row.addWidget(self.home_more_button)
-        actions_column.addLayout(quick_actions_row)
-
-        self.home_detail_hint_label = QLabel(
-            "El detalle técnico vive en Diagnóstico y en Estado actual."
-        )
-        self.home_detail_hint_label.setWordWrap(True)
-        self.home_detail_hint_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        actions_column.addWidget(self.home_detail_hint_label)
-        top_bar.addLayout(actions_column, 0)
+        top_bar.addLayout(quick_actions_row, 0)
         layout.addLayout(top_bar)
 
         self.home_map_panel = HomeMapPanel(self)
+        self.home_map_panel.setObjectName("homeMapPanel")
         layout.addWidget(self.home_map_panel, 1)
         layout.addStretch(1)
 
@@ -955,7 +890,6 @@ class MainWindow(QMainWindow):
 
         self.home_status_chip.setText(session_status_summary)
         self.home_profile_label.setText(f"{profile_summary} · {general_summary}")
-        self.home_detail_hint_label.setText("El detalle vive en Diagnóstico y en Estado actual.")
 
         self.start_session_button.setEnabled(session_action_state.can_start_session)
         self.stop_session_button.setEnabled(session_action_state.can_stop_session)
@@ -965,7 +899,7 @@ class MainWindow(QMainWindow):
         self.home_reset_error_action.setEnabled(session_action_state.can_reset_error)
 
         self.change_profile_button.setEnabled(session_action_state.can_edit_configuration)
-        self.home_change_profile_action.setEnabled(session_action_state.can_edit_configuration)
+        self.change_profile_action.setEnabled(session_action_state.can_edit_configuration)
         self.reload_action.setEnabled(session_action_state.can_edit_configuration)
         self.firmware_manager_action.setEnabled(True)
         self.advanced_tools_action.setEnabled(True)

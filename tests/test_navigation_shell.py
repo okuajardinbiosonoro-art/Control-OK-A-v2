@@ -55,5 +55,6 @@ def test_navigation_panel_tracks_checked_section() -> None:
         assert panel.button_for_key("home").isChecked() is False
         visible_labels = [label.text() for label in panel.findChildren(QLabel)]
         assert "Shell principal" not in visible_labels
+        assert panel.styleSheet() == ""
     finally:
         panel.close()

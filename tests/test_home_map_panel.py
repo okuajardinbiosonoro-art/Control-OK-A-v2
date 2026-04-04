@@ -37,7 +37,7 @@ def test_home_map_panel_loads_asset_and_has_reasonable_size_hint() -> None:
     panel = HomeMapPanel()
     try:
         assert panel.has_map_asset() is True
-        assert panel.sizeHint().width() >= 900
-        assert panel.minimumHeight() >= 420
+        assert panel.sizeHint().width() >= 1200
+        assert panel.minimumHeight() >= 560
     finally:
         panel.close()

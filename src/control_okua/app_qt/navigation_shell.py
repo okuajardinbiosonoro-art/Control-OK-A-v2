@@ -91,37 +91,9 @@ class NavigationPanel(QWidget):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
         self.setObjectName("navigationPanel")
-        self.setStyleSheet(
-            """
-            QWidget#navigationPanel {
-                background-color: #FBF8F2;
-                border-right: 1px solid #CBBBA0;
-            }
-            QWidget#navigationPanel QLabel {
-                color: #0B3B27;
-            }
-            QWidget#navigationPanel QPushButton {
-                text-align: left;
-                padding: 10px 12px;
-                border-radius: 10px;
-                border: 1px solid transparent;
-                background-color: transparent;
-                color: #0B3B27;
-                font-weight: 600;
-            }
-            QWidget#navigationPanel QPushButton:hover {
-                background-color: #EFE6D5;
-                border-color: #CBBBA0;
-            }
-            QWidget#navigationPanel QPushButton:checked {
-                background-color: #2FAC66;
-                color: white;
-                border-color: #0B3B27;
-            }
-            """
-        )
 
         brand_label = QLabel("CKv2")
+        brand_label.setObjectName("navigationBrandLabel")
         brand_font = brand_label.font()
         brand_font.setBold(True)
         brand_font.setPointSize(brand_font.pointSize() + 6)

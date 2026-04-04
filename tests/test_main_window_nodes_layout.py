@@ -200,10 +200,12 @@ def test_home_surface_keeps_primary_action_and_visual_map_as_main_elements() -> 
         assert window.tabs.currentWidget() is window.home_tab
         assert window.start_session_button.text() == "Iniciar sesión"
         assert window.home_map_panel.has_map_asset() is True
-        assert window.home_map_panel.width() >= 700
+        assert window.home_map_panel.minimumHeight() >= 560
+        assert window.home_map_panel.width() >= 900
         assert window.home_more_button.text() == "Más"
         assert window.change_profile_button.isHidden() is True
         assert window.reset_session_error_button.isHidden() is True
+        assert window.shell_subtitle_label.isHidden() is True
 
         group_titles = {group.title() for group in window.home_tab.findChildren(QGroupBox)}
         assert "Operación principal" not in group_titles
@@ -213,6 +215,8 @@ def test_home_surface_keeps_primary_action_and_visual_map_as_main_elements() -> 
         assert "Accesos rápidos" not in group_titles
 
         home_texts = {label.text().strip() for label in window.home_tab.findChildren(QLabel) if label.text().strip()}
+        assert "Entrada principal operator-first para navegar el sistema sin depender de diálogos." not in home_texts
+        assert "El detalle técnico vive en Diagnóstico y en Estado actual." not in home_texts
         assert "Home visual lista para cajas, overlays y estados 33.x" not in home_texts
         assert "Espacio reservado para alertas discretas y overlays futuros." not in home_texts
     finally:
@@ -283,8 +287,10 @@ def test_help_menu_has_about_action_and_uses_qmessagebox(monkeypatch) -> None:
     monkeypatch.setattr("control_okua.app_qt.main_window.QMessageBox.about", _fake_about)
     try:
         menu_titles = [action.text() for action in window.menuBar().actions()]
-        assert "Ayuda" in menu_titles
+        assert menu_titles == ["Aplicación", "Ayuda"]
         assert window.about_action.text() == "Acerca de"
+        assert not hasattr(window, "view_home_action")
+        assert not hasattr(window, "view_nodes_action")
 
         window.show_about_dialog()
         assert called["title"] == "Acerca de"

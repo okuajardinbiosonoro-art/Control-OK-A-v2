@@ -1,178 +1,300 @@
 /*
- * Hoja de Estilo (QSS) para Control Okúa v1.4
- *
- * - ¡CAMBIO! Corregido el bug de QSpinBox (botones +/-)
- * - ¡CAMBIO! Corregido el estilo de QLabel ("cajones")
-*/
+ * Control OKÚA v2
+ * Base visual clara y corporativa para la GUI desktop.
+ */
 
-/* --- Ventana Principal y Widgets Base --- */
-QMainWindow, QDialog {
-    background-color: #252525; /* Fondo Principal (Gris Oscuro) */
+QMainWindow,
+QDialog {
+    background-color: #F7F4EC;
 }
+
 QWidget {
-    font-family: "Roboto", "Segoe UI", sans-serif;
+    background-color: transparent;
+    color: #0B3B27;
+    font-family: "Segoe UI", "Roboto", sans-serif;
     font-size: 10pt;
-    color: #cbbba0; /* Texto (Beige) */
-    border-radius: 3px;
 }
 
-/* --- ¡NUEVO! Corrección de QLabel ("cajones") --- */
+QWidget#shellContentHost,
+QWidget#homeOperationContent {
+    background-color: #F7F4EC;
+}
+
 QLabel {
     background-color: transparent;
-    border: none;
-    padding: 2px 0px; /* Añade un poco de espacio vertical */
+    color: #0B3B27;
+    padding: 0;
 }
 
-/* --- Contenedores de Grupo (QGroupBox) --- */
-QGroupBox {
-    background-color: #2D2D2D;
-    border: 1px solid #444444;
-    border-radius: 5px;
-    margin-top: 12px;
+QLabel#shellTitleLabel {
+    color: #0B3B27;
+    font-weight: 700;
 }
+
+QLabel#shellSubtitleLabel {
+    color: #5B6F66;
+}
+
+QLabel#homeStatusChip {
+    background-color: #E9F5EE;
+    color: #0B3B27;
+    border: 1px solid #C9DCCF;
+    border-radius: 14px;
+    padding: 6px 12px;
+    font-weight: 700;
+}
+
+QLabel#homeStatusLine {
+    color: #0B3B27;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+QLabel#homeMetaLabel {
+    color: #5A695F;
+}
+
+QGroupBox {
+    background-color: #FFFDFC;
+    border: 1px solid #E1D5C2;
+    border-radius: 14px;
+    margin-top: 14px;
+    padding: 12px 14px 14px 14px;
+}
+
 QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    padding: 0 5px;
-    left: 10px;
-    color: #2FACC6;
-    font-weight: bold;
+    left: 12px;
+    padding: 0 6px;
+    color: #0B3B27;
+    background-color: #FFFDFC;
+    font-weight: 700;
 }
 
-/* --- Pestañas (QTabWidget) --- */
-QTabWidget::pane {
-    border-top: 1px solid #444444;
-    background-color: #2D2D2D;
+QPushButton,
+QToolButton {
+    background-color: #FFFDF9;
+    color: #0B3B27;
+    border: 1px solid #DCCFB8;
+    border-radius: 12px;
+    padding: 9px 14px;
+    font-weight: 600;
 }
-QTabBar::tab {
-    background: #252525;
-    color: #cbbba0;
-    padding: 8px 15px;
-    border: 1px solid #444444;
-    border-bottom: none;
-    border-top-left-radius: 4px;
-    border-top-right-radius: 4px;
-    font-weight: bold;
+
+QPushButton:hover,
+QToolButton:hover {
+    background-color: #F3EBDD;
+    border-color: #CBBBA0;
 }
-QTabBar::tab:selected {
-    background: #2D2D2D;
+
+QPushButton:pressed,
+QToolButton:pressed {
+    background-color: #E8DDCB;
+    border-color: #BFA883;
+}
+
+QPushButton:disabled,
+QToolButton:disabled {
+    background-color: #E7E5DF;
+    color: #95A39B;
+    border-color: #D8D4CA;
+}
+
+QPushButton:focus,
+QToolButton:focus,
+QComboBox:focus,
+QSpinBox:focus,
+QTextEdit:focus,
+QTreeWidget:focus,
+QTableWidget:focus {
+    border: 1px solid #2FAC66;
+}
+
+QPushButton#primarySessionButton {
+    background-color: #2FAC66;
     color: #FFFFFF;
-}
-QTabBar::tab:!selected {
-    color: #AAAAAA;
-    background: #222222;
-}
-
-/* --- Botones (QPushButton) --- */
-QPushButton {
-    background-color: #2FACC6;
-    color: #FFFFFF;
-    border: none;
-    padding: 8px 16px;
-    border-radius: 4px;
-    font-weight: bold;
-}
-QPushButton:hover {
-    background-color: #3DCC7A;
-}
-QPushButton:pressed {
-    background-color: #2A995C;
-}
-QPushButton:disabled {
-    background-color: #444444;
-    color: #999999;
+    border: 1px solid #2A975A;
+    padding: 10px 18px;
+    font-size: 11pt;
+    font-weight: 700;
 }
 
-/* --- Menús Desplegables (QComboBox) --- */
-QComboBox {
-    background-color: #2D2D2D;
-    color: #cbbba0;
-    border: 1px solid #444444;
-    padding: 5px;
-    border-radius: 3px;
-}
-QComboBox:hover {
-    border-color: #2FACC6;
-}
-QComboBox QAbstractItemView { 
-     background-color: #2D2D2D;
-     color: #cbbba0;
-     border: 1px solid #444444;
-     selection-background-color: #2FACC6;
-     selection-color: #FFFFFF;
+QPushButton#primarySessionButton:hover {
+    background-color: #279A5A;
+    border-color: #1E7644;
 }
 
+QPushButton#primarySessionButton:pressed {
+    background-color: #1E7644;
+    border-color: #165C34;
+}
 
-/* --- Controles Numéricos (QSpinBox) --- */
+QToolButton#secondaryMenuButton {
+    min-width: 68px;
+}
+
+QComboBox,
 QSpinBox {
-    background-color: #2D2D2D;
-    color: #cbbba0;
-    border: 1px solid #444444;
-    padding: 5px;
-    border-radius: 3px;
+    background-color: #FFFDFC;
+    color: #0B3B27;
+    border: 1px solid #DCCFB8;
+    border-radius: 10px;
+    padding: 6px 10px;
 }
+
+QComboBox:hover,
 QSpinBox:hover {
-    border-color: #2FACC6;
+    border-color: #2FAC66;
 }
-QSpinBox::up-button, QSpinBox::down-button {
-    subcontrol-origin: border;
-    background-color: #444444;
-    border: 1px solid #444444;
-    width: 18px;
-    border-radius: 3px;
+
+QComboBox QAbstractItemView {
+    background-color: #FFFDFC;
+    color: #0B3B27;
+    border: 1px solid #DCCFB8;
+    selection-background-color: #2FAC66;
+    selection-color: #FFFFFF;
 }
-QSpinBox::up-button {
-    subcontrol-position: top right; /* Posición correcta */
-    margin-right: 3px;
-    margin-top: 3px;
-}
+
+QSpinBox::up-button,
 QSpinBox::down-button {
-    subcontrol-position: bottom right; /* Posición correcta */
-    margin-right: 3px;
-    margin-bottom: 3px;
-}
-QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-    background-color: #555555;
-}
-QSpinBox::up-button:pressed, QSpinBox::down-button:pressed {
-    background-color: #2FACC6;
+    subcontrol-origin: border;
+    background-color: #F3EBDD;
+    border: 1px solid #DCCFB8;
+    width: 18px;
+    border-radius: 8px;
 }
 
-/* --- ¡ELIMINADO! Se han quitado los estilos ::up-arrow y ::down-arrow
-     para dejar que el sistema dibuje las flechas por defecto.
-     Esto corrige el bug del botón "más". --- */
+QSpinBox::up-button {
+    subcontrol-position: top right;
+    margin-right: 4px;
+    margin-top: 4px;
+}
 
+QSpinBox::down-button {
+    subcontrol-position: bottom right;
+    margin-right: 4px;
+    margin-bottom: 4px;
+}
 
-/* --- Log de Actividad (QTextEdit) --- */
-QTextEdit {
-    background-color: #1E1E1E;
-    color: #cbbba0;
+QTextEdit,
+QTreeWidget,
+QTableWidget {
+    background-color: #FFFDFC;
+    color: #0B3B27;
+    border: 1px solid #E1D5C2;
+    border-radius: 12px;
+    alternate-background-color: #F8F4EC;
+    gridline-color: #E7DECF;
+    selection-background-color: #D8EFE0;
+    selection-color: #0B3B27;
+}
+
+QHeaderView::section {
+    background-color: #F3EBDD;
+    color: #0B3B27;
     border: none;
-    padding: 5px;
+    border-bottom: 1px solid #E1D5C2;
+    padding: 8px 10px;
+    font-weight: 700;
 }
 
-/* --- Barra de Menú y Estado --- */
+QScrollArea {
+    background-color: transparent;
+    border: none;
+}
+
+QTabWidget::pane {
+    border: none;
+    background-color: transparent;
+}
+
+QTabBar::tab {
+    background-color: #EFE6D5;
+    color: #0B3B27;
+    border: 1px solid #DCCFB8;
+    border-bottom: none;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    padding: 8px 14px;
+    font-weight: 600;
+}
+
+QTabBar::tab:selected {
+    background-color: #FFFDFC;
+}
+
 QMenuBar {
-    background-color: #2D2D2D;
-    color: #cbbba0;
-    padding: 2px;
+    background-color: #FBF8F2;
+    color: #0B3B27;
+    border-bottom: 1px solid #E1D5C2;
+    padding: 4px 8px;
 }
+
+QMenuBar::item {
+    background-color: transparent;
+    padding: 6px 10px;
+    border-radius: 8px;
+}
+
 QMenuBar::item:selected {
-    background-color: #2FACC6;
-    color: #FFFFFF;
+    background-color: #EFE6D5;
 }
+
 QMenu {
-    background-color: #2D2D2D;
-    border: 1px solid #444444;
+    background-color: #FFFDFC;
+    color: #0B3B27;
+    border: 1px solid #DCCFB8;
+    padding: 6px;
 }
+
+QMenu::item {
+    padding: 8px 24px 8px 12px;
+    border-radius: 8px;
+}
+
 QMenu::item:selected {
-    background-color: #2FACC6;
+    background-color: #2FAC66;
     color: #FFFFFF;
 }
 
 QStatusBar {
-    background-color: #2D2D2D;
-    color: #cbbba0;
-    padding: 3px 10px;
-    font-weight: bold;
+    background-color: #FBF8F2;
+    color: #4F6259;
+    border-top: 1px solid #E1D5C2;
+    padding: 4px 10px;
+}
+
+QWidget#navigationPanel {
+    background-color: #FBF8F2;
+    border-right: 1px solid #E1D5C2;
+}
+
+QWidget#navigationPanel QLabel {
+    color: #0B3B27;
+}
+
+QWidget#navigationPanel QPushButton {
+    text-align: left;
+    background-color: transparent;
+    color: #0B3B27;
+    border: 1px solid transparent;
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-weight: 700;
+}
+
+QWidget#navigationPanel QPushButton:hover {
+    background-color: #F0E7D8;
+    border-color: #DCCFB8;
+}
+
+QWidget#navigationPanel QPushButton:checked {
+    background-color: #2FAC66;
+    color: #FFFFFF;
+    border-color: #248A53;
+}
+
+QWidget#homeMapPanel {
+    background-color: transparent;
 }

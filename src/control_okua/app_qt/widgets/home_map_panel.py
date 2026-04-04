@@ -23,7 +23,7 @@ class HomeMapPanel(QWidget):
         super().__init__(parent)
         self._asset_path = resolve_home_map_asset_path()
         self._map_pixmap = self._load_pixmap(self._asset_path)
-        self.setMinimumHeight(420)
+        self.setMinimumHeight(560)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     @property
@@ -34,7 +34,7 @@ class HomeMapPanel(QWidget):
         return not self._map_pixmap.isNull()
 
     def sizeHint(self) -> QSize:
-        return QSize(980, 620)
+        return QSize(1320, 820)
 
     def paintEvent(self, event) -> None:  # type: ignore[override]
         painter = QPainter(self)

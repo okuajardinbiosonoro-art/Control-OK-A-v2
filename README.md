@@ -38,11 +38,11 @@ El ejecutable queda en `dist/Control Okua.exe`.
 
 ## Estado actual de la app (UX)
 
-La ventana principal usa una shell operator-first no modal con navegación lateral persistente y un stack interno con tabs ocultas:
+La ventana principal usa una shell no modal con navegación lateral persistente y un stack interno con tabs ocultas:
 
 - Superficies principales: `Inicio`, `Nodos`, `Diagnóstico`, `Firmware`, `Técnico`, `Remoto`.
-- Vista `Estado actual` disponible bajo demanda desde `Ver > Estado actual` (ya no es pestaña fija).
-- `Inicio` es la entrada principal y ya usa el plano real del repo como protagonista visual de la Home.
+- Vista `Estado actual` disponible bajo demanda desde la propia app, sin ocupar la portada.
+- `Inicio` es la entrada principal y usa el plano real del repo como protagonista visual.
 - `Nodos` sigue agrupando cajas desplegables (`Caja 1` a `Caja 5`) con nombres lógicos (`EB1`, `EC1`, `...`).
 - `Diagnóstico` concentra resumen técnico, advertencias y panel de preflight desplegable.
 - `Técnico` integra `Control F3` y herramientas avanzadas.
@@ -50,7 +50,7 @@ La ventana principal usa una shell operator-first no modal con navegación later
 - `Remoto` queda confirmado como superficie principal de primer nivel porque ya expone estado y control rápido del servicio remoto sin depender del diálogo avanzado.
 - `Inicio` queda definida como portada limpia: mapa protagonista, estado breve de sesión y una única acción principal visible.
 - El detalle operativo y técnico vive fuera de la portada:
-  - `Ver > Estado actual` concentra el resumen largo de sesión
+  - `Estado actual` concentra el resumen largo de sesión
   - `Diagnóstico` concentra readiness, advertencias y runtime
   - `Técnico` concentra control avanzado y herramientas delicadas
   - `Remoto` concentra el estado y acceso del servicio remoto
@@ -58,11 +58,10 @@ La ventana principal usa una shell operator-first no modal con navegación later
 Acciones y menú principal:
 
 - `Inicio` mantiene una acción primaria visible: `Iniciar sesión` o `Detener sesión`, según el estado real.
-- Las acciones secundarias (`Estado actual`, `Diagnóstico`, `Cambiar perfil`, `Reiniciar error`) quedan disponibles de forma discreta desde la propia Home y desde el menú principal.
-- `Archivo`: `Recargar configuración`, `Salir`.
-- `Ver`: `Inicio`, `Nodos`, `Estado actual`, `Diagnóstico`, `Firmware / OTA`, `Técnico`, `Remoto`, `Errores / preflight`.
-- `Herramientas`: `Firmware Manager`, `Herramientas avanzadas`.
-- `Ayuda`: `Acerca de`.
+- Las acciones secundarias (`Estado actual`, `Diagnóstico`, `Cambiar perfil`, `Reiniciar error`) quedan disponibles de forma discreta desde la propia Home.
+- Menú superior reducido:
+  - `Aplicación`: `Cambiar perfil`, `Recargar configuración`, `Salir`
+  - `Ayuda`: `Acerca de`
 
 ## Flujo de sesion y readiness (Tickets 3.3 + 4.x)
 
@@ -446,7 +445,7 @@ Remove-Item Env:CKV2_AUTOCLOSE_MS
 2. Confirmar estado inicial de sesion en `inactiva`.
 3. Verificar en `Inicio` la acción principal, el mapa protagonista y el resumen breve de sesión.
 4. Verificar en `Diagnostico` el bloque de preflight y los bloques de runtime serial/UDP.
-5. Abrir `Ver > Estado actual` y validar:
+5. Abrir `Estado actual` desde la Home y validar:
    - detalle navegable con scroll interno
    - 2 columnas en ancho amplio
    - 1 columna en ancho estrecho
@@ -466,7 +465,7 @@ Remove-Item Env:CKV2_AUTOCLOSE_MS
 14. Pulsar `Reiniciar error` y confirmar retorno a estado inactivo con refresco visual coherente.
 15. Validar bloqueo de `Cambiar perfil`/`Recargar configuracion` cuando la sesion no esta en estado seguro (`starting`, `running`, `stopping`).
 16. Abrir `Ayuda > Acerca de` y confirmar información básica.
-17. Abrir `Herramientas avanzadas` y validar `Ver config`, `Abrir carpeta`, `Recargar config` y `Salidas MIDI`.
+17. Abrir `Herramientas avanzadas` desde `Técnico` y validar `Ver config`, `Abrir carpeta`, `Recargar config` y `Salidas MIDI`.
 18. Cerrar y reabrir la app sin errores.
 
 ## Prueba MIDI (LoopMIDI / Ableton)
