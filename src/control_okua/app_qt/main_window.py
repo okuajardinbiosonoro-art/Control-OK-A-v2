@@ -329,13 +329,15 @@ class MainWindow(QMainWindow):
         operation_content.setObjectName("homeOperationContent")
         operation_content.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         layout = QVBoxLayout(operation_content)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
+        layout.setContentsMargins(8, 2, 8, 0)
+        layout.setSpacing(10)
 
         top_bar = QHBoxLayout()
+        top_bar.setContentsMargins(4, 2, 4, 2)
         top_bar.setSpacing(14)
 
         intro_column = QVBoxLayout()
+        intro_column.setContentsMargins(2, 0, 0, 0)
         intro_column.setSpacing(4)
         self.home_status_chip = QLabel("Sesión inactiva")
         self.home_status_chip.setObjectName("homeStatusChip")
@@ -357,6 +359,7 @@ class MainWindow(QMainWindow):
         top_bar.addLayout(intro_column, 1)
 
         quick_actions_row = QHBoxLayout()
+        quick_actions_row.setContentsMargins(0, 0, 2, 0)
         quick_actions_row.setSpacing(10)
         self.start_session_button = QPushButton("Iniciar sesión")
         self.start_session_button.setObjectName("primarySessionButton")
@@ -369,7 +372,7 @@ class MainWindow(QMainWindow):
 
         self.home_more_button = QToolButton(self)
         self.home_more_button.setObjectName("secondaryMenuButton")
-        self.home_more_button.setText("Más ▾")
+        self.home_more_button.setText("Más")
         self.home_more_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.home_more_menu = QMenu(self.home_more_button)
         self.home_more_button.setMenu(self.home_more_menu)

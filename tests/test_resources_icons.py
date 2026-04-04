@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from PySide6.QtGui import QColor, QImage
+
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 SRC_DIR = ROOT_DIR / "src"
@@ -27,3 +29,26 @@ def test_pyinstaller_spec_points_to_branding_icon_assets() -> None:
     assert 'PROJECT_DIR / "assets" / "branding" / "okua_icon_256.png"' in spec_text
     assert 'PROJECT_DIR / "assets" / "icons" / "app_icon.ico"' not in spec_text
     assert 'PROJECT_DIR / "assets" / "icons" / "app_icon.png"' not in spec_text
+
+
+def test_primary_branding_png_uses_canvas_more_aggressively() -> None:
+    icon_path = resource_path("assets/branding/okua_icon_256.png")
+    image = QImage(str(icon_path))
+
+    left = image.width()
+    top = image.height()
+    right = -1
+    bottom = -1
+    for y in range(image.height()):
+        for x in range(image.width()):
+            if QColor.fromRgba(image.pixel(x, y)).alpha() <= 0:
+                continue
+            left = min(left, x)
+            top = min(top, y)
+            right = max(right, x)
+            bottom = max(bottom, y)
+
+    assert right > left
+    assert bottom > top
+    assert (right - left + 1) >= 190
+    assert (bottom - top + 1) >= 220
