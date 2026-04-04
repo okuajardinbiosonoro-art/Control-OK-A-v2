@@ -38,10 +38,7 @@ from control_okua.app_qt.firmware_manager_dialog import FirmwareManagerDialog
 from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
 from control_okua.app_qt.widgets import ConfigViewDialog, HomeMapView
 from control_okua.app_qt.viewmodels import (
-    HOME_MAP_LEGEND_ITEMS,
-    HomeMapBoxViewModel,
     build_nodes_tab_view_state,
-    build_home_map_box_view_models,
     NodesTabViewState,
     PreflightDiagnosticRow,
     SerialRuntimeDiagnosticRow,
@@ -133,7 +130,6 @@ class MainWindow(QMainWindow):
         self._firmware_summary_labels: dict[str, QLabel] = {}
         self._technical_summary_labels: dict[str, QLabel] = {}
         self._home_map_detail_labels: dict[str, QLabel] = {}
-        self._home_map_box_view_models: dict[int, HomeMapBoxViewModel] = {}
         self.session_controller = session_controller or SessionController(
             self._session_cfg_provider,
             parent=self,
@@ -343,8 +339,8 @@ class MainWindow(QMainWindow):
         map_group = QGroupBox("Mapa operativo")
         map_layout = QVBoxLayout(map_group)
         map_intro_label = QLabel(
-            "Base espacial de la Home con estado agregado por caja. "
-            "La lectura rápida ya usa el runtime real; los overlays vivos por nodo llegarán en el siguiente ticket."
+            "Base espacial estática de la Home. "
+            "Las cajas ya pueden seleccionarse; el estado agregado y los overlays vivos llegarán en el siguiente ticket."
         )
         map_intro_label.setWordWrap(True)
         map_layout.addWidget(map_intro_label)
@@ -367,7 +363,7 @@ class MainWindow(QMainWindow):
             ("nodes", "Nodos esperados"),
             ("description", "Contexto"),
             ("status", "Estado agregado"),
-            ("asset", "Evidencia / plano"),
+            ("asset", "Plano base"),
         ]
         for key, field_name in selection_fields:
             label = QLabel("-")
@@ -380,19 +376,6 @@ class MainWindow(QMainWindow):
         map_content_layout.addWidget(self.home_map_selection_group, 2)
 
         map_layout.addWidget(map_content, 1)
-        self.home_map_legend_group = QGroupBox("Leyenda de estados")
-        legend_layout = QHBoxLayout(self.home_map_legend_group)
-        self.home_map_legend_labels: list[QLabel] = []
-        for item in HOME_MAP_LEGEND_ITEMS:
-            legend_label = QLabel(item.label)
-            legend_label.setStyleSheet(
-                "padding: 4px 10px; border-radius: 10px; "
-                f"background-color: {item.fill_hex}; border: 1px solid {item.border_hex};"
-            )
-            self.home_map_legend_labels.append(legend_label)
-            legend_layout.addWidget(legend_label)
-        legend_layout.addStretch(1)
-        map_layout.addWidget(self.home_map_legend_group)
         self.home_map_hint_label = QLabel(
             "Home ofrece lectura espacial rápida. Nodos sigue siendo la vista detallada técnico-operativa."
         )
@@ -948,7 +931,7 @@ class MainWindow(QMainWindow):
             self._refresh_nodes_views()
         self._refresh_firmware_shell_summary()
         self._refresh_technical_shell_summary()
-        self._refresh_home_map_runtime_view()
+        self._refresh_home_map_selection_summary()
 
         self.statusBar().showMessage(
             f"{preflight_status} | {session_status_summary} | {self._session_snapshot.message}"
@@ -1230,22 +1213,6 @@ class MainWindow(QMainWindow):
             return
         self._refresh_home_map_selection_summary()
 
-    def _refresh_home_map_runtime_view(self) -> None:
-        if not hasattr(self, "home_map_view"):
-            return
-        now_monotonic = time.monotonic()
-        node_snapshots = self.session_controller.get_node_snapshots(now=now_monotonic)
-        view_models = build_home_map_box_view_models(
-            self.home_map_view.layout_contract,
-            node_snapshots,
-            self._session_snapshot,
-        )
-        self._home_map_box_view_models = {
-            view_model.box_id: view_model for view_model in view_models
-        }
-        self.home_map_view.set_box_view_models(view_models)
-        self._refresh_home_map_selection_summary()
-
     def _refresh_home_map_selection_summary(self) -> None:
         if not self._home_map_detail_labels:
             return
@@ -1255,31 +1222,19 @@ class MainWindow(QMainWindow):
                 label.setText("-")
             return
 
-        selected_view = self._home_map_box_view_models.get(selected.box_id)
         nodes_text = ", ".join(selected.expected_node_labels)
         if not nodes_text:
             nodes_text = "Sin nodos definidos"
-        status_text = "Sin estado en vivo todavía."
-        context_text = selected.description
-        asset_prefix = (
+        asset_text = (
             "Asset configurado" if self.home_map_view.has_background_asset() else "Fallback estático activo"
         )
-        asset_text = asset_prefix
-        if selected_view is not None:
-            status_text = (
-                f"{selected_view.status_label} | conectados {selected_view.connected_nodes}/{selected_view.expected_nodes}"
-            )
-            context_text = f"{selected.description} {selected_view.status_summary}"
-            asset_text = (
-                f"{asset_prefix} | observados {selected_view.observed_nodes}/{selected_view.expected_nodes}"
-            )
         self._home_map_detail_labels["label"].setText(selected.label)
         self._home_map_detail_labels["box_id"].setText(
             f"Caja {selected.box_id} | slot={selected.position_slot}"
         )
         self._home_map_detail_labels["nodes"].setText(nodes_text)
-        self._home_map_detail_labels["description"].setText(context_text)
-        self._home_map_detail_labels["status"].setText(status_text)
+        self._home_map_detail_labels["description"].setText(selected.description)
+        self._home_map_detail_labels["status"].setText(selected.future_status_hint)
         self._home_map_detail_labels["asset"].setText(asset_text)
 
     def _on_session_state_changed(self, _state_value: str) -> None:
@@ -1312,8 +1267,6 @@ class MainWindow(QMainWindow):
 
         runtime_snapshot = self.session_controller.get_backend_runtime_snapshot()
         self._refresh_runtime_views(runtime_snapshot)
-        if self.tabs.currentWidget() is self.home_tab:
-            self._refresh_home_map_runtime_view()
         if self._is_nodes_view_visible():
             self._refresh_nodes_views()
 
@@ -1323,9 +1276,6 @@ class MainWindow(QMainWindow):
             return
         if self._is_nodes_view_visible():
             self._refresh_nodes_views()
-            return
-        if self.tabs.currentWidget() is self.home_tab:
-            self._refresh_home_map_runtime_view()
             return
         if self._is_runtime_view_visible():
             runtime_snapshot = self.session_controller.get_backend_runtime_snapshot()
