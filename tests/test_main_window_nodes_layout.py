@@ -119,6 +119,7 @@ def test_main_tabs_do_not_include_estado_actual_by_default() -> None:
         assert window.navigation_panel is not None
         assert window.navigation_panel.button_for_key("home").isChecked() is True
         assert window.shell_title_label.text() == "Inicio"
+        assert window.home_map_panel.has_map_asset() is True
     finally:
         window.close()
 
@@ -184,6 +185,24 @@ def test_navigation_panel_changes_real_view_and_keeps_selection_in_sync() -> Non
         assert window.tabs.currentWidget() is window.remote_tab
         assert window.navigation_panel.button_for_key("remote").isChecked() is True
         assert window.shell_title_label.text() == "Remoto"
+    finally:
+        window.close()
+
+
+def test_home_surface_keeps_primary_action_and_visual_map_as_main_elements() -> None:
+    app = _ensure_qapp()
+    window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
+    try:
+        window.show()
+        app.processEvents()
+        window.resize(1400, 900)
+        app.processEvents()
+        assert window.tabs.currentWidget() is window.home_tab
+        assert window.start_session_button.text() == "Iniciar sesión"
+        assert window.home_map_panel.has_map_asset() is True
+        assert window.home_map_panel.width() >= 700
+        assert window.home_alerts_label.text().strip()
+        assert not hasattr(window, "home_visual_placeholder")
     finally:
         window.close()
 

@@ -46,6 +46,7 @@ from control_okua.app_qt.navigation_shell import (
 )
 from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
 from control_okua.app_qt.widgets.config_view_dialog import ConfigViewDialog
+from control_okua.app_qt.widgets.home_map_panel import HomeMapPanel
 from control_okua.app_qt.viewmodels import (
     build_nodes_tab_view_state,
     NodesTabViewState,
@@ -312,10 +313,10 @@ class MainWindow(QMainWindow):
             self.start_session_button.setStyleSheet(
                 f"background-color: {BRAND_ACCENT}; color: white; font-weight: 700; padding: 8px 14px;"
             )
-        if hasattr(self, "home_visual_placeholder"):
-            self.home_visual_placeholder.setStyleSheet(
-                "border: 1px solid {sand}; border-radius: 12px; padding: 24px; "
-                "background-color: #F7F4EC; color: {deep};".format(
+        if hasattr(self, "home_alerts_label"):
+            self.home_alerts_label.setStyleSheet(
+                "border: 1px dashed {sand}; border-radius: 10px; padding: 10px; "
+                "background-color: #FBF8F2; color: {deep};".format(
                     sand=BRAND_SAND,
                     deep=BRAND_DEEP,
                 )
@@ -356,47 +357,44 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.title_label)
 
         self.operation_subtitle_label = QLabel(
-            "Superficie principal operator-first preparada para la futura Home visual de CKv2."
+            "Pantalla principal de operación preparada para la futura lectura viva por cajas."
         )
         self.operation_subtitle_label.setWordWrap(True)
         layout.addWidget(self.operation_subtitle_label)
 
-        hero_layout = QGridLayout()
-        hero_layout.setHorizontalSpacing(14)
-        hero_layout.setVerticalSpacing(14)
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(14)
 
-        quick_actions_group = QGroupBox("Operación principal")
-        quick_actions_layout = QVBoxLayout(quick_actions_group)
+        headline_group = QGroupBox("Operación principal")
+        headline_layout = QVBoxLayout(headline_group)
+        headline_intro = QLabel(
+            "Inicio concentra la acción primaria y deja el detalle técnico en las demás superficies."
+        )
+        headline_intro.setWordWrap(True)
+        headline_layout.addWidget(headline_intro)
         quick_actions_row = QHBoxLayout()
-
-        self.change_profile_button = QPushButton("Cambiar perfil")
-        self.change_profile_button.clicked.connect(self.change_profile)
-        quick_actions_row.addWidget(self.change_profile_button)
         self.start_session_button = QPushButton("Iniciar sesión")
         self.start_session_button.clicked.connect(self.start_session)
         quick_actions_row.addWidget(self.start_session_button)
         self.stop_session_button = QPushButton("Detener sesión")
         self.stop_session_button.clicked.connect(self.stop_session)
         quick_actions_row.addWidget(self.stop_session_button)
+        self.change_profile_button = QPushButton("Cambiar perfil")
+        self.change_profile_button.clicked.connect(self.change_profile)
+        quick_actions_row.addWidget(self.change_profile_button)
         self.reset_session_error_button = QPushButton("Reiniciar error")
         self.reset_session_error_button.clicked.connect(self.reset_session_error)
         quick_actions_row.addWidget(self.reset_session_error_button)
         quick_actions_row.addStretch(1)
-        quick_actions_layout.addLayout(quick_actions_row)
-        quick_actions_hint = QLabel(
-            "Inicio concentra la acción primaria y deja el detalle técnico para las otras superficies."
-        )
-        quick_actions_hint.setWordWrap(True)
-        quick_actions_layout.addWidget(quick_actions_hint)
-        hero_layout.addWidget(quick_actions_group, 0, 0)
+        headline_layout.addLayout(quick_actions_row)
+        header_layout.addWidget(headline_group, 2)
 
-        compact_group = QGroupBox("Resumen operativo")
+        compact_group = QGroupBox("Estado actual")
         compact_layout = QFormLayout(compact_group)
         compact_fields = [
             ("profile", "Perfil activo"),
             ("session_state", "Estado de sesión"),
-            ("session_backend", "Backend esperado"),
-            ("session_message", "Mensaje de sesión"),
+            ("session_message", "Resumen corto"),
             ("general", "Estado general"),
         ]
         for key, field_name in compact_fields:
@@ -404,29 +402,19 @@ class MainWindow(QMainWindow):
             label.setWordWrap(True)
             compact_layout.addRow(field_name, label)
             self._operation_compact_labels[key] = label
-        hero_layout.addWidget(compact_group, 1, 0)
+        header_layout.addWidget(compact_group, 1)
+        layout.addLayout(header_layout)
 
-        shortcuts_group = QGroupBox("Accesos directos")
-        shortcuts_layout = QVBoxLayout(shortcuts_group)
-        shortcuts_hint = QLabel(
-            "La navegación principal mantiene todo visible sin depender de diálogos para llegar a módulos centrales."
-        )
-        shortcuts_hint.setWordWrap(True)
-        shortcuts_layout.addWidget(shortcuts_hint)
-        for button_text, handler in (
-            ("Abrir Nodos", self.show_nodes_tab),
-            ("Abrir Diagnóstico", self.show_diagnostics_tab),
-            ("Abrir Firmware / OTA", self.show_firmware_tab),
-            ("Abrir Técnico", self.show_control_plane_tab),
-            ("Abrir Remoto", self.show_remote_tab),
-        ):
-            button = QPushButton(button_text)
-            button.clicked.connect(handler)
-            shortcuts_layout.addWidget(button)
-        shortcuts_layout.addStretch(1)
-        hero_layout.addWidget(shortcuts_group, 0, 1, 2, 1)
+        main_layout = QHBoxLayout()
+        main_layout.setSpacing(16)
 
-        readiness_group = QGroupBox("Preparación")
+        self.home_map_panel = HomeMapPanel(self)
+        main_layout.addWidget(self.home_map_panel, 5)
+
+        side_column = QVBoxLayout()
+        side_column.setSpacing(12)
+
+        readiness_group = QGroupBox("Pulso operativo")
         readiness_layout = QFormLayout(readiness_group)
         readiness_fields = [
             ("status", "Estado"),
@@ -439,62 +427,55 @@ class MainWindow(QMainWindow):
             label.setWordWrap(True)
             readiness_layout.addRow(field_name, label)
             self._operation_readiness_labels[key] = label
-        hero_layout.addWidget(readiness_group, 2, 0)
+        self.home_open_diagnostics_button = QPushButton("Ver diagnóstico")
+        self.home_open_diagnostics_button.clicked.connect(self.show_diagnostics_tab)
+        readiness_layout.addRow("", self.home_open_diagnostics_button)
+        side_column.addWidget(readiness_group)
 
-        channels_group = QGroupBox("Lectura rápida de canales")
-        channels_layout = QHBoxLayout(channels_group)
-
-        serial_group = QGroupBox("Serial")
-        serial_layout = QFormLayout(serial_group)
-        serial_fields = [
-            ("status", "Estado"),
-            ("summary", "Resumen"),
-            ("recent", "Actividad reciente"),
-        ]
-        for key, field_name in serial_fields:
+        channels_group = QGroupBox("Canales")
+        channels_layout = QFormLayout(channels_group)
+        for key, field_name in (
+            ("status", "Serial"),
+            ("summary", "Serial resumen"),
+            ("recent", "Serial actividad"),
+        ):
             label = QLabel("-")
             label.setWordWrap(True)
-            serial_layout.addRow(field_name, label)
+            channels_layout.addRow(field_name, label)
             self._operation_serial_labels[key] = label
-        channels_layout.addWidget(serial_group, 1)
-
-        udp_group = QGroupBox("UDP")
-        udp_layout = QFormLayout(udp_group)
-        udp_fields = [
-            ("status", "Estado"),
-            ("summary", "Resumen"),
-            ("recent", "Actividad reciente"),
-        ]
-        for key, field_name in udp_fields:
+        for key, field_name in (
+            ("status", "UDP"),
+            ("summary", "UDP resumen"),
+            ("recent", "UDP actividad"),
+        ):
             label = QLabel("-")
             label.setWordWrap(True)
-            udp_layout.addRow(field_name, label)
+            channels_layout.addRow(field_name, label)
             self._operation_udp_labels[key] = label
-        channels_layout.addWidget(udp_group, 1)
-        hero_layout.addWidget(channels_group, 2, 1)
+        side_column.addWidget(channels_group)
 
-        hero_layout.setColumnStretch(0, 2)
-        hero_layout.setColumnStretch(1, 1)
-        layout.addLayout(hero_layout)
+        shortcuts_group = QGroupBox("Accesos rápidos")
+        shortcuts_layout = QVBoxLayout(shortcuts_group)
+        for button_text, handler in (
+            ("Nodos", self.show_nodes_tab),
+            ("Firmware", self.show_firmware_tab),
+            ("Técnico", self.show_control_plane_tab),
+            ("Remoto", self.show_remote_tab),
+        ):
+            button = QPushButton(button_text)
+            button.clicked.connect(handler)
+            shortcuts_layout.addWidget(button)
+        shortcuts_layout.addStretch(1)
+        side_column.addWidget(shortcuts_group)
 
-        visual_stage_group = QGroupBox("Home visual preparada")
-        visual_stage_layout = QVBoxLayout(visual_stage_group)
-        visual_intro_label = QLabel(
-            "Aquí vivirá la Home basada en mapa del siguiente ticket. "
-            "La shell ya queda limpia, persistente y orientada a operación."
+        self.home_alerts_label = QLabel(
+            "Espacio reservado para alertas discretas y overlays futuros."
         )
-        visual_intro_label.setWordWrap(True)
-        visual_stage_layout.addWidget(visual_intro_label)
-        self.home_visual_placeholder = QLabel(
-            "Contenedor principal listo para la futura vista operator-first."
-        )
-        self.home_visual_placeholder.setAlignment(Qt.AlignCenter)
-        self.home_visual_placeholder.setMinimumHeight(260)
-        self.home_visual_placeholder.setStyleSheet(
-            "border: 1px solid palette(mid); border-radius: 12px; padding: 24px;"
-        )
-        visual_stage_layout.addWidget(self.home_visual_placeholder, 1)
-        layout.addWidget(visual_stage_group, 1)
+        self.home_alerts_label.setWordWrap(True)
+        side_column.addWidget(self.home_alerts_label)
+        side_column.addStretch(1)
+        main_layout.addLayout(side_column, 2)
+        layout.addLayout(main_layout, 1)
         layout.addStretch(1)
 
         operation_scroll.setWidget(operation_content)

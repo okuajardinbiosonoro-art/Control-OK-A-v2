@@ -42,28 +42,28 @@ La ventana principal usa una shell operator-first no modal con navegación later
 
 - Superficies principales: `Inicio`, `Nodos`, `Diagnóstico`, `Firmware`, `Técnico`, `Remoto`.
 - Vista `Estado actual` disponible bajo demanda desde `Ver > Estado actual` (ya no es pestaña fija).
-- `Inicio` es la entrada principal y queda preparada para la futura Home visual basada en mapa.
+- `Inicio` es la entrada principal y ya usa el plano real del repo como protagonista visual de la Home.
 - `Nodos` sigue agrupando cajas desplegables (`Caja 1` a `Caja 5`) con nombres lógicos (`EB1`, `EC1`, `...`).
 - `Diagnóstico` concentra resumen técnico, advertencias y panel de preflight desplegable.
 - `Técnico` integra `Control F3` y herramientas avanzadas.
 - `Firmware` deja visible el acceso al `Firmware Manager`.
 - `Remoto` queda confirmado como superficie principal de primer nivel porque ya expone estado y control rápido del servicio remoto sin depender del diálogo avanzado.
 
-En `Inicio` aparece el bloque `Preparación`, que resume:
+En `Inicio` aparece un `Pulso operativo` corto, que resume:
 
 - readiness actual (`Lista`, `Lista con advertencias`, `No lista`)
 - resumen corto del ultimo preflight
 - conteo de bloqueos/advertencias
 - motivo principal y nota de separacion entre readiness/config y runtime/backend
 
-En `Inicio` también aparece la lectura rápida `Serial`, con resumen compacto de:
+En `Inicio` también aparece una lectura rápida discreta `Serial`, con resumen compacto de:
 
 - estado serial (`Activo`, `Sin actividad reciente`, `Con error`, `No disponible`)
 - puerto actual (si aplica)
 - mensajes procesados
 - ultimo error y actividad reciente
 
-En `Inicio` también aparece la lectura rápida `UDP`, con resumen compacto de:
+En `Inicio` también aparece una lectura rápida discreta `UDP`, con resumen compacto de:
 
 - estado UDP (`Activo`, `Sin actividad reciente`, `Con error`, `No disponible`)
 - bind y puertos EVT/STAT
@@ -72,7 +72,7 @@ En `Inicio` también aparece la lectura rápida `UDP`, con resumen compacto de:
 
 Acciones y menú principal:
 
-- `Inicio` mantiene la acción primaria: `Cambiar perfil`, `Iniciar sesión`, `Detener sesión`, `Reiniciar error`.
+- `Inicio` mantiene la acción primaria: `Iniciar sesión`, `Detener sesión`, `Cambiar perfil`, `Reiniciar error`.
 - `Archivo`: `Recargar configuración`, `Salir`.
 - `Ver`: `Inicio`, `Nodos`, `Estado actual`, `Diagnóstico`, `Firmware / OTA`, `Técnico`, `Remoto`, `Errores / preflight`.
 - `Herramientas`: `Firmware Manager`, `Herramientas avanzadas`.
@@ -458,7 +458,7 @@ Remove-Item Env:CKV2_AUTOCLOSE_MS
 
 1. Verificar que la primera superficie sea `Inicio`.
 2. Confirmar estado inicial de sesion en `inactiva`.
-3. Verificar en `Inicio` la acción principal, el resumen operativo, los accesos directos y el contenedor preparado para la Home visual.
+3. Verificar en `Inicio` la acción principal, el mapa protagonista, el pulso operativo corto y los accesos rápidos.
 4. Verificar en `Diagnostico` el bloque de preflight y los bloques de runtime serial/UDP.
 5. Abrir `Ver > Estado actual` y validar:
    - detalle navegable con scroll interno
