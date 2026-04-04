@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QScrollArea,
@@ -26,6 +27,7 @@ from PySide6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QSizePolicy,
@@ -311,12 +313,32 @@ class MainWindow(QMainWindow):
             self.shell_subtitle_label.setStyleSheet(f"color: {BRAND_DEEP};")
         if hasattr(self, "start_session_button"):
             self.start_session_button.setStyleSheet(
-                f"background-color: {BRAND_ACCENT}; color: white; font-weight: 700; padding: 8px 14px;"
+                f"background-color: {BRAND_ACCENT}; color: white; font-weight: 700; "
+                "padding: 10px 16px; border-radius: 12px;"
             )
-        if hasattr(self, "home_alerts_label"):
-            self.home_alerts_label.setStyleSheet(
-                "border: 1px dashed {sand}; border-radius: 10px; padding: 10px; "
-                "background-color: #FBF8F2; color: {deep};".format(
+        if hasattr(self, "stop_session_button"):
+            self.stop_session_button.setStyleSheet(
+                f"background-color: {BRAND_ACCENT}; color: white; font-weight: 700; "
+                "padding: 10px 16px; border-radius: 12px;"
+            )
+        if hasattr(self, "home_status_chip"):
+            self.home_status_chip.setStyleSheet(
+                "background-color: #EAF5EE; color: {deep}; border: 1px solid {sand}; "
+                "border-radius: 12px; padding: 5px 10px; font-weight: 700;".format(
+                    deep=BRAND_DEEP,
+                    sand=BRAND_SAND,
+                )
+            )
+        if hasattr(self, "home_profile_label"):
+            self.home_profile_label.setStyleSheet(f"color: {BRAND_DEEP};")
+        if hasattr(self, "operation_subtitle_label"):
+            self.operation_subtitle_label.setStyleSheet(f"color: {BRAND_DEEP};")
+        if hasattr(self, "home_detail_hint_label"):
+            self.home_detail_hint_label.setStyleSheet(f"color: {BRAND_DEEP};")
+        if hasattr(self, "home_more_button"):
+            self.home_more_button.setStyleSheet(
+                "padding: 8px 12px; border-radius: 10px; border: 1px solid {sand}; "
+                "background-color: #F8F5EE; color: {deep}; font-weight: 600;".format(
                     sand=BRAND_SAND,
                     deep=BRAND_DEEP,
                 )
@@ -345,137 +367,79 @@ class MainWindow(QMainWindow):
         tab_layout = QVBoxLayout(tab)
         operation_scroll = QScrollArea(self)
         operation_scroll.setWidgetResizable(True)
+        operation_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
 
         operation_content = QWidget(self)
         layout = QVBoxLayout(operation_content)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(18)
 
-        self.title_label = QLabel("Inicio")
-        title_font = self.title_label.font()
-        title_font.setPointSize(title_font.pointSize() + 6)
-        title_font.setBold(True)
-        self.title_label.setFont(title_font)
-        layout.addWidget(self.title_label)
+        top_bar = QHBoxLayout()
+        top_bar.setSpacing(16)
+
+        intro_column = QVBoxLayout()
+        intro_column.setSpacing(8)
+        self.home_status_chip = QLabel("Sesión inactiva")
+        self.home_status_chip.setAlignment(Qt.AlignCenter)
+        self.home_status_chip.setMaximumWidth(180)
+        intro_column.addWidget(self.home_status_chip, 0, Qt.AlignLeft)
 
         self.operation_subtitle_label = QLabel(
-            "Pantalla principal de operación preparada para la futura lectura viva por cajas."
+            "Portada principal de operación local."
         )
         self.operation_subtitle_label.setWordWrap(True)
-        layout.addWidget(self.operation_subtitle_label)
+        intro_column.addWidget(self.operation_subtitle_label)
 
-        header_layout = QHBoxLayout()
-        header_layout.setSpacing(14)
+        self.home_profile_label = QLabel("Perfil pendiente")
+        self.home_profile_label.setWordWrap(True)
+        intro_column.addWidget(self.home_profile_label)
+        top_bar.addLayout(intro_column, 1)
 
-        headline_group = QGroupBox("Operación principal")
-        headline_layout = QVBoxLayout(headline_group)
-        headline_intro = QLabel(
-            "Inicio concentra la acción primaria y deja el detalle técnico en las demás superficies."
-        )
-        headline_intro.setWordWrap(True)
-        headline_layout.addWidget(headline_intro)
+        actions_column = QVBoxLayout()
+        actions_column.setSpacing(8)
         quick_actions_row = QHBoxLayout()
+        quick_actions_row.setSpacing(10)
         self.start_session_button = QPushButton("Iniciar sesión")
         self.start_session_button.clicked.connect(self.start_session)
         quick_actions_row.addWidget(self.start_session_button)
         self.stop_session_button = QPushButton("Detener sesión")
         self.stop_session_button.clicked.connect(self.stop_session)
         quick_actions_row.addWidget(self.stop_session_button)
+
+        self.home_more_button = QToolButton(self)
+        self.home_more_button.setText("Más")
+        self.home_more_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.home_more_menu = QMenu(self.home_more_button)
+        self.home_more_button.setMenu(self.home_more_menu)
+        self.home_details_action = self.home_more_menu.addAction("Estado actual")
+        self.home_details_action.triggered.connect(self.show_session_details_dialog)
+        self.home_diagnostics_action = self.home_more_menu.addAction("Diagnóstico")
+        self.home_diagnostics_action.triggered.connect(self.show_diagnostics_tab)
+        self.home_more_menu.addSeparator()
         self.change_profile_button = QPushButton("Cambiar perfil")
         self.change_profile_button.clicked.connect(self.change_profile)
-        quick_actions_row.addWidget(self.change_profile_button)
+        self.change_profile_button.hide()
+        self.home_change_profile_action = self.home_more_menu.addAction("Cambiar perfil")
+        self.home_change_profile_action.triggered.connect(self.change_profile)
         self.reset_session_error_button = QPushButton("Reiniciar error")
         self.reset_session_error_button.clicked.connect(self.reset_session_error)
-        quick_actions_row.addWidget(self.reset_session_error_button)
-        quick_actions_row.addStretch(1)
-        headline_layout.addLayout(quick_actions_row)
-        header_layout.addWidget(headline_group, 2)
+        self.reset_session_error_button.hide()
+        self.home_reset_error_action = self.home_more_menu.addAction("Reiniciar error")
+        self.home_reset_error_action.triggered.connect(self.reset_session_error)
+        quick_actions_row.addWidget(self.home_more_button)
+        actions_column.addLayout(quick_actions_row)
 
-        compact_group = QGroupBox("Estado actual")
-        compact_layout = QFormLayout(compact_group)
-        compact_fields = [
-            ("profile", "Perfil activo"),
-            ("session_state", "Estado de sesión"),
-            ("session_message", "Resumen corto"),
-            ("general", "Estado general"),
-        ]
-        for key, field_name in compact_fields:
-            label = QLabel("-")
-            label.setWordWrap(True)
-            compact_layout.addRow(field_name, label)
-            self._operation_compact_labels[key] = label
-        header_layout.addWidget(compact_group, 1)
-        layout.addLayout(header_layout)
-
-        main_layout = QHBoxLayout()
-        main_layout.setSpacing(16)
+        self.home_detail_hint_label = QLabel(
+            "El detalle técnico vive en Diagnóstico y en Estado actual."
+        )
+        self.home_detail_hint_label.setWordWrap(True)
+        self.home_detail_hint_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        actions_column.addWidget(self.home_detail_hint_label)
+        top_bar.addLayout(actions_column, 0)
+        layout.addLayout(top_bar)
 
         self.home_map_panel = HomeMapPanel(self)
-        main_layout.addWidget(self.home_map_panel, 5)
-
-        side_column = QVBoxLayout()
-        side_column.setSpacing(12)
-
-        readiness_group = QGroupBox("Pulso operativo")
-        readiness_layout = QFormLayout(readiness_group)
-        readiness_fields = [
-            ("status", "Estado"),
-            ("summary", "Resumen"),
-            ("primary", "Mensaje principal"),
-            ("runtime_note", "Nota runtime"),
-        ]
-        for key, field_name in readiness_fields:
-            label = QLabel("-")
-            label.setWordWrap(True)
-            readiness_layout.addRow(field_name, label)
-            self._operation_readiness_labels[key] = label
-        self.home_open_diagnostics_button = QPushButton("Ver diagnóstico")
-        self.home_open_diagnostics_button.clicked.connect(self.show_diagnostics_tab)
-        readiness_layout.addRow("", self.home_open_diagnostics_button)
-        side_column.addWidget(readiness_group)
-
-        channels_group = QGroupBox("Canales")
-        channels_layout = QFormLayout(channels_group)
-        for key, field_name in (
-            ("status", "Serial"),
-            ("summary", "Serial resumen"),
-            ("recent", "Serial actividad"),
-        ):
-            label = QLabel("-")
-            label.setWordWrap(True)
-            channels_layout.addRow(field_name, label)
-            self._operation_serial_labels[key] = label
-        for key, field_name in (
-            ("status", "UDP"),
-            ("summary", "UDP resumen"),
-            ("recent", "UDP actividad"),
-        ):
-            label = QLabel("-")
-            label.setWordWrap(True)
-            channels_layout.addRow(field_name, label)
-            self._operation_udp_labels[key] = label
-        side_column.addWidget(channels_group)
-
-        shortcuts_group = QGroupBox("Accesos rápidos")
-        shortcuts_layout = QVBoxLayout(shortcuts_group)
-        for button_text, handler in (
-            ("Nodos", self.show_nodes_tab),
-            ("Firmware", self.show_firmware_tab),
-            ("Técnico", self.show_control_plane_tab),
-            ("Remoto", self.show_remote_tab),
-        ):
-            button = QPushButton(button_text)
-            button.clicked.connect(handler)
-            shortcuts_layout.addWidget(button)
-        shortcuts_layout.addStretch(1)
-        side_column.addWidget(shortcuts_group)
-
-        self.home_alerts_label = QLabel(
-            "Espacio reservado para alertas discretas y overlays futuros."
-        )
-        self.home_alerts_label.setWordWrap(True)
-        side_column.addWidget(self.home_alerts_label)
-        side_column.addStretch(1)
-        main_layout.addLayout(side_column, 2)
-        layout.addLayout(main_layout, 1)
+        layout.addWidget(self.home_map_panel, 1)
         layout.addStretch(1)
 
         operation_scroll.setWidget(operation_content)
@@ -958,44 +922,50 @@ class MainWindow(QMainWindow):
 
         if self._session_snapshot.state is SessionState.STARTING:
             self.operation_subtitle_label.setText(
-                "La sesión se está iniciando. Espere antes de cambiar configuración."
+                "La sesión se está iniciando."
             )
         elif self._session_snapshot.state is SessionState.RUNNING:
             self.operation_subtitle_label.setText(
-                "Sesión en ejecución. Detenga la sesión antes de cambiar perfil o configuración."
+                "La operación está activa."
             )
         elif self._session_snapshot.state is SessionState.STOPPING:
             self.operation_subtitle_label.setText(
-                "La sesión se está deteniendo. Espere antes de cambiar configuración."
+                "La sesión se está deteniendo."
             )
         elif self._session_snapshot.state is SessionState.ERROR:
             self.operation_subtitle_label.setText(
-                "Sesión en error. Revise el mensaje de sesión y use 'Reiniciar error'."
+                "La última sesión requiere atención."
             )
         elif self.warnings:
             self.operation_subtitle_label.setText(
-                "Aplicación cargada con advertencias. Revise Diagnóstico. "
-                "La sesión aún no está iniciada."
+                "Hay advertencias activas. Revise Diagnóstico."
             )
         elif "perfil pendiente" in general_summary or "perfil incompleto" in general_summary:
             self.operation_subtitle_label.setText(
-                "Seleccione un perfil operativo para continuar. "
-                "La sesión aún no está iniciada."
+                "Seleccione un perfil operativo para continuar."
             )
         elif self.cfg.get("mode") in {"serial", "udp"}:
             self.operation_subtitle_label.setText(
-                "Aplicación lista para operación. La sesión aún no está iniciada."
+                "Todo listo para iniciar la operación."
             )
         else:
             self.operation_subtitle_label.setText(
-                "Seleccione un perfil operativo para continuar. La sesión aún no está iniciada."
+                "Seleccione un perfil operativo para continuar."
             )
+
+        self.home_status_chip.setText(session_status_summary)
+        self.home_profile_label.setText(f"{profile_summary} · {general_summary}")
+        self.home_detail_hint_label.setText("El detalle vive en Diagnóstico y en Estado actual.")
 
         self.start_session_button.setEnabled(session_action_state.can_start_session)
         self.stop_session_button.setEnabled(session_action_state.can_stop_session)
+        self.start_session_button.setVisible(not session_action_state.can_stop_session)
+        self.stop_session_button.setVisible(session_action_state.can_stop_session)
         self.reset_session_error_button.setEnabled(session_action_state.can_reset_error)
+        self.home_reset_error_action.setEnabled(session_action_state.can_reset_error)
 
         self.change_profile_button.setEnabled(session_action_state.can_edit_configuration)
+        self.home_change_profile_action.setEnabled(session_action_state.can_edit_configuration)
         self.reload_action.setEnabled(session_action_state.can_edit_configuration)
         self.firmware_manager_action.setEnabled(True)
         self.advanced_tools_action.setEnabled(True)

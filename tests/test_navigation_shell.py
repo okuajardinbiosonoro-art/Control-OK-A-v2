@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QLabel
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -53,5 +53,7 @@ def test_navigation_panel_tracks_checked_section() -> None:
         panel.set_current_key("firmware")
         assert panel.button_for_key("firmware").isChecked() is True
         assert panel.button_for_key("home").isChecked() is False
+        visible_labels = [label.text() for label in panel.findChildren(QLabel)]
+        assert "Shell principal" not in visible_labels
     finally:
         panel.close()

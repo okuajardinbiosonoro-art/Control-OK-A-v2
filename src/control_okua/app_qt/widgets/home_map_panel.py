@@ -41,21 +41,21 @@ class HomeMapPanel(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, True)
 
-        outer_rect = QRectF(self.rect()).adjusted(8.0, 8.0, -8.0, -8.0)
-        painter.fillRect(outer_rect, QColor("#F7F4EC"))
+        outer_rect = QRectF(self.rect()).adjusted(6.0, 6.0, -6.0, -6.0)
+        painter.fillRect(outer_rect, QColor("#FBF8F2"))
 
         panel_path = QPainterPath()
-        panel_path.addRoundedRect(outer_rect, 20.0, 20.0)
-        painter.fillPath(panel_path, QColor("#FCFBF7"))
-        painter.setPen(QPen(QColor(BRAND_SAND), 1.2))
+        panel_path.addRoundedRect(outer_rect, 24.0, 24.0)
+        painter.fillPath(panel_path, QColor("#FFFEFB"))
+        painter.setPen(QPen(QColor(BRAND_SAND), 1.0))
         painter.drawPath(panel_path)
 
-        map_rect = outer_rect.adjusted(18.0, 18.0, -18.0, -18.0)
+        map_rect = outer_rect.adjusted(14.0, 14.0, -14.0, -14.0)
         painter.save()
         clip_path = QPainterPath()
-        clip_path.addRoundedRect(map_rect, 16.0, 16.0)
+        clip_path.addRoundedRect(map_rect, 20.0, 20.0)
         painter.setClipPath(clip_path)
-        painter.fillRect(map_rect, QColor("#EEF5EB"))
+        painter.fillRect(map_rect, QColor("#F4F7F0"))
 
         if not self._map_pixmap.isNull():
             scaled = self._map_pixmap.scaled(
@@ -71,29 +71,13 @@ class HomeMapPanel(QWidget):
             painter.setPen(QColor(BRAND_DEEP))
             painter.drawText(
                 map_rect,
-                Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
-                "Asset del mapa no disponible.\nLa Home sigue preparada para overlays futuros.",
+                Qt.AlignmentFlag.AlignCenter,
+                "Mapa no disponible",
             )
 
         painter.restore()
-        painter.setPen(QPen(QColor(BRAND_ACCENT), 1.6))
-        painter.drawRoundedRect(map_rect, 16.0, 16.0)
-
-        badge_rect = QRectF(
-            outer_rect.left() + 18.0,
-            outer_rect.bottom() - 44.0,
-            min(outer_rect.width() * 0.55, 360.0),
-            28.0,
-        )
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(BRAND_DEEP))
-        painter.drawRoundedRect(badge_rect, 14.0, 14.0)
-        painter.setPen(QColor("#FFFFFF"))
-        painter.drawText(
-            badge_rect,
-            Qt.AlignmentFlag.AlignCenter,
-            "Home visual lista para cajas, overlays y estados 33.x",
-        )
+        painter.setPen(QPen(QColor(BRAND_ACCENT), 1.2))
+        painter.drawRoundedRect(map_rect, 20.0, 20.0)
 
     @staticmethod
     def _load_pixmap(asset_path: Path) -> QPixmap:

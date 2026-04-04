@@ -94,7 +94,7 @@ class NavigationPanel(QWidget):
         self.setStyleSheet(
             """
             QWidget#navigationPanel {
-                background-color: #F5F1E8;
+                background-color: #FBF8F2;
                 border-right: 1px solid #CBBBA0;
             }
             QWidget#navigationPanel QLabel {
@@ -127,10 +127,6 @@ class NavigationPanel(QWidget):
         brand_font.setPointSize(brand_font.pointSize() + 6)
         brand_label.setFont(brand_font)
         layout.addWidget(brand_label)
-
-        hint_label = QLabel("Shell principal")
-        hint_label.setObjectName("shellHintLabel")
-        layout.addWidget(hint_label)
 
         for item in self._items:
             button = QPushButton(item.label, self)

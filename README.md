@@ -48,31 +48,17 @@ La ventana principal usa una shell operator-first no modal con navegación later
 - `Técnico` integra `Control F3` y herramientas avanzadas.
 - `Firmware` deja visible el acceso al `Firmware Manager`.
 - `Remoto` queda confirmado como superficie principal de primer nivel porque ya expone estado y control rápido del servicio remoto sin depender del diálogo avanzado.
-
-En `Inicio` aparece un `Pulso operativo` corto, que resume:
-
-- readiness actual (`Lista`, `Lista con advertencias`, `No lista`)
-- resumen corto del ultimo preflight
-- conteo de bloqueos/advertencias
-- motivo principal y nota de separacion entre readiness/config y runtime/backend
-
-En `Inicio` también aparece una lectura rápida discreta `Serial`, con resumen compacto de:
-
-- estado serial (`Activo`, `Sin actividad reciente`, `Con error`, `No disponible`)
-- puerto actual (si aplica)
-- mensajes procesados
-- ultimo error y actividad reciente
-
-En `Inicio` también aparece una lectura rápida discreta `UDP`, con resumen compacto de:
-
-- estado UDP (`Activo`, `Sin actividad reciente`, `Con error`, `No disponible`)
-- bind y puertos EVT/STAT
-- contadores basicos EVT/STAT
-- ultimo error y actividad reciente
+- `Inicio` queda definida como portada limpia: mapa protagonista, estado breve de sesión y una única acción principal visible.
+- El detalle operativo y técnico vive fuera de la portada:
+  - `Ver > Estado actual` concentra el resumen largo de sesión
+  - `Diagnóstico` concentra readiness, advertencias y runtime
+  - `Técnico` concentra control avanzado y herramientas delicadas
+  - `Remoto` concentra el estado y acceso del servicio remoto
 
 Acciones y menú principal:
 
-- `Inicio` mantiene la acción primaria: `Iniciar sesión`, `Detener sesión`, `Cambiar perfil`, `Reiniciar error`.
+- `Inicio` mantiene una acción primaria visible: `Iniciar sesión` o `Detener sesión`, según el estado real.
+- Las acciones secundarias (`Estado actual`, `Diagnóstico`, `Cambiar perfil`, `Reiniciar error`) quedan disponibles de forma discreta desde la propia Home y desde el menú principal.
 - `Archivo`: `Recargar configuración`, `Salir`.
 - `Ver`: `Inicio`, `Nodos`, `Estado actual`, `Diagnóstico`, `Firmware / OTA`, `Técnico`, `Remoto`, `Errores / preflight`.
 - `Herramientas`: `Firmware Manager`, `Herramientas avanzadas`.
@@ -80,11 +66,11 @@ Acciones y menú principal:
 
 ## Flujo de sesion y readiness (Tickets 3.3 + 4.x)
 
-- La Home `Inicio` está conectada a `SessionController` real y muestra snapshot de sesión (`idle`, `starting`, `running`, `stopping`, `error`).
+- La Home `Inicio` está conectada a `SessionController` real y muestra un resumen breve de sesión (`idle`, `starting`, `running`, `stopping`, `error`).
 - Antes de intentar backend, `SessionController` ejecuta preflight/readiness puro.
 - Si readiness esta `blocked`, no intenta backend y la sesion pasa a `error` controlado con motivo de configuracion.
 - Si readiness esta `ready` o `ready_with_warnings`, se intenta backend.
-- `Inicio` muestra el resumen de readiness y `Diagnostico` muestra findings (severidad, codigo, mensaje, detalle).
+- `Inicio` mantiene la portada limpia y `Diagnostico` muestra findings (severidad, codigo, mensaje, detalle).
 - La UI distingue fallo por readiness/configuracion vs fallo posterior de backend/runtime.
 - `Reiniciar error` devuelve la sesion a estado inactivo y refresca readiness visible.
 - Mientras la sesion esta en `starting`, `running` o `stopping`, la UI bloquea cambios de perfil y recarga de config para evitar inconsistencias.
@@ -96,7 +82,7 @@ Acciones y menú principal:
 - El backend serial real se integra en el lifecycle de sesion via `SessionBackendFactory` + `SessionController`.
 - El flujo en arquitectura es: `Serial -> parser -> backend serial -> MidiRouter`.
 - `SessionController` solo deja la sesion en `running` si el backend serial arranca realmente.
-- `Inicio` muestra actividad serial resumida y `Diagnostico` muestra detalle tecnico de runtime serial.
+- `Diagnostico` muestra el detalle tecnico de runtime serial sin recargar la portada `Inicio`.
 
 ## Flujo UDP runtime y NodeRegistry (Tickets 6.x + 7.x)
 
@@ -108,9 +94,9 @@ Acciones y menú principal:
 - El backend UDP alimenta `NodeRegistry` por paquete parseado (`EVT -> observe_evt`, `STAT -> observe_stat`) sin duplicar parser ni dominio.
 - `SessionController` expone `get_node_snapshots()` y `get_node_registry_summary()` para consumo UI.
 - La pestaña `Nodos` usa esos snapshots como fuente de verdad (sin recalcular estado/pps/perdida en UI).
-- La UI distingue estado de runtime UDP (`Inicio`/`Diagnostico`) vs estado por nodo (pestaña Nodos).
+- La UI distingue estado de runtime UDP (`Diagnostico`) vs estado por nodo (pestaña Nodos).
 - La pestaña `Nodos` no inventa datos en no-UDP: muestra mensaje de no aplicacion. En UDP corriendo sin trafico, muestra estado vacio coherente.
-- `Inicio` muestra actividad UDP resumida y `Diagnostico` muestra detalle tecnico de runtime UDP.
+- `Diagnostico` muestra el detalle tecnico de runtime UDP.
 - `Estado actual` concentra el detalle largo de sesion de forma responsive para evitar saturar `Inicio`.
 - `NodeRegistry` se reinicia por sesion UDP, evitando nodos fantasmas entre stop/restart.
 
@@ -458,7 +444,7 @@ Remove-Item Env:CKV2_AUTOCLOSE_MS
 
 1. Verificar que la primera superficie sea `Inicio`.
 2. Confirmar estado inicial de sesion en `inactiva`.
-3. Verificar en `Inicio` la acción principal, el mapa protagonista, el pulso operativo corto y los accesos rápidos.
+3. Verificar en `Inicio` la acción principal, el mapa protagonista y el resumen breve de sesión.
 4. Verificar en `Diagnostico` el bloque de preflight y los bloques de runtime serial/UDP.
 5. Abrir `Ver > Estado actual` y validar:
    - detalle navegable con scroll interno

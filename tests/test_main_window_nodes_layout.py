@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 
-from PySide6.QtWidgets import QApplication, QPushButton, QSizePolicy
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QGroupBox, QSizePolicy
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -201,8 +201,20 @@ def test_home_surface_keeps_primary_action_and_visual_map_as_main_elements() -> 
         assert window.start_session_button.text() == "Iniciar sesión"
         assert window.home_map_panel.has_map_asset() is True
         assert window.home_map_panel.width() >= 700
-        assert window.home_alerts_label.text().strip()
-        assert not hasattr(window, "home_visual_placeholder")
+        assert window.home_more_button.text() == "Más"
+        assert window.change_profile_button.isHidden() is True
+        assert window.reset_session_error_button.isHidden() is True
+
+        group_titles = {group.title() for group in window.home_tab.findChildren(QGroupBox)}
+        assert "Operación principal" not in group_titles
+        assert "Estado actual" not in group_titles
+        assert "Pulso operativo" not in group_titles
+        assert "Canales" not in group_titles
+        assert "Accesos rápidos" not in group_titles
+
+        home_texts = {label.text().strip() for label in window.home_tab.findChildren(QLabel) if label.text().strip()}
+        assert "Home visual lista para cajas, overlays y estados 33.x" not in home_texts
+        assert "Espacio reservado para alertas discretas y overlays futuros." not in home_texts
     finally:
         window.close()
 
