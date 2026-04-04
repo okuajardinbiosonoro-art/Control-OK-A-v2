@@ -38,13 +38,18 @@ El ejecutable queda en `dist/Control Okua.exe`.
 
 ## Estado actual de la app (UX)
 
-La ventana principal usa flujo operator-first y separa operación rápida de acciones técnicas:
+La ventana principal usa una shell operator-first no modal y separa operación principal de superficies técnicas:
 
-- Pestañas principales: `Operación`, `Nodos`, `Diagnóstico`, `Plano de control`.
+- Superficies principales: `Home`, `Nodos`, `Diagnóstico`, `Firmware / OTA`, `Técnico`.
+- `Home` es la entrada principal y reserva el espacio para la futura vista guiada por mapa.
+- `Nodos` sigue siendo la vista detallada técnico-operativa principal.
+- `Diagnóstico` mantiene observabilidad, readiness y troubleshooting.
+- `Firmware / OTA` da acceso visible y persistente al módulo de firmware existente.
+- `Técnico` integra `Control F3` y accesos de soporte/mantenimiento.
 - Vista `Estado actual` disponible bajo demanda desde `Ver > Estado actual` (ya no es pestaña fija).
 - Vista `Nodos` agrupada por cajas desplegables (`Caja 1` a `Caja 5`) con nombres lógicos (`EB1`, `EC1`, `...`).
 - Vista `Diagnóstico` con resumen técnico, advertencias y panel de preflight desplegable.
-- Vista `Plano de control` para acciones manuales de control-plane por `node_id`.
+- `Control F3` vive dentro de `Técnico` para acciones manuales por `node_id`.
 
 En `Operacion` tambien aparece el bloque `Preparacion de sesion`, que resume:
 
@@ -69,10 +74,10 @@ En `Operacion` tambien aparece el bloque `Actividad UDP`, con resumen compacto d
 
 Acciones y menú principal:
 
-- `Operación` mantiene solo acciones rápidas: `Cambiar perfil`, `Iniciar sesión`, `Detener sesión`, `Reiniciar error`.
+- `Home` mantiene acciones rápidas: `Cambiar perfil`, `Iniciar sesión`, `Detener sesión`, `Reiniciar error`.
 - `Archivo`: `Recargar configuración`, `Salir`.
-- `Ver`: `Estado actual`, `Diagnóstico`, `Plano de control`, `Errores / preflight`.
-- `Herramientas`: `Herramientas avanzadas`.
+- `Ver`: `Home`, `Nodos`, `Diagnóstico`, `Firmware / OTA`, `Técnico`, `Estado actual`, `Errores / preflight`.
+- `Herramientas`: `Firmware Manager`, `Herramientas avanzadas`.
 - `Ayuda`: `Acerca de`.
 
 ## Arquitectura congelada de la shell desktop (Ticket 32.0)

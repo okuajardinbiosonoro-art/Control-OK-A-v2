@@ -77,6 +77,7 @@ from control_okua.app_qt.viewmodels import (
 )
 from control_okua.core.preflight import PreflightReport
 from control_okua.core.config.config_schema import load_config, save_config
+from control_okua.core.firmware import FirmwareCatalogStore
 from control_okua.core.profiles.profile_service import (
     infer_profile_from_config,
     is_known_profile_id,
@@ -124,6 +125,9 @@ class MainWindow(QMainWindow):
         self._preflight_panel_visible = False
         self._remote_api_status: Any | None = None
         self._on_apply_remote_settings = on_apply_remote_settings
+        self._firmware_catalog_store = FirmwareCatalogStore()
+        self._firmware_summary_labels: dict[str, QLabel] = {}
+        self._technical_summary_labels: dict[str, QLabel] = {}
         self.session_controller = session_controller or SessionController(
             self._session_cfg_provider,
             parent=self,
@@ -155,16 +159,20 @@ class MainWindow(QMainWindow):
         self._build_menu_bar()
 
         self.tabs = QTabWidget(self)
-        self.operation_tab = self._build_operation_tab()
+        self.home_tab = self._build_operation_tab()
+        self.operation_tab = self.home_tab
         self.nodes_tab = self._build_nodes_tab()
         self.diagnostics_tab = self._build_diagnostics_tab()
-        self.control_plane_tab = self._build_control_plane_tab()
-        self.tabs.addTab(self.operation_tab, "Sesión")
-        self.tabs.addTab(self.nodes_tab, "Nodos en vivo")
-        self.tabs.addTab(self.diagnostics_tab, "Estado técnico")
-        self.tabs.addTab(self.control_plane_tab, "Control F3")
+        self.firmware_tab = self._build_firmware_tab()
+        self.technical_tab = self._build_control_plane_tab()
+        self.control_plane_tab = self.technical_tab
+        self.tabs.addTab(self.home_tab, "Home")
+        self.tabs.addTab(self.nodes_tab, "Nodos")
+        self.tabs.addTab(self.diagnostics_tab, "Diagnóstico")
+        self.tabs.addTab(self.firmware_tab, "Firmware / OTA")
+        self.tabs.addTab(self.technical_tab, "Técnico")
         self.tabs.currentChanged.connect(self._on_tab_changed)
-        self.tabs.setCurrentIndex(0)
+        self.tabs.setCurrentWidget(self.home_tab)
         root_layout.addWidget(self.tabs)
         self._create_session_details_dialog()
 
@@ -181,17 +189,30 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.exit_action)
 
         view_menu = menu_bar.addMenu("Ver")
-        self.view_state_action = QAction("Estado actual", self)
-        self.view_state_action.triggered.connect(self.show_session_details_dialog)
-        view_menu.addAction(self.view_state_action)
+        self.view_home_action = QAction("Home", self)
+        self.view_home_action.triggered.connect(self.show_home_tab)
+        view_menu.addAction(self.view_home_action)
 
-        self.view_diagnostics_action = QAction("Estado técnico", self)
+        self.view_nodes_action = QAction("Nodos", self)
+        self.view_nodes_action.triggered.connect(self.show_nodes_tab)
+        view_menu.addAction(self.view_nodes_action)
+
+        self.view_diagnostics_action = QAction("Diagnóstico", self)
         self.view_diagnostics_action.triggered.connect(self.show_diagnostics_tab)
         view_menu.addAction(self.view_diagnostics_action)
 
-        self.view_control_plane_action = QAction("Control F3", self)
-        self.view_control_plane_action.triggered.connect(self.show_control_plane_tab)
-        view_menu.addAction(self.view_control_plane_action)
+        self.view_firmware_action = QAction("Firmware / OTA", self)
+        self.view_firmware_action.triggered.connect(self.show_firmware_tab)
+        view_menu.addAction(self.view_firmware_action)
+
+        self.view_technical_action = QAction("Técnico", self)
+        self.view_technical_action.triggered.connect(self.show_control_plane_tab)
+        view_menu.addAction(self.view_technical_action)
+
+        view_menu.addSeparator()
+        self.view_state_action = QAction("Estado actual", self)
+        self.view_state_action.triggered.connect(self.show_session_details_dialog)
+        view_menu.addAction(self.view_state_action)
 
         self.toggle_preflight_action = QAction("Chequeos previos", self)
         self.toggle_preflight_action.setCheckable(True)
@@ -199,6 +220,9 @@ class MainWindow(QMainWindow):
         view_menu.addAction(self.toggle_preflight_action)
 
         tools_menu = menu_bar.addMenu("Herramientas")
+        self.firmware_manager_action = QAction("Firmware Manager", self)
+        self.firmware_manager_action.triggered.connect(self.open_firmware_manager)
+        tools_menu.addAction(self.firmware_manager_action)
         self.advanced_tools_action = QAction("Herramientas avanzadas", self)
         self.advanced_tools_action.triggered.connect(self.open_advanced_tools)
         tools_menu.addAction(self.advanced_tools_action)
@@ -225,7 +249,7 @@ class MainWindow(QMainWindow):
         operation_content = QWidget(self)
         layout = QVBoxLayout(operation_content)
 
-        self.title_label = QLabel("Control OKÚA v2")
+        self.title_label = QLabel("Home")
         title_font = self.title_label.font()
         title_font.setPointSize(title_font.pointSize() + 8)
         title_font.setBold(True)
@@ -233,33 +257,49 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.title_label)
 
         self.operation_subtitle_label = QLabel(
-            "Aplicación lista para operación. La sesión aún no está iniciada."
+            "Entrada principal de operación local. La sesión aún no está iniciada."
         )
         self.operation_subtitle_label.setWordWrap(True)
         layout.addWidget(self.operation_subtitle_label)
 
-        quick_actions_group = QGroupBox("Inicio rápido")
+        quick_actions_group = QGroupBox("Acciones rápidas")
         quick_actions_layout = QHBoxLayout(quick_actions_group)
 
         self.change_profile_button = QPushButton("Cambiar perfil")
         self.change_profile_button.clicked.connect(self.change_profile)
         quick_actions_layout.addWidget(self.change_profile_button)
+        self.start_session_button = QPushButton("Iniciar sesión")
+        self.start_session_button.clicked.connect(self.start_session)
+        quick_actions_layout.addWidget(self.start_session_button)
+        self.stop_session_button = QPushButton("Detener sesión")
+        self.stop_session_button.clicked.connect(self.stop_session)
+        quick_actions_layout.addWidget(self.stop_session_button)
+        self.reset_session_error_button = QPushButton("Reiniciar error")
+        self.reset_session_error_button.clicked.connect(self.reset_session_error)
+        quick_actions_layout.addWidget(self.reset_session_error_button)
         quick_actions_layout.addStretch(1)
         layout.addWidget(quick_actions_group)
 
-        session_actions_group = QGroupBox("Sesión")
-        session_actions_layout = QHBoxLayout(session_actions_group)
-        self.start_session_button = QPushButton("Iniciar sesión")
-        self.start_session_button.clicked.connect(self.start_session)
-        session_actions_layout.addWidget(self.start_session_button)
-        self.stop_session_button = QPushButton("Detener sesión")
-        self.stop_session_button.clicked.connect(self.stop_session)
-        session_actions_layout.addWidget(self.stop_session_button)
-        self.reset_session_error_button = QPushButton("Reiniciar error")
-        self.reset_session_error_button.clicked.connect(self.reset_session_error)
-        session_actions_layout.addWidget(self.reset_session_error_button)
-        session_actions_layout.addStretch(1)
-        layout.addWidget(session_actions_group)
+        shell_links_group = QGroupBox("Superficies principales")
+        shell_links_layout = QHBoxLayout(shell_links_group)
+        self.home_nodes_button = QPushButton("Ir a Nodos")
+        self.home_nodes_button.clicked.connect(self.show_nodes_tab)
+        shell_links_layout.addWidget(self.home_nodes_button)
+        self.home_diagnostics_button = QPushButton("Ir a Diagnóstico")
+        self.home_diagnostics_button.clicked.connect(self.show_diagnostics_tab)
+        shell_links_layout.addWidget(self.home_diagnostics_button)
+        self.home_firmware_button = QPushButton("Ir a Firmware / OTA")
+        self.home_firmware_button.clicked.connect(self.show_firmware_tab)
+        shell_links_layout.addWidget(self.home_firmware_button)
+        self.home_technical_button = QPushButton("Ir a Técnico")
+        self.home_technical_button.clicked.connect(self.show_control_plane_tab)
+        shell_links_layout.addWidget(self.home_technical_button)
+        shell_links_layout.addStretch(1)
+        layout.addWidget(shell_links_group)
+
+        home_overview_layout = QGridLayout()
+        home_overview_layout.setHorizontalSpacing(12)
+        home_overview_layout.setVerticalSpacing(12)
 
         compact_group = QGroupBox("Estado de sesión")
         compact_layout = QFormLayout(compact_group)
@@ -276,9 +316,9 @@ class MainWindow(QMainWindow):
             label.setWordWrap(True)
             compact_layout.addRow(field_name, label)
             self._operation_compact_labels[key] = label
-        layout.addWidget(compact_group)
+        home_overview_layout.addWidget(compact_group, 0, 0)
 
-        readiness_group = QGroupBox("Chequeos previos")
+        readiness_group = QGroupBox("Preparación de sesión")
         readiness_layout = QFormLayout(readiness_group)
         readiness_fields = [
             ("status", "Estado"),
@@ -292,7 +332,37 @@ class MainWindow(QMainWindow):
             label.setWordWrap(True)
             readiness_layout.addRow(field_name, label)
             self._operation_readiness_labels[key] = label
-        layout.addWidget(readiness_group)
+        home_overview_layout.addWidget(readiness_group, 1, 0)
+
+        map_group = QGroupBox("Mapa operativo")
+        map_layout = QVBoxLayout(map_group)
+        map_intro_label = QLabel(
+            "Esta área reserva la futura Home guiada por mapa. "
+            "En este ticket se consolida la shell principal; el mapa vivo llegará en el siguiente paso."
+        )
+        map_intro_label.setWordWrap(True)
+        map_layout.addWidget(map_intro_label)
+        self.home_map_placeholder_label = QLabel(
+            "Vista espacial reservada\n\n"
+            "Aquí aparecerá el plano operativo principal con lectura por caja y acceso contextual a detalle."
+        )
+        self.home_map_placeholder_label.setAlignment(Qt.AlignCenter)
+        self.home_map_placeholder_label.setMinimumHeight(260)
+        self.home_map_placeholder_label.setStyleSheet(
+            "border: 1px dashed #7a8a99; border-radius: 12px; padding: 24px; "
+            "background-color: rgba(255, 255, 255, 0.04);"
+        )
+        self.home_map_placeholder_label.setWordWrap(True)
+        map_layout.addWidget(self.home_map_placeholder_label, 1)
+        self.home_map_hint_label = QLabel(
+            "El detalle técnico sigue disponible desde Nodos, Diagnóstico, Firmware / OTA y Técnico."
+        )
+        self.home_map_hint_label.setWordWrap(True)
+        map_layout.addWidget(self.home_map_hint_label)
+        home_overview_layout.addWidget(map_group, 0, 1, 2, 1)
+        home_overview_layout.setColumnStretch(0, 2)
+        home_overview_layout.setColumnStretch(1, 3)
+        layout.addLayout(home_overview_layout)
 
         serial_group = QGroupBox("Canal serial")
         serial_layout = QFormLayout(serial_group)
@@ -423,7 +493,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
 
-        title_label = QLabel("Nodos en vivo")
+        title_label = QLabel("Nodos")
         title_font = title_label.font()
         title_font.setPointSize(title_font.pointSize() + 2)
         title_font.setBold(True)
@@ -482,6 +552,19 @@ class MainWindow(QMainWindow):
     def _build_diagnostics_tab(self) -> QWidget:
         tab = QWidget(self)
         layout = QVBoxLayout(tab)
+
+        title_label = QLabel("Diagnóstico")
+        title_font = title_label.font()
+        title_font.setPointSize(title_font.pointSize() + 2)
+        title_font.setBold(True)
+        title_label.setFont(title_font)
+        layout.addWidget(title_label)
+
+        intro_label = QLabel(
+            "Observabilidad, readiness y troubleshooting del runtime actual."
+        )
+        intro_label.setWordWrap(True)
+        layout.addWidget(intro_label)
 
         summary_group = QGroupBox("Resumen de sistema")
         summary_layout = QFormLayout(summary_group)
@@ -571,6 +654,42 @@ class MainWindow(QMainWindow):
         tab = QWidget(self)
         layout = QVBoxLayout(tab)
 
+        intro_label = QLabel(
+            "Superficie técnica para control delicado, soporte y mantenimiento. "
+            "El control-plane sigue disponible aquí y las herramientas avanzadas permanecen fuera de la Home."
+        )
+        intro_label.setWordWrap(True)
+        layout.addWidget(intro_label)
+
+        summary_group = QGroupBox("Resumen técnico")
+        summary_layout = QFormLayout(summary_group)
+        technical_fields = [
+            ("config", "Archivo de config"),
+            ("remote", "Servicio remoto"),
+            ("warnings", "Advertencias"),
+            ("control", "Acceso de control"),
+        ]
+        for key, field_name in technical_fields:
+            label = QLabel("-")
+            label.setWordWrap(True)
+            summary_layout.addRow(field_name, label)
+            self._technical_summary_labels[key] = label
+        layout.addWidget(summary_group)
+
+        actions_group = QGroupBox("Accesos técnicos")
+        actions_layout = QHBoxLayout(actions_group)
+        self.open_advanced_tools_button = QPushButton("Herramientas avanzadas")
+        self.open_advanced_tools_button.clicked.connect(self.open_advanced_tools)
+        actions_layout.addWidget(self.open_advanced_tools_button)
+        self.view_state_button = QPushButton("Estado actual")
+        self.view_state_button.clicked.connect(self.show_session_details_dialog)
+        actions_layout.addWidget(self.view_state_button)
+        self.open_config_folder_button = QPushButton("Abrir carpeta config")
+        self.open_config_folder_button.clicked.connect(self.open_config_folder)
+        actions_layout.addWidget(self.open_config_folder_button)
+        actions_layout.addStretch(1)
+        layout.addWidget(actions_group)
+
         self.control_plane_panel = ControlPlanePanel(
             send_ping=self._send_control_ping_from_ui,
             send_request_stat_now=self._send_control_request_stat_now_from_ui,
@@ -584,6 +703,58 @@ class MainWindow(QMainWindow):
             parent=self,
         )
         layout.addWidget(self.control_plane_panel, 1)
+        return tab
+
+    def _build_firmware_tab(self) -> QWidget:
+        tab = QWidget(self)
+        layout = QVBoxLayout(tab)
+
+        intro_label = QLabel(
+            "Superficie principal para firmware y OTA. "
+            "Aquí queda visible el acceso al catálogo técnico actual sin esconderlo detrás de menús secundarios."
+        )
+        intro_label.setWordWrap(True)
+        layout.addWidget(intro_label)
+
+        summary_group = QGroupBox("Estado de firmware")
+        summary_layout = QFormLayout(summary_group)
+        firmware_fields = [
+            ("catalog", "Catálogo"),
+            ("artifacts", "Resumen"),
+            ("store", "Carpeta / archivo"),
+            ("ota", "Acceso OTA"),
+        ]
+        for key, field_name in firmware_fields:
+            label = QLabel("-")
+            label.setWordWrap(True)
+            summary_layout.addRow(field_name, label)
+            self._firmware_summary_labels[key] = label
+        layout.addWidget(summary_group)
+
+        actions_group = QGroupBox("Acciones")
+        actions_layout = QHBoxLayout(actions_group)
+        self.open_firmware_manager_button = QPushButton("Abrir Firmware Manager")
+        self.open_firmware_manager_button.clicked.connect(self.open_firmware_manager)
+        actions_layout.addWidget(self.open_firmware_manager_button)
+        self.refresh_firmware_shell_button = QPushButton("Actualizar resumen")
+        self.refresh_firmware_shell_button.clicked.connect(self._refresh_firmware_shell_summary)
+        actions_layout.addWidget(self.refresh_firmware_shell_button)
+        self.open_firmware_store_button = QPushButton("Abrir carpeta firmware")
+        self.open_firmware_store_button.clicked.connect(self.open_firmware_store_folder)
+        actions_layout.addWidget(self.open_firmware_store_button)
+        actions_layout.addStretch(1)
+        layout.addWidget(actions_group)
+
+        guidance_group = QGroupBox("Integración en la shell")
+        guidance_layout = QVBoxLayout(guidance_group)
+        guidance_label = QLabel(
+            "El catálogo, la importación y los flujos OTA siguen reutilizando el módulo técnico actual. "
+            "En esta shell dejan de sentirse escondidos: el acceso principal ya es visible y persistente."
+        )
+        guidance_label.setWordWrap(True)
+        guidance_layout.addWidget(guidance_label)
+        layout.addWidget(guidance_group)
+        layout.addStretch(1)
         return tab
 
     def resizeEvent(self, event) -> None:  # type: ignore[override]
@@ -708,6 +879,7 @@ class MainWindow(QMainWindow):
 
         self.change_profile_button.setEnabled(session_action_state.can_edit_configuration)
         self.reload_action.setEnabled(session_action_state.can_edit_configuration)
+        self.firmware_manager_action.setEnabled(True)
         self.advanced_tools_action.setEnabled(True)
 
         if self.warnings:
@@ -734,6 +906,8 @@ class MainWindow(QMainWindow):
         self._refresh_runtime_views(runtime_snapshot, force=True)
         if self._is_nodes_view_visible() or self._session_snapshot.state is not SessionState.RUNNING:
             self._refresh_nodes_views()
+        self._refresh_firmware_shell_summary()
+        self._refresh_technical_shell_summary()
 
         self.statusBar().showMessage(
             f"{preflight_status} | {session_status_summary} | {self._session_snapshot.message}"
@@ -825,6 +999,7 @@ class MainWindow(QMainWindow):
 
     def set_remote_api_status(self, status: Any | None) -> None:
         self._remote_api_status = status
+        self._refresh_technical_shell_summary()
         if self._advanced_dialog is not None and self._advanced_dialog.isVisible():
             self._advanced_dialog.set_state(self.cfg, self.config_path, self.warnings)
 
@@ -842,6 +1017,11 @@ class MainWindow(QMainWindow):
 
     def open_config_folder(self) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.config_path.parent)))
+
+    def open_firmware_store_folder(self) -> None:
+        QDesktopServices.openUrl(
+            QUrl.fromLocalFile(str(self._firmware_catalog_store.catalog_path.parent))
+        )
 
     def view_config(self) -> None:
         dialog = ConfigViewDialog(self._config_pretty_text(), parent=self)
@@ -1059,9 +1239,81 @@ class MainWindow(QMainWindow):
     def show_diagnostics_tab(self) -> None:
         self.tabs.setCurrentWidget(self.diagnostics_tab)
 
+    def show_home_tab(self) -> None:
+        self.tabs.setCurrentWidget(self.home_tab)
+
+    def show_nodes_tab(self) -> None:
+        self.tabs.setCurrentWidget(self.nodes_tab)
+
+    def show_firmware_tab(self) -> None:
+        self.tabs.setCurrentWidget(self.firmware_tab)
+
     def show_control_plane_tab(self) -> None:
-        self.tabs.setCurrentWidget(self.control_plane_tab)
+        self.tabs.setCurrentWidget(self.technical_tab)
         self.control_plane_panel.on_section_activated()
+
+    def _refresh_firmware_shell_summary(self) -> None:
+        if not self._firmware_summary_labels:
+            return
+        try:
+            catalog = self._firmware_catalog_store.load()
+        except Exception as exc:
+            self._firmware_summary_labels["catalog"].setText("Catálogo no disponible")
+            self._firmware_summary_labels["artifacts"].setText(
+                f"No se pudo leer el catálogo: {exc}"
+            )
+            self._firmware_summary_labels["store"].setText(
+                str(self._firmware_catalog_store.catalog_path)
+            )
+            self._firmware_summary_labels["ota"].setText(
+                "Use Firmware Manager para revisar el estado OTA."
+            )
+            return
+
+        artifacts = list(catalog.artifacts)
+        total_artifacts = len(artifacts)
+        current_count = sum(1 for artifact in artifacts if artifact.is_current)
+        target_count = len(
+            {
+                (artifact.target_kind.value, artifact.target_variant)
+                for artifact in artifacts
+            }
+        )
+
+        if total_artifacts > 0:
+            self._firmware_summary_labels["catalog"].setText("Catálogo cargado")
+        else:
+            self._firmware_summary_labels["catalog"].setText("Catálogo vacío")
+        self._firmware_summary_labels["artifacts"].setText(
+            f"Artifacts: {total_artifacts} | targets únicos: {target_count} | current: {current_count}"
+        )
+        self._firmware_summary_labels["store"].setText(
+            str(self._firmware_catalog_store.catalog_path)
+        )
+        self._firmware_summary_labels["ota"].setText(
+            "OTA deploy y campañas siguen accesibles desde Firmware Manager."
+        )
+
+    def _refresh_technical_shell_summary(self) -> None:
+        if not self._technical_summary_labels:
+            return
+
+        remote_status = self._remote_api_status
+        if remote_status is None:
+            remote_text = "Sin estado remoto cargado"
+        else:
+            service_state = str(getattr(remote_status, "service_state", "-"))
+            exposure_mode = str(getattr(remote_status, "exposure_mode", "-"))
+            remote_text = f"{service_state} | {exposure_mode}"
+        warning_count = len(self.warnings)
+        self._technical_summary_labels["config"].setText(str(self.config_path))
+        self._technical_summary_labels["remote"].setText(remote_text)
+        self._technical_summary_labels["warnings"].setText(
+            f"{warning_count} advertencia(s) de configuración"
+        )
+        self._technical_summary_labels["control"].setText(
+            "Control F3 embebido en esta superficie. Las herramientas avanzadas siguen disponibles bajo demanda."
+        )
 
     def show_about_dialog(self) -> None:
         version = self.cfg.get("version")
