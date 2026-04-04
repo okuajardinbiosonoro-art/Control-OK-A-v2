@@ -41,7 +41,7 @@ El ejecutable queda en `dist/Control Okua.exe`.
 La ventana principal usa una shell operator-first no modal y separa operación principal de superficies técnicas:
 
 - Superficies principales: `Home`, `Nodos`, `Diagnóstico`, `Firmware / OTA`, `Técnico`.
-- `Home` es la entrada principal y ya muestra una base espacial estática con cajas seleccionables.
+- `Home` es la entrada principal y ya muestra una base espacial con cajas seleccionables y estado agregado por caja.
 - `Nodos` sigue siendo la vista detallada técnico-operativa principal.
 - `Diagnóstico` mantiene observabilidad, readiness y troubleshooting.
 - `Firmware / OTA` da acceso visible y persistente al módulo de firmware existente.

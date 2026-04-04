@@ -118,6 +118,13 @@ def test_main_shell_uses_home_and_visible_primary_surfaces() -> None:
         assert window.tabs.currentWidget() is window.home_tab
         assert isinstance(window.home_map_view, HomeMapView)
         assert window.home_map_selection_group.title() == "Caja seleccionada"
+        assert window.home_map_legend_group.title() == "Leyenda de estados"
+        assert [label.text() for label in window.home_map_legend_labels] == [
+            "En línea",
+            "En calibración",
+            "Degradado",
+            "Fuera de línea",
+        ]
     finally:
         window.close()
 
@@ -171,7 +178,8 @@ def test_home_map_selection_updates_context_panel() -> None:
         assert window._home_map_detail_labels["label"].text() == "Caja 1"
         assert "Caja 1" in window._home_map_detail_labels["box_id"].text()
         assert "EB1" in window._home_map_detail_labels["nodes"].text()
-        assert "siguiente ticket" in window._home_map_detail_labels["status"].text().lower()
+        assert window._home_map_detail_labels["status"].text().strip()
+        assert window._home_map_detail_labels["asset"].text().strip()
     finally:
         window.close()
 
