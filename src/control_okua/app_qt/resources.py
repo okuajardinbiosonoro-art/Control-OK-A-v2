@@ -30,10 +30,17 @@ def load_qss(path: Path) -> str:
 
 
 def app_icon_path() -> Path:
-    """Prefiere ICO y cae a PNG si no existe."""
-    ico = resource_path("assets/icons/app_icon.ico")
-    if ico.exists():
-        return ico
-
-    png = resource_path("assets/icons/app_icon.png")
-    return png
+    """Prefiere el set de branding actual y cae a legados solo si hace falta."""
+    candidates = (
+        "assets/branding/okua_app_icon.ico",
+        "assets/branding/okua_icon_256.png",
+        "assets/branding/okua_icon_128.png",
+        "assets/branding/okua_icon_64.png",
+        "assets/icons/app_icon.ico",
+        "assets/icons/app_icon.png",
+    )
+    for relative in candidates:
+        candidate = resource_path(relative)
+        if candidate.exists():
+            return candidate
+    return resource_path("assets/branding/okua_app_icon.ico")

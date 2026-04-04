@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from PySide6.QtCore import Qt, QTimer, QUrl
-from PySide6.QtGui import QAction, QBrush, QColor, QDesktopServices
+from PySide6.QtGui import QAction, QBrush, QColor, QDesktopServices, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -44,6 +44,7 @@ from control_okua.app_qt.navigation_shell import (
     build_primary_shell_items,
 )
 from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
+from control_okua.app_qt.resources import app_icon_path
 from control_okua.app_qt.widgets.config_view_dialog import ConfigViewDialog
 from control_okua.app_qt.widgets.home_map_panel import HomeMapPanel
 from control_okua.app_qt.widgets.toast_manager import ToastManager
@@ -119,6 +120,9 @@ class MainWindow(QMainWindow):
         self.warnings = list(warnings or [])
 
         self.setWindowTitle("Control OKÚA v2")
+        icon_path = app_icon_path()
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
         self.resize(1100, 700)
         self._initial_maximize_pending = True
 

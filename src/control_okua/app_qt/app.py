@@ -213,6 +213,8 @@ def run_app() -> int:
         session_controller=session_controller,
         on_apply_remote_settings=_apply_remote_api_settings,
     )
+    if icon_path.exists():
+        window.setWindowIcon(QIcon(str(icon_path)))
     window.set_remote_api_status(remote_runtime_status)
     window.showMaximized()
 

@@ -6,9 +6,9 @@ from pathlib import Path
 
 PROJECT_DIR = Path(SPEC).resolve().parent
 
-# Icono cross-platform (prefiere .ico, fallback .png, o None si no existe)
-ICO_PATH = PROJECT_DIR / "assets" / "icons" / "app_icon.ico"
-PNG_PATH = PROJECT_DIR / "assets" / "icons" / "app_icon.png"
+# Icono cross-platform del set de branding actual.
+ICO_PATH = PROJECT_DIR / "assets" / "branding" / "okua_app_icon.ico"
+PNG_PATH = PROJECT_DIR / "assets" / "branding" / "okua_icon_256.png"
 
 if ICO_PATH.exists():
     ICON_FILE = ICO_PATH

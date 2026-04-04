@@ -121,6 +121,7 @@ def test_main_tabs_do_not_include_estado_actual_by_default() -> None:
         assert window.navigation_panel.button_for_key("home").isChecked() is True
         assert window.shell_title_label.text() == "Inicio"
         assert window.home_map_panel.has_map_asset() is True
+        assert window.windowIcon().isNull() is False
         window.show()
         QApplication.processEvents()
         assert window.isMaximized() is True

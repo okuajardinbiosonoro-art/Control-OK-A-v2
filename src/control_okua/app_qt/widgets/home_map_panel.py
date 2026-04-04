@@ -307,65 +307,68 @@ class HomeMapPanel(QWidget):
             style = self._STATUS_STYLE[status]
             is_selected = spec.box_key == self._selected_box_key
             is_hovered = spec.box_key == self._hovered_box_key
+            base_font = painter.font()
+            body_rect = marker_rect.adjusted(4.0, 3.0, -4.0, -8.0)
+            badge_rect = QRectF(
+                body_rect.center().x() - 15.0,
+                body_rect.bottom() - 1.5,
+                30.0,
+                12.5,
+            )
 
-            halo_rect = marker_rect.adjusted(-7.0, -7.0, 7.0, 7.0)
-            halo_fill = QColor(style["halo"])
-            if is_selected:
-                halo_fill.setAlpha(76)
-            elif is_hovered:
-                halo_fill.setAlpha(56)
-            halo_border = QColor(style["accent"])
-            painter.setPen(QPen(halo_border, 1.8 if (is_selected or is_hovered) else 1.2))
-            painter.setBrush(halo_fill)
-            painter.drawEllipse(halo_rect)
+            if is_selected or is_hovered:
+                glow_rect = body_rect.adjusted(-5.0, -5.0, 5.0, 5.0)
+                glow_fill = QColor(style["halo"])
+                glow_fill.setAlpha(78 if is_selected else 52)
+                glow_border = QColor(style["accent"])
+                glow_border.setAlpha(115 if is_selected else 72)
+                painter.setPen(QPen(glow_border, 1.6 if is_selected else 1.0))
+                painter.setBrush(glow_fill)
+                painter.drawRoundedRect(glow_rect, 12.0, 12.0)
 
-            marker_path = QPainterPath()
-            marker_path.addRoundedRect(marker_rect, 10.0, 10.0)
+            shadow_rect = body_rect.translated(1.5, 2.0)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(26, 37, 31, 18))
+            painter.drawRoundedRect(shadow_rect, 9.0, 9.0)
+
+            bridge_rect = QRectF(
+                badge_rect.center().x() - 4.0,
+                body_rect.bottom() - 2.0,
+                8.0,
+                max(4.0, badge_rect.top() - body_rect.bottom() + 3.0),
+            )
             marker_fill = QColor(style["fill"])
-            if is_selected:
-                marker_fill.setAlpha(255)
-            elif is_hovered:
-                marker_fill.setAlpha(248)
-            painter.fillPath(marker_path, marker_fill)
-            painter.setPen(QPen(QColor(style["accent"]), 1.8 if is_selected else 1.25))
-            painter.drawPath(marker_path)
+            marker_fill.setAlpha(255 if is_selected else (250 if is_hovered else 244))
+            painter.setBrush(marker_fill)
+            painter.setPen(QPen(QColor(style["accent"]), 1.8 if is_selected else 1.35))
+            painter.drawRoundedRect(body_rect, 9.0, 9.0)
+            painter.drawRoundedRect(bridge_rect, 3.0, 3.0)
 
-            status_dot_rect = QRectF(marker_rect.right() - 10.0, marker_rect.top() - 2.0, 10.0, 10.0)
-            painter.setPen(QPen(QColor("#FFFEFB"), 1.2))
-            painter.setBrush(QColor(style["accent"]))
-            painter.drawEllipse(status_dot_rect)
-
+            number_font = painter.font()
+            number_font.setBold(True)
+            painter.setFont(number_font)
             painter.setPen(QColor(BRAND_DEEP))
             painter.drawText(
-                marker_rect,
+                body_rect,
                 Qt.AlignmentFlag.AlignCenter,
                 str(spec.box_index),
             )
 
             if state is not None:
-                base_font = painter.font()
-                badge_rect = QRectF(
-                    marker_rect.center().x() - 19.0,
-                    marker_rect.bottom() + 5.0,
-                    38.0,
-                    16.0,
-                )
-                if badge_rect.bottom() > map_rect.bottom() - 4.0:
-                    badge_rect.moveTop(marker_rect.top() - 20.0)
-                painter.setPen(QPen(QColor(style["accent"]), 1.0))
                 painter.setBrush(QColor(style["badge_fill"]))
-                painter.drawRoundedRect(badge_rect, 8.0, 8.0)
+                painter.setPen(QPen(QColor(style["accent"]), 1.0))
+                painter.drawRoundedRect(badge_rect, 6.0, 6.0)
                 badge_font = painter.font()
-                badge_font.setPointSize(max(7, badge_font.pointSize() - 1))
                 badge_font.setBold(True)
+                badge_font.setPointSize(max(7, badge_font.pointSize() - 1))
                 painter.setFont(badge_font)
                 painter.setPen(QColor(style["accent"]))
                 painter.drawText(
-                    badge_rect,
+                    badge_rect.adjusted(0.0, -0.5, 0.0, 0.0),
                     Qt.AlignmentFlag.AlignCenter,
                     state.badge_text,
                 )
-                painter.setFont(base_font)
+            painter.setFont(base_font)
 
     def _draw_context_card(self, painter: QPainter, map_rect: QRectF) -> None:
         selected_box = self.selected_box()
