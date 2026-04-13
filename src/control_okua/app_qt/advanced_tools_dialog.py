@@ -36,7 +36,7 @@ class AdvancedToolsDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("advancedToolsDialog")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setWindowTitle("Herramientas avanzadas")
+        self.setWindowTitle("Centro técnico")
         self.resize(980, 680)
 
         self._on_open_folder = on_open_folder
@@ -54,7 +54,7 @@ class AdvancedToolsDialog(QDialog):
         root_layout = QVBoxLayout(self)
 
         intro_label = QLabel(
-            "Use estas herramientas para diagnóstico técnico y revisión de configuración."
+            "Herramientas de soporte para configuración, remoto y firmware."
         )
         intro_label.setObjectName("sectionHintLabel")
         intro_label.setWordWrap(True)
@@ -67,7 +67,7 @@ class AdvancedToolsDialog(QDialog):
         config_form = QFormLayout()
         self.config_path_label = QLabel("-")
         self.config_path_label.setWordWrap(True)
-        config_form.addRow("Archivo config:", self.config_path_label)
+        config_form.addRow("Archivo de configuración:", self.config_path_label)
         config_layout.addLayout(config_form)
 
         actions_layout = QHBoxLayout()
@@ -77,12 +77,12 @@ class AdvancedToolsDialog(QDialog):
         self.open_folder_button.clicked.connect(self._on_open_folder)
         actions_layout.addWidget(self.open_folder_button)
 
-        self.view_config_button = QPushButton("Ver config")
+        self.view_config_button = QPushButton("Ver configuración")
         self.view_config_button.setProperty("role", "secondary")
         self.view_config_button.clicked.connect(self._on_view_config)
         actions_layout.addWidget(self.view_config_button)
 
-        self.reload_button = QPushButton("Recargar config")
+        self.reload_button = QPushButton("Recargar configuración")
         self.reload_button.setProperty("role", "secondary")
         self.reload_button.clicked.connect(self._handle_reload_clicked)
         actions_layout.addWidget(self.reload_button)
@@ -90,7 +90,7 @@ class AdvancedToolsDialog(QDialog):
 
         config_layout.addLayout(actions_layout)
 
-        self.warnings_label = QLabel("Advertencias de config: -")
+        self.warnings_label = QLabel("Advertencias de configuración: -")
         self.warnings_label.setWordWrap(True)
         config_layout.addWidget(self.warnings_label)
 
@@ -120,15 +120,14 @@ class AdvancedToolsDialog(QDialog):
         remote_form.addRow("URL remota:", self.remote_remote_url_label)
         self.remote_store_label = QLabel("-")
         self.remote_store_label.setWordWrap(True)
-        remote_form.addRow("Store usuarios:", self.remote_store_label)
+        remote_form.addRow("Base de usuarios:", self.remote_store_label)
         self.remote_failure_label = QLabel("-")
         self.remote_failure_label.setWordWrap(True)
-        remote_form.addRow("Último fallo:", self.remote_failure_label)
+        remote_form.addRow("Último error:", self.remote_failure_label)
         remote_layout.addLayout(remote_form)
 
         remote_apply_hint = QLabel(
-            "Cambie aquí el modo operativo del gateway remoto sin editar config.json. "
-            "El servicio se guarda y se intenta reaplicar de inmediato."
+            "Ajusta el modo del servicio remoto sin editar archivos manualmente."
         )
         remote_apply_hint.setObjectName("sectionHintLabel")
         remote_apply_hint.setWordWrap(True)
@@ -138,8 +137,8 @@ class AdvancedToolsDialog(QDialog):
         self.remote_enabled_checkbox = QCheckBox("Servicio remoto habilitado")
         remote_apply_form.addRow("Habilitado:", self.remote_enabled_checkbox)
         self.remote_exposure_mode_combo = QComboBox(self)
-        self.remote_exposure_mode_combo.addItem("Solo este PC (local_only)", "local_only")
-        self.remote_exposure_mode_combo.addItem("Solo Tailscale (tailscale_only)", "tailscale_only")
+        self.remote_exposure_mode_combo.addItem("Solo este equipo", "local_only")
+        self.remote_exposure_mode_combo.addItem("Solo red Tailscale", "tailscale_only")
         remote_apply_form.addRow("Modo rápido:", self.remote_exposure_mode_combo)
         remote_layout.addLayout(remote_apply_form)
 
@@ -156,14 +155,14 @@ class AdvancedToolsDialog(QDialog):
         firmware_group.setProperty("sectionRole", "summary")
         firmware_layout = QVBoxLayout(firmware_group)
         firmware_hint = QLabel(
-            "Abra el Firmware Manager para revisar el catálogo técnico, "
+            "Abra el gestor de firmware para revisar el catálogo técnico, "
             "importar bins y marcar current por target."
         )
         firmware_hint.setWordWrap(True)
         firmware_layout.addWidget(firmware_hint)
 
         firmware_actions_layout = QHBoxLayout()
-        self.open_firmware_manager_button = QPushButton("Firmware Manager")
+        self.open_firmware_manager_button = QPushButton("Abrir gestor de firmware")
         self.open_firmware_manager_button.setProperty("role", "contextual")
         self.open_firmware_manager_button.clicked.connect(
             self._handle_open_firmware_manager_clicked
@@ -189,7 +188,7 @@ class AdvancedToolsDialog(QDialog):
     ) -> None:
         warning_count = len(warnings or [])
         self.config_path_label.setText(str(config_path))
-        self.warnings_label.setText(f"Advertencias de config: {warning_count}")
+        self.warnings_label.setText(f"Advertencias de configuración: {warning_count}")
         self.midi_outputs_widget.refresh_from_config(cfg)
         remote_cfg = cfg.get("remote_api")
         remote_enabled = False

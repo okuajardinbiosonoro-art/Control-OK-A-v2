@@ -525,6 +525,18 @@ QWidget#navigationPanel QLabel {
     color: #0B3B27;
 }
 
+QLabel#navigationBrandLabel {
+    font-weight: 800;
+    letter-spacing: 0.5px;
+}
+
+QLabel#navigationEditionLabel {
+    color: #4F6259;
+    font-size: 9pt;
+    margin-top: -6px;
+    margin-bottom: 6px;
+}
+
 QWidget#navigationPanel QPushButton {
     text-align: left;
     background-color: transparent;

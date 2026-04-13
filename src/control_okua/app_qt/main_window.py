@@ -45,7 +45,7 @@ from control_okua.app_qt.navigation_shell import (
 )
 from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
 from control_okua.app_qt.resources import app_icon_path
-from control_okua.app_qt.design_system import node_status_table_color
+from control_okua.app_qt.design_system import APP_ABOUT_NAME, APP_DISPLAY_NAME, node_status_table_color
 from control_okua.app_qt.widgets.config_view_dialog import ConfigViewDialog
 from control_okua.app_qt.widgets.home_map_panel import HomeMapPanel
 from control_okua.app_qt.widgets.toast_manager import ToastManager
@@ -129,7 +129,7 @@ class MainWindow(QMainWindow):
         self.config_path = config_path
         self.warnings = list(warnings or [])
 
-        self.setWindowTitle("Control OKÚA v2")
+        self.setWindowTitle(APP_DISPLAY_NAME)
         icon_path = app_icon_path()
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
@@ -280,14 +280,14 @@ class MainWindow(QMainWindow):
         self.exit_action.triggered.connect(self.close)
         app_menu.addAction(self.exit_action)
 
-        self.view_state_action = QAction("Estado actual", self)
+        self.view_state_action = QAction("Estado de sesión", self)
         self.view_state_action.triggered.connect(self.show_session_details_dialog)
         self.view_diagnostics_action = QAction("Diagnóstico", self)
         self.view_diagnostics_action.triggered.connect(self.show_diagnostics_tab)
         self.toggle_preflight_action = QAction("Chequeos previos", self)
         self.toggle_preflight_action.setCheckable(True)
         self.toggle_preflight_action.toggled.connect(self._on_preflight_toggle_action)
-        self.firmware_manager_action = QAction("Firmware Manager", self)
+        self.firmware_manager_action = QAction("Gestor de firmware", self)
         self.firmware_manager_action.triggered.connect(self.open_firmware_manager)
         self.advanced_tools_action = QAction("Herramientas avanzadas", self)
         self.advanced_tools_action.triggered.connect(self.open_advanced_tools)
@@ -302,7 +302,7 @@ class MainWindow(QMainWindow):
         self._details_dialog.setObjectName("sessionDetailsDialog")
         self._details_dialog.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._details_dialog.setModal(False)
-        self._details_dialog.setWindowTitle("Estado actual")
+        self._details_dialog.setWindowTitle("Estado de sesión")
         self._details_dialog.setMinimumSize(880, 620)
         self._details_dialog.resize(980, 700)
         layout = QVBoxLayout(self._details_dialog)
@@ -362,13 +362,13 @@ class MainWindow(QMainWindow):
         intro_column.addWidget(self.home_status_chip, 0, Qt.AlignLeft)
 
         self.operation_subtitle_label = QLabel(
-            "Lista para operar."
+            "Sistema listo para iniciar sesión."
         )
         self.operation_subtitle_label.setObjectName("homeStatusLine")
         self.operation_subtitle_label.setWordWrap(True)
         intro_column.addWidget(self.operation_subtitle_label)
 
-        self.home_profile_label = QLabel("Perfil pendiente")
+        self.home_profile_label = QLabel("Perfil operativo pendiente")
         self.home_profile_label.setObjectName("homeMetaLabel")
         self.home_profile_label.setWordWrap(True)
         intro_column.addWidget(self.home_profile_label)
@@ -427,7 +427,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
 
-        title_label = QLabel("Detalles de sesión")
+        title_label = QLabel("Estado de sesión")
         title_label.setObjectName("sectionTitleLabel")
         title_font = title_label.font()
         title_font.setPointSize(title_font.pointSize() + 2)
@@ -436,7 +436,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(title_label)
 
         hint_label = QLabel(
-            "Resumen actual con scroll interno y secciones que se reordenan automáticamente según el ancho disponible."
+            "Resumen operativo con secciones adaptables al tamaño de la ventana."
         )
         hint_label.setObjectName("sectionHintLabel")
         hint_label.setWordWrap(True)
@@ -517,7 +517,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
 
-        title_label = QLabel("Nodos en vivo")
+        title_label = QLabel("Nodos")
         title_label.setObjectName("sectionTitleLabel")
         title_font = title_label.font()
         title_font.setPointSize(title_font.pointSize() + 2)
@@ -531,7 +531,7 @@ class MainWindow(QMainWindow):
         nodes_context_layout.setContentsMargins(0, 0, 0, 0)
         nodes_context_layout.setSpacing(8)
 
-        self.nodes_context_label = QLabel("Contexto de caja no activo.")
+        self.nodes_context_label = QLabel("Sin filtro de caja activo.")
         self.nodes_context_label.setWordWrap(True)
         self.nodes_context_label.setSizePolicy(
             QSizePolicy.Policy.Expanding,
@@ -544,7 +544,7 @@ class MainWindow(QMainWindow):
         self.nodes_clear_context_button.clicked.connect(self._clear_map_nodes_context)
         nodes_context_layout.addWidget(self.nodes_clear_context_button, 0)
 
-        self.nodes_show_map_button = QPushButton("Ver caja en Inicio")
+        self.nodes_show_map_button = QPushButton("Ver caja en inicio")
         self.nodes_show_map_button.setProperty("role", "contextual")
         self.nodes_show_map_button.clicked.connect(self._show_home_map_for_active_context)
         nodes_context_layout.addWidget(self.nodes_show_map_button, 0)
@@ -562,17 +562,17 @@ class MainWindow(QMainWindow):
         empty_layout.setContentsMargins(10, 8, 10, 8)
         empty_layout.setSpacing(6)
 
-        self.nodes_state_label = QLabel("La vista de nodos está disponible para sesiones UDP.")
+        self.nodes_state_label = QLabel("Esta vista se habilita en sesiones UDP activas.")
         self._set_compact_wordwrap_label(self.nodes_state_label)
         self.nodes_state_label.setAlignment(Qt.AlignCenter)
         empty_layout.addWidget(self.nodes_state_label)
 
-        self.nodes_hint_label = QLabel("Inicia una sesión UDP para ver nodos en vivo.")
+        self.nodes_hint_label = QLabel("Inicia una sesión UDP para ver actividad en tiempo real.")
         self._set_compact_wordwrap_label(self.nodes_hint_label)
         self.nodes_hint_label.setAlignment(Qt.AlignCenter)
         empty_layout.addWidget(self.nodes_hint_label)
 
-        self.nodes_summary_label = QLabel("Resumen de nodos: no disponible.")
+        self.nodes_summary_label = QLabel("Resumen de nodos no disponible.")
         self._set_compact_wordwrap_label(self.nodes_summary_label)
         self.nodes_summary_label.setAlignment(Qt.AlignCenter)
         empty_layout.addWidget(self.nodes_summary_label)
@@ -619,7 +619,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(title_label)
 
         hint_label = QLabel(
-            "Superficie técnica para readiness, runtime y evidencia del sistema."
+            "Monitoreo técnico de readiness, runtime y evidencia operativa."
         )
         hint_label.setObjectName("sectionHintLabel")
         hint_label.setWordWrap(True)
@@ -645,7 +645,7 @@ class MainWindow(QMainWindow):
             self._diagnostic_summary_labels[key] = label
 
         layout.addWidget(summary_group)
-        self.preflight_toggle_button = QPushButton("Ver chequeos previos")
+        self.preflight_toggle_button = QPushButton("Chequeos previos")
         self.preflight_toggle_button.setProperty("role", "contextual")
         self.preflight_toggle_button.setCheckable(True)
         self.preflight_toggle_button.toggled.connect(self._on_preflight_toggle_button)
@@ -729,7 +729,7 @@ class MainWindow(QMainWindow):
         title_label.setFont(title_font)
         layout.addWidget(title_label)
 
-        hint_label = QLabel("Lectura, mantenimiento y acciones delicadas del sistema.")
+        hint_label = QLabel("Herramientas para lectura técnica, mantenimiento y control avanzado.")
         hint_label.setObjectName("sectionHintLabel")
         hint_label.setWordWrap(True)
         layout.addWidget(hint_label)
@@ -745,10 +745,10 @@ class MainWindow(QMainWindow):
         reading_group = QGroupBox("Lectura técnica")
         reading_group.setProperty("sectionRole", "summary")
         reading_layout = QVBoxLayout(reading_group)
-        reading_hint = QLabel("Revise el estado operativo completo sin salir de la shell principal.")
+        reading_hint = QLabel("Consulta el estado operativo completo sin salir del flujo principal.")
         reading_hint.setWordWrap(True)
         reading_layout.addWidget(reading_hint)
-        self.technical_state_button = QPushButton("Estado actual")
+        self.technical_state_button = QPushButton("Estado de sesión")
         self.technical_state_button.setProperty("role", "secondary")
         self.technical_state_button.clicked.connect(self.show_session_details_dialog)
         reading_layout.addWidget(self.technical_state_button, 0, Qt.AlignLeft)
@@ -757,7 +757,7 @@ class MainWindow(QMainWindow):
         tools_group = QGroupBox("Mantenimiento")
         tools_group.setProperty("sectionRole", "summary")
         tools_layout = QVBoxLayout(tools_group)
-        tools_hint = QLabel("Abra herramientas auxiliares cuando necesite revisar configuración, remoto o firmware.")
+        tools_hint = QLabel("Abre utilidades de soporte para configuración, remoto y firmware.")
         tools_hint.setWordWrap(True)
         tools_layout.addWidget(tools_hint)
         self.technical_tools_button = QPushButton("Herramientas avanzadas")
@@ -791,7 +791,7 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
 
-        title_label = QLabel("Firmware / OTA")
+        title_label = QLabel("Firmware")
         title_label.setObjectName("sectionTitleLabel")
         title_font = title_label.font()
         title_font.setPointSize(title_font.pointSize() + 2)
@@ -800,7 +800,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(title_label)
 
         hint_label = QLabel(
-            "Superficie persistente para catálogo técnico, bins y despliegue OTA sin esconder el acceso principal."
+            "Gestiona catálogo, versiones y despliegues OTA desde una vista única."
         )
         hint_label.setObjectName("sectionHintLabel")
         hint_label.setWordWrap(True)
@@ -809,7 +809,7 @@ class MainWindow(QMainWindow):
         actions_group = QGroupBox("Acción principal")
         actions_group.setProperty("sectionRole", "actions")
         actions_layout = QHBoxLayout(actions_group)
-        self.open_firmware_manager_button = QPushButton("Abrir Firmware Manager")
+        self.open_firmware_manager_button = QPushButton("Abrir gestor de firmware")
         self.open_firmware_manager_button.setProperty("role", "primary")
         self.open_firmware_manager_button.clicked.connect(self.open_firmware_manager)
         actions_layout.addWidget(self.open_firmware_manager_button)
@@ -820,7 +820,7 @@ class MainWindow(QMainWindow):
         actions_layout.addStretch(1)
         layout.addWidget(actions_group)
 
-        summary_group = QGroupBox("Estado del catálogo")
+        summary_group = QGroupBox("Resumen del catálogo")
         summary_group.setProperty("sectionRole", "summary")
         summary_layout = QFormLayout(summary_group)
         for key, field_name in (
@@ -852,13 +852,13 @@ class MainWindow(QMainWindow):
         layout.addWidget(title_label)
 
         hint_label = QLabel(
-            "Estado y exposición del servicio remoto. Esta superficie evita depender del diálogo avanzado para revisar lo esencial."
+            "Supervisa el acceso remoto y aplica cambios rápidos del servicio."
         )
         hint_label.setObjectName("sectionHintLabel")
         hint_label.setWordWrap(True)
         layout.addWidget(hint_label)
 
-        summary_group = QGroupBox("Estado del servicio remoto")
+        summary_group = QGroupBox("Resumen del servicio remoto")
         summary_group.setProperty("sectionRole", "summary")
         summary_layout = QFormLayout(summary_group)
         for key, field_name in (
@@ -1225,7 +1225,7 @@ class MainWindow(QMainWindow):
                 str(self._firmware_catalog_store.catalog_path)
             )
             self._firmware_summary_labels["ota"].setText(
-                "El flujo OTA y el detalle de bins siguen centralizados en Firmware Manager."
+                "El flujo OTA y el detalle de bins se gestionan desde el gestor de firmware."
             )
         except Exception as exc:
             self._firmware_summary_labels["catalog"].setText("Catálogo no disponible")
@@ -1234,7 +1234,7 @@ class MainWindow(QMainWindow):
                 str(self._firmware_catalog_store.catalog_path)
             )
             self._firmware_summary_labels["ota"].setText(
-                "Abra Firmware Manager para revisar o reconstruir el catálogo."
+                "Abra el gestor de firmware para revisar o reconstruir el catálogo."
             )
 
     def _refresh_remote_shell_summary(self) -> None:
@@ -1546,14 +1546,16 @@ class MainWindow(QMainWindow):
     def show_about_dialog(self) -> None:
         version = self.cfg.get("version")
         version_text = str(version) if version is not None else "No disponible"
+        active_profile = self._active_profile_id() or "sin perfil"
         QMessageBox.about(
             self,
             "Acerca de",
             (
-                "Control OKÚA v2\n"
-                f"Versión de configuración: {version_text}\n\n"
-                "Aplicación de operación para monitoreo de nodos OKÚA,\n"
-                "control de sesión serial/UDP y ruteo MIDI por caja."
+                f"{APP_ABOUT_NAME}\n"
+                f"Versión de configuración: {version_text}\n"
+                f"Perfil activo: {active_profile}\n\n"
+                "Aplicación de operación para monitoreo de nodos,\n"
+                "control de sesión serial/UDP y gestión remota."
             ),
         )
 

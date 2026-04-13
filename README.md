@@ -1,4 +1,4 @@
-# Control-OK-A-v2
+# Control OKUA CKv2
 
 ## Arranque rapido
 
@@ -34,7 +34,7 @@ python main.py
 pyinstaller ControlOkuaV2.spec
 ```
 
-El ejecutable queda en `dist/Control Okua.exe`.
+El ejecutable queda en `dist/Control OKUA CKv2.exe`.
 
 ## Estado actual de la app (UX)
 

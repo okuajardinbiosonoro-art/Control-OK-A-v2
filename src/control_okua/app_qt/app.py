@@ -7,6 +7,7 @@ from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
+from control_okua.app_qt.design_system import APP_DISPLAY_NAME
 from control_okua.app_qt.main_window import MainWindow
 from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
 from control_okua.app_qt.resources import app_icon_path, load_qss, resource_path
@@ -57,6 +58,8 @@ def run_app() -> int:
         _emit_runtime_message(f"[remote_api] {warning}")
 
     app = QApplication(sys.argv)
+    app.setApplicationName(APP_DISPLAY_NAME)
+    app.setApplicationDisplayName(APP_DISPLAY_NAME)
 
     qss_path = resource_path("assets/theme.qss")
     if qss_path.exists():

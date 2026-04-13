@@ -65,7 +65,7 @@ class FirmwareManagerDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("firmwareManagerDialog")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setWindowTitle("Firmware Manager")
+        self.setWindowTitle("Gestor de firmware")
         self.resize(1240, 760)
 
         self._catalog_store = catalog_store or FirmwareCatalogStore()
@@ -88,9 +88,7 @@ class FirmwareManagerDialog(QDialog):
         root_layout = QVBoxLayout(self)
 
         intro = QLabel(
-            "Gestione el catálogo técnico de firmware importado. "
-            "Desde aquí puede revisar artifacts, importarlos y abrir el deploy OTA técnico "
-            "para nodos seleccionados manualmente."
+            "Administra el catálogo de firmware, revisa versiones y ejecuta despliegues OTA."
         )
         intro.setObjectName("sectionHintLabel")
         intro.setWordWrap(True)
@@ -102,7 +100,7 @@ class FirmwareManagerDialog(QDialog):
         self.import_button.clicked.connect(self._on_import_clicked)
         actions_layout.addWidget(self.import_button)
 
-        self.mark_current_button = QPushButton("Marcar current", self)
+        self.mark_current_button = QPushButton("Marcar como current", self)
         self.mark_current_button.setProperty("role", "secondary")
         self.mark_current_button.clicked.connect(self._on_mark_current_clicked)
         self.mark_current_button.setEnabled(False)
@@ -119,19 +117,19 @@ class FirmwareManagerDialog(QDialog):
         self.refresh_button.clicked.connect(self.refresh_catalog)
         actions_layout.addWidget(self.refresh_button)
 
-        self.ota_deploy_button = QPushButton("OTA Deploy…", self)
+        self.ota_deploy_button = QPushButton("Despliegue OTA…", self)
         self.ota_deploy_button.setProperty("role", "secondary")
         self.ota_deploy_button.clicked.connect(self._on_ota_deploy_clicked)
         self.ota_deploy_button.setEnabled(self._session_controller is not None)
         actions_layout.addWidget(self.ota_deploy_button)
 
-        self.ota_campaign_button = QPushButton("OTA Campaign…", self)
+        self.ota_campaign_button = QPushButton("Campaña OTA…", self)
         self.ota_campaign_button.setProperty("role", "secondary")
         self.ota_campaign_button.clicked.connect(self._on_ota_campaign_clicked)
         self.ota_campaign_button.setEnabled(self._session_controller is not None)
         actions_layout.addWidget(self.ota_campaign_button)
 
-        self.open_store_button = QPushButton("Abrir carpeta firmware", self)
+        self.open_store_button = QPushButton("Abrir carpeta del firmware", self)
         self.open_store_button.setProperty("role", "ghost")
         self.open_store_button.clicked.connect(self._open_managed_store_folder)
         actions_layout.addWidget(self.open_store_button)
@@ -221,7 +219,7 @@ class FirmwareManagerDialog(QDialog):
         pane = QWidget(self)
         layout = QVBoxLayout(pane)
 
-        current_group = QGroupBox("Resumen de selección", self)
+        current_group = QGroupBox("Resumen de la selección", self)
         current_group.setProperty("sectionRole", "summary")
         current_layout = QVBoxLayout(current_group)
         self.current_summary_label = QLabel("Sin selección.", self)
@@ -397,8 +395,8 @@ class FirmwareManagerDialog(QDialog):
             return
         if artifact.is_current:
             self._notify(
-                "Firmware current",
-                "El artefacto seleccionado ya es current para su target.",
+                "Firmware actual",
+                "El artefacto seleccionado ya está marcado como current para su target.",
                 level="info",
             )
             return
@@ -431,7 +429,7 @@ class FirmwareManagerDialog(QDialog):
             self,
             "Confirmar borrado",
             (
-                "Se eliminará este artifact del catálogo técnico.\n\n"
+                "Se eliminará este artefacto del catálogo de firmware.\n\n"
                 f"Nombre: {artifact.display_name}\n"
                 f"Artifact ID: {artifact.artifact_id}\n"
                 f"Ruta: {artifact.file_path}\n\n"
@@ -469,7 +467,7 @@ class FirmwareManagerDialog(QDialog):
         if self._session_controller is None:
             self._notify(
                 "OTA Deploy no disponible",
-                "Esta instancia de Firmware Manager no tiene SessionController asociado.",
+                "Esta instancia del gestor de firmware no tiene SessionController asociado.",
                 level="warning",
             )
             return
@@ -486,7 +484,7 @@ class FirmwareManagerDialog(QDialog):
         if self._session_controller is None:
             self._notify(
                 "OTA Campaign no disponible",
-                "Esta instancia de Firmware Manager no tiene SessionController asociado.",
+                "Esta instancia del gestor de firmware no tiene SessionController asociado.",
                 level="warning",
             )
             return

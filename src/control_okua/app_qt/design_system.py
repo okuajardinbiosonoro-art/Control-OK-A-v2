@@ -6,6 +6,11 @@ from PySide6.QtGui import QColor
 
 from control_okua.core.registry import NodeStatus
 
+APP_BRAND_LABEL = "OKÚA"
+APP_EDITION_LABEL = "Control CKv2"
+APP_DISPLAY_NAME = "Control OKÚA · CKv2"
+APP_ABOUT_NAME = "Control OKÚA CKv2"
+
 BRAND_ACCENT = "#2FAC66"
 BRAND_DEEP = "#0B3B27"
 BRAND_EARTH = "#432918"

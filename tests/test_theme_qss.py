@@ -22,6 +22,8 @@ def test_theme_qss_uses_new_light_palette_and_removes_legacy_dark_colors() -> No
     assert "QWidget#navigationPanel QPushButton:checked" in qss
     assert "QLabel#dialogHeadlineLabel" in qss
     assert "QLabel#sectionTitleLabel" in qss
+    assert "QLabel#navigationBrandLabel" in qss
+    assert "QLabel#navigationEditionLabel" in qss
     assert "QWidget#nodesContextBar" in qss
     assert "QPlainTextEdit" in qss
     assert "QTableView" in qss

@@ -33,7 +33,7 @@ class ProfileSelectorDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("profileSelectorDialog")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setWindowTitle("Seleccionar perfil operativo")
+        self.setWindowTitle("Perfil de operación")
         self.setModal(True)
         self.resize(620, 460)
 
@@ -49,13 +49,13 @@ class ProfileSelectorDialog(QDialog):
         layout.setSpacing(14)
 
         title = QLabel(
-            "Elija cómo desea operar Control OKÚA v2."
+            "Selecciona cómo deseas operar Control OKÚA."
         )
         title.setObjectName("dialogHeadlineLabel")
         title.setWordWrap(True)
         layout.addWidget(title)
 
-        hint = QLabel("Puede cambiar este perfil más adelante desde Aplicación.")
+        hint = QLabel("Puedes cambiar este perfil más adelante desde Aplicación.")
         hint.setObjectName("dialogSubtleLabel")
         hint.setWordWrap(True)
         layout.addWidget(hint)
@@ -66,7 +66,7 @@ class ProfileSelectorDialog(QDialog):
             group_box.setProperty("sectionRole", "summary")
             group_layout = QVBoxLayout(group_box)
 
-            radio = QRadioButton("Usar este perfil", group_box)
+            radio = QRadioButton("Elegir este perfil", group_box)
             group_layout.addWidget(radio)
             self._button_group.addButton(radio)
             self._profile_buttons[definition.profile_id] = radio

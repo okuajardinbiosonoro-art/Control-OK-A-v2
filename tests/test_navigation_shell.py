@@ -54,6 +54,8 @@ def test_navigation_panel_tracks_checked_section() -> None:
         assert panel.button_for_key("firmware").isChecked() is True
         assert panel.button_for_key("home").isChecked() is False
         visible_labels = [label.text() for label in panel.findChildren(QLabel)]
+        assert "OKÚA" in visible_labels
+        assert "Control CKv2" in visible_labels
         assert "Shell principal" not in visible_labels
         assert panel.styleSheet() == ""
     finally:

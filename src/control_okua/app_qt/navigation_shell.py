@@ -11,7 +11,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from control_okua.app_qt.design_system import BRAND_ACCENT, BRAND_DEEP, BRAND_EARTH, BRAND_SAND
+from control_okua.app_qt.design_system import (
+    APP_BRAND_LABEL,
+    APP_EDITION_LABEL,
+    BRAND_ACCENT,
+    BRAND_DEEP,
+    BRAND_EARTH,
+    BRAND_SAND,
+)
 
 
 @dataclass(frozen=True)
@@ -26,27 +33,27 @@ def build_primary_shell_items(*, include_remote: bool = True) -> tuple[ShellNavI
         ShellNavItem(
             key="home",
             label="Inicio",
-            subtitle="Entrada operator-first y operación principal.",
+            subtitle="Centro de operación con mapa en tiempo real.",
         ),
         ShellNavItem(
             key="nodes",
             label="Nodos",
-            subtitle="Vista detallada de nodos en vivo.",
+            subtitle="Listado en vivo por caja y estado.",
         ),
         ShellNavItem(
             key="diagnostics",
             label="Diagnóstico",
-            subtitle="Estado técnico, runtime y evidencia.",
+            subtitle="Salud del sistema, preflight y runtime.",
         ),
         ShellNavItem(
             key="firmware",
             label="Firmware",
-            subtitle="Catálogo técnico y OTA local.",
+            subtitle="Catálogo de firmware y despliegue OTA.",
         ),
         ShellNavItem(
             key="technical",
             label="Técnico",
-            subtitle="Control F3 y herramientas avanzadas.",
+            subtitle="Control F3 y utilidades avanzadas.",
         ),
     ]
     if include_remote:
@@ -54,7 +61,7 @@ def build_primary_shell_items(*, include_remote: bool = True) -> tuple[ShellNavI
             ShellNavItem(
                 key="remote",
                 label="Remoto",
-                subtitle="Estado y exposición de la consola remota.",
+                subtitle="Estado del acceso remoto de CKv2.",
             )
         )
     return tuple(items)
@@ -90,13 +97,17 @@ class NavigationPanel(QWidget):
         layout.setSpacing(10)
         self.setObjectName("navigationPanel")
 
-        brand_label = QLabel("CKv2")
+        brand_label = QLabel(APP_BRAND_LABEL)
         brand_label.setObjectName("navigationBrandLabel")
         brand_font = brand_label.font()
         brand_font.setBold(True)
         brand_font.setPointSize(brand_font.pointSize() + 6)
         brand_label.setFont(brand_font)
         layout.addWidget(brand_label)
+
+        edition_label = QLabel(APP_EDITION_LABEL)
+        edition_label.setObjectName("navigationEditionLabel")
+        layout.addWidget(edition_label)
 
         for item in self._items:
             button = QPushButton(item.label, self)

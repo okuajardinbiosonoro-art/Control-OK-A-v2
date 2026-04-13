@@ -54,7 +54,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="Control Okua",
+    name="Control OKUA CKv2",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

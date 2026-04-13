@@ -123,6 +123,7 @@ def test_main_tabs_do_not_include_estado_actual_by_default() -> None:
         assert window.navigation_panel is not None
         assert window.navigation_panel.button_for_key("home").isChecked() is True
         assert window.shell_title_label.text() == "Inicio"
+        assert window.windowTitle() == "Control OKÚA · CKv2"
         assert window.home_map_panel.has_map_asset() is True
         assert window.windowIcon().isNull() is False
         window.show()
@@ -163,7 +164,7 @@ def test_control_plane_panel_is_separated_from_diagnostics() -> None:
         assert window.control_plane_panel.details_tabs.documentMode() is False
         assert window.control_plane_panel.result_view.minimumHeight() >= 320
         technical_buttons = [btn.text() for btn in window.technical_tab.findChildren(QPushButton)]
-        assert "Estado actual" in technical_buttons
+        assert "Estado de sesión" in technical_buttons
         assert "Herramientas avanzadas" in technical_buttons
         assert window.control_plane_panel.node_search_edit.placeholderText() == "Buscar por ID o alias"
     finally:
@@ -174,7 +175,7 @@ def test_firmware_and_remote_surfaces_are_visible_from_primary_shell() -> None:
     _ensure_qapp()
     window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
     try:
-        assert window.open_firmware_manager_button.text() == "Abrir Firmware Manager"
+        assert window.open_firmware_manager_button.text() == "Abrir gestor de firmware"
         assert "catalog" in window._firmware_summary_labels
         assert "status" in window._remote_summary_labels
         window.show_remote_tab()
@@ -642,7 +643,8 @@ def test_help_menu_has_about_action_and_uses_qmessagebox(monkeypatch) -> None:
 
         window.show_about_dialog()
         assert called["title"] == "Acerca de"
-        assert "Control OKÚA v2" in called["text"]
+        assert "Control OKÚA CKv2" in called["text"]
+        assert "Perfil activo:" in called["text"]
     finally:
         window.close()
 
