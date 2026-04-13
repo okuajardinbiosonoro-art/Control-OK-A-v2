@@ -4,6 +4,7 @@ import os
 import sys
 from pathlib import Path
 
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QApplication, QPushButton
 
 
@@ -69,11 +70,16 @@ def test_set_active_profile_syncs_mode() -> None:
 
 
 def test_main_window_primary_actions_no_longer_expose_change_mode() -> None:
+    # "Cambiar perfil" lives as a QAction in the Aplicación menu (not a standalone
+    # QPushButton), so we search QAction objects.  The old "Cambiar modo" button
+    # must not exist in either QAction or QPushButton surfaces.
     _ensure_qapp()
     cfg = {"version": 2, "mode": "serial", "profile": {"active": "serial_local"}}
     window = MainWindow(cfg=cfg, config_path=Path("config.json"), warnings=[])
+    action_texts = {action.text() for action in window.findChildren(QAction)}
     button_texts = {button.text() for button in window.findChildren(QPushButton)}
     window.close()
 
-    assert "Cambiar perfil" in button_texts
+    assert "Cambiar perfil" in action_texts
+    assert "Cambiar modo" not in action_texts
     assert "Cambiar modo" not in button_texts

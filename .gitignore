@@ -219,8 +219,8 @@ remote_api_users.json
 # OKUA dev artifacts (screenshots, evidence)
 artifacts/
 
-# UI experiments / temporary widgets (if not part of core app yet)
-src/control_okua/app_qt/widgets/
+# UI experiments / temporary widgets — ignore individual files, not the whole directory
+# (blanket directory rules prevent negation exceptions from working in git)
 
 # OKUA runtime outputs
 logs/
