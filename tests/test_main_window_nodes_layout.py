@@ -337,6 +337,113 @@ def test_home_map_panel_receives_compact_node_detail_for_selected_box() -> None:
         window.close()
 
 
+def test_home_map_selection_can_open_nodes_view_filtered_by_shared_box_context() -> None:
+    app = _ensure_qapp()
+    window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
+    try:
+        window._session_snapshot = SessionSnapshot(
+            state=SessionState.RUNNING,
+            active_profile="udp_jardin",
+            mode="udp",
+            backend=BackendKind.UDP,
+            message="running",
+            error=None,
+            can_start=False,
+            can_stop=True,
+        )
+        snapshots = [
+            _node_snapshot(node_id=2),
+            _node_snapshot(node_id=11),
+            _node_snapshot(node_id=12),
+            _node_snapshot(node_id=13),
+            _node_snapshot(node_id=14),
+            _node_snapshot(node_id=22),
+        ]
+        window.session_controller.get_node_snapshots = lambda now=None: snapshots  # type: ignore[method-assign]
+
+        window.refresh_ui()
+        window.show()
+        app.processEvents()
+        window.home_map_panel.select_box("caja_3")
+        window.home_map_panel.request_view_nodes_for_selected_box()
+        app.processEvents()
+
+        assert window.tabs.currentWidget() is window.nodes_tab
+        assert window._map_nodes_context is not None
+        assert window._map_nodes_context.box_key == "caja_3"
+        assert window._map_nodes_context.origin == "map"
+        assert window.nodes_context_bar.isHidden() is False
+        assert "Caja 3" in window.nodes_context_label.text()
+        assert window.nodes_clear_context_button.text() == "Ver todos"
+        assert window.nodes_tree.topLevelItemCount() == 1
+        assert window.nodes_tree.topLevelItem(0).text(0) == "Caja 3 (4)"
+        assert window.nodes_tree.topLevelItem(0).childCount() == 4
+    finally:
+        window.close()
+
+
+def test_node_selection_can_sync_back_to_home_map_without_filtering_nodes_view() -> None:
+    app = _ensure_qapp()
+    window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
+    try:
+        window._session_snapshot = SessionSnapshot(
+            state=SessionState.RUNNING,
+            active_profile="udp_jardin",
+            mode="udp",
+            backend=BackendKind.UDP,
+            message="running",
+            error=None,
+            can_start=False,
+            can_stop=True,
+        )
+        snapshots = [
+            _node_snapshot(node_id=2),
+            _node_snapshot(node_id=11),
+            _node_snapshot(node_id=12),
+            _node_snapshot(node_id=13),
+            _node_snapshot(node_id=21),
+        ]
+        window.session_controller.get_node_snapshots = lambda now=None: snapshots  # type: ignore[method-assign]
+
+        window.refresh_ui()
+        window.show()
+        window.show_nodes_tab()
+        app.processEvents()
+
+        target_item = None
+        for index in range(window.nodes_tree.topLevelItemCount()):
+            parent_item = window.nodes_tree.topLevelItem(index)
+            for child_index in range(parent_item.childCount()):
+                child_item = parent_item.child(child_index)
+                if child_item.data(0, window._NODE_TREE_ROLE_NODE_ID) == 12:
+                    target_item = child_item
+                    break
+            if target_item is not None:
+                break
+
+        assert target_item is not None
+        window.nodes_tree.setCurrentItem(target_item)
+        app.processEvents()
+
+        assert window._map_nodes_context is not None
+        assert window._map_nodes_context.box_key == "caja_3"
+        assert window._map_nodes_context.selected_node_id == 12
+        assert window._map_nodes_context.origin == "nodes"
+        assert window.nodes_context_bar.isHidden() is False
+        assert "Nodo activo: EC3 · ID 12." in window.nodes_context_label.text()
+        assert window.nodes_clear_context_button.text() == "Quitar foco"
+        assert window.nodes_tree.topLevelItemCount() >= 5
+
+        window.nodes_show_map_button.click()
+        app.processEvents()
+
+        assert window.tabs.currentWidget() is window.home_tab
+        assert window.home_map_panel.selected_box() is not None
+        assert window.home_map_panel.selected_box().box_key == "caja_3"
+    finally:
+        window.close()
+
+
 def test_home_status_chip_supports_running_text_without_clipping() -> None:
     app = _ensure_qapp()
     window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])

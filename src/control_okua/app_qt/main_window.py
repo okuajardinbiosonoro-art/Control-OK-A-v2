@@ -59,6 +59,8 @@ from control_okua.app_qt.viewmodels import (
     build_diagnostic_udp_rows,
     build_home_map_box_detail_states,
     build_home_map_box_states,
+    build_map_nodes_sync_context_for_box,
+    build_map_nodes_sync_context_for_node,
     build_logging_summary,
     build_midi_summary,
     build_mode_summary,
@@ -88,6 +90,8 @@ from control_okua.app_qt.viewmodels import (
     build_session_status_summary,
     build_node_runtime_tooltip,
     build_transport_summary,
+    filter_snapshots_for_context,
+    MapNodesSyncContext,
 )
 from control_okua.core.preflight import PreflightReport
 from control_okua.core.config.config_schema import load_config, save_config
@@ -105,6 +109,9 @@ from control_okua.services.session_controller import SessionController
 class MainWindow(QMainWindow):
     _NODES_COLUMN_MIN_WIDTHS: tuple[int, ...] = (130, 120, 170, 125, 135, 95, 170)
     _NODES_COLUMN_WEIGHTS: tuple[int, ...] = (0, 0, 3, 2, 2, 1, 3)
+    _NODE_TREE_ROLE_KIND = Qt.ItemDataRole.UserRole + 1
+    _NODE_TREE_ROLE_BOX_KEY = Qt.ItemDataRole.UserRole + 2
+    _NODE_TREE_ROLE_NODE_ID = Qt.ItemDataRole.UserRole + 3
 
     def __init__(
         self,
@@ -150,6 +157,10 @@ class MainWindow(QMainWindow):
         self._shell_nav_items: tuple[ShellNavItem, ...] = build_primary_shell_items(include_remote=True)
         self._page_key_to_widget: dict[str, QWidget] = {}
         self._widget_to_page_key: dict[QWidget, str] = {}
+        self._map_nodes_context: MapNodesSyncContext | None = None
+        self._last_runtime_node_snapshots: tuple[object, ...] = ()
+        self._syncing_map_context = False
+        self._syncing_nodes_context = False
         self.session_controller = session_controller or SessionController(
             self._session_cfg_provider,
             parent=self,
@@ -392,6 +403,8 @@ class MainWindow(QMainWindow):
 
         self.home_map_panel = HomeMapPanel(self)
         self.home_map_panel.setObjectName("homeMapPanel")
+        self.home_map_panel.boxSelectionChanged.connect(self._on_home_map_box_selection_changed)
+        self.home_map_panel.viewNodesRequested.connect(self._on_home_map_view_nodes_requested)
         layout.addWidget(self.home_map_panel, 1)
         tab_layout.addWidget(operation_content, 1)
         return tab
@@ -499,6 +512,31 @@ class MainWindow(QMainWindow):
         title_label.setFont(title_font)
         layout.addWidget(title_label)
 
+        self.nodes_context_bar = QWidget(self)
+        self.nodes_context_bar.setObjectName("nodesContextBar")
+        nodes_context_layout = QHBoxLayout(self.nodes_context_bar)
+        nodes_context_layout.setContentsMargins(0, 0, 0, 0)
+        nodes_context_layout.setSpacing(8)
+
+        self.nodes_context_label = QLabel("Contexto de caja no activo.")
+        self.nodes_context_label.setWordWrap(True)
+        self.nodes_context_label.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        nodes_context_layout.addWidget(self.nodes_context_label, 1)
+
+        self.nodes_clear_context_button = QPushButton("Ver todos")
+        self.nodes_clear_context_button.clicked.connect(self._clear_map_nodes_context)
+        nodes_context_layout.addWidget(self.nodes_clear_context_button, 0)
+
+        self.nodes_show_map_button = QPushButton("Ver caja en Inicio")
+        self.nodes_show_map_button.clicked.connect(self._show_home_map_for_active_context)
+        nodes_context_layout.addWidget(self.nodes_show_map_button, 0)
+
+        self.nodes_context_bar.hide()
+        layout.addWidget(self.nodes_context_bar, 0)
+
         self.nodes_empty_state_group = QGroupBox("Estado general")
         self.nodes_empty_state_group.setSizePolicy(
             QSizePolicy.Policy.Expanding,
@@ -540,7 +578,9 @@ class MainWindow(QMainWindow):
         self.nodes_tree.setAlternatingRowColors(True)
         self.nodes_tree.setRootIsDecorated(True)
         self.nodes_tree.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.nodes_tree.setSelectionMode(QAbstractItemView.NoSelection)
+        self.nodes_tree.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.nodes_tree.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.nodes_tree.currentItemChanged.connect(self._on_nodes_current_item_changed)
         self.nodes_tree.itemExpanded.connect(self._on_node_box_expanded)
         self.nodes_tree.itemCollapsed.connect(self._on_node_box_collapsed)
         self._configure_nodes_tree_columns()
@@ -1651,15 +1691,27 @@ class MainWindow(QMainWindow):
         now_monotonic = time.monotonic()
         raw_snapshots = self.session_controller.get_node_snapshots(now=now_monotonic)
         snapshots = sort_node_snapshots_by_id(raw_snapshots)
+        self._last_runtime_node_snapshots = tuple(snapshots)
+        active_filter_context = self._active_nodes_filter_context()
+        shown_snapshots = (
+            filter_snapshots_for_context(snapshots, active_filter_context)
+            if active_filter_context is not None
+            else list(snapshots)
+        )
         summary = self.session_controller.get_node_registry_summary(now=now_monotonic)
         view_state = build_nodes_tab_view_state(
             self._session_snapshot,
             summary,
-            shown_nodes=len(snapshots),
+            shown_nodes=len(shown_snapshots),
         )
 
-        self._refresh_nodes_tree(snapshots, now_monotonic=now_monotonic)
+        self._refresh_nodes_tree(
+            shown_snapshots,
+            context=self._map_nodes_context,
+            now_monotonic=now_monotonic,
+        )
         self._apply_nodes_view_state(view_state)
+        self._refresh_nodes_context_bar()
 
     def _refresh_home_map_states(self, *, now_monotonic: float) -> None:
         node_snapshots = self.session_controller.get_node_snapshots(now=now_monotonic)
@@ -1669,7 +1721,13 @@ class MainWindow(QMainWindow):
             build_home_map_box_detail_states(node_snapshots, box_states=box_states)
         )
 
-    def _refresh_nodes_tree(self, snapshots: list[object], *, now_monotonic: float) -> None:
+    def _refresh_nodes_tree(
+        self,
+        snapshots: list[object],
+        *,
+        context: MapNodesSyncContext | None = None,
+        now_monotonic: float,
+    ) -> None:
         box_expanded_state = self._capture_node_box_expanded_state()
         self.nodes_tree.clear()
 
@@ -1683,12 +1741,19 @@ class MainWindow(QMainWindow):
             grouped.setdefault(box_index, []).append(snapshot)
             max_box = max(max_box, box_index)
 
-        total_boxes = max(5, max_box)
-        for box_index in range(1, total_boxes + 1):
+        if self._is_nodes_filter_active(context):
+            box_indexes = (context.box_index,)
+        else:
+            total_boxes = max(5, max_box)
+            box_indexes = tuple(range(1, total_boxes + 1))
+
+        for box_index in box_indexes:
             children = grouped.get(box_index, [])
             parent_text = f"Caja {box_index} ({len(children)})"
             parent_item = QTreeWidgetItem([parent_text])
             parent_item.setData(0, Qt.UserRole, box_index)
+            parent_item.setData(0, self._NODE_TREE_ROLE_KIND, "box")
+            parent_item.setData(0, self._NODE_TREE_ROLE_BOX_KEY, f"caja_{box_index}")
             parent_item.setFirstColumnSpanned(True)
             self.nodes_tree.addTopLevelItem(parent_item)
 
@@ -1724,6 +1789,8 @@ class MainWindow(QMainWindow):
                         now_monotonic=now_monotonic,
                     )
                 child_item.setToolTip(1, runtime_tooltip)
+                child_item.setData(0, self._NODE_TREE_ROLE_KIND, "node")
+                child_item.setData(0, self._NODE_TREE_ROLE_BOX_KEY, f"caja_{box_index}")
                 status_key = str(getattr(getattr(snapshot, "status", None), "value", "")).lower()
                 if status_key == "online":
                     child_item.setForeground(1, QBrush(QColor("#2F9E44")))
@@ -1733,15 +1800,122 @@ class MainWindow(QMainWindow):
                     child_item.setForeground(1, QBrush(QColor("#E67700")))
                 else:
                     child_item.setForeground(1, QBrush(QColor("#C92A2A")))
+                try:
+                    child_item.setData(0, self._NODE_TREE_ROLE_NODE_ID, int(node_id))
+                except (TypeError, ValueError):
+                    child_item.setData(0, self._NODE_TREE_ROLE_NODE_ID, None)
                 parent_item.addChild(child_item)
 
             previous_expanded = box_expanded_state.get(box_index)
-            if previous_expanded is None:
+            if context is not None and context.box_index == box_index:
+                parent_item.setExpanded(True)
+            elif previous_expanded is None:
                 parent_item.setExpanded(len(children) > 0)
             else:
                 parent_item.setExpanded(previous_expanded)
 
+        self._restore_nodes_tree_context_selection(context)
         self._adjust_nodes_tree_columns()
+
+    def _active_nodes_filter_context(self) -> MapNodesSyncContext | None:
+        context = self._map_nodes_context
+        if self._is_nodes_filter_active(context):
+            return context
+        return None
+
+    @staticmethod
+    def _is_nodes_filter_active(context: MapNodesSyncContext | None) -> bool:
+        if context is None:
+            return False
+        return context.origin in {"map", "nodes_filter"}
+
+    def _set_map_nodes_context(
+        self,
+        context: MapNodesSyncContext | None,
+        *,
+        refresh_nodes: bool | None = None,
+    ) -> None:
+        self._map_nodes_context = context
+        self._sync_home_map_selection_from_context()
+        self._refresh_nodes_context_bar()
+        should_refresh_nodes = self._is_nodes_view_visible() if refresh_nodes is None else bool(refresh_nodes)
+        if should_refresh_nodes:
+            self._refresh_nodes_views()
+
+    def _sync_home_map_selection_from_context(self) -> None:
+        if not hasattr(self, "home_map_panel"):
+            return
+        target_box_key = self._map_nodes_context.box_key if self._map_nodes_context is not None else None
+        current_box = self.home_map_panel.selected_box()
+        current_box_key = current_box.box_key if current_box is not None else None
+        if current_box_key == target_box_key:
+            return
+        self._syncing_map_context = True
+        try:
+            self.home_map_panel.select_box(target_box_key)
+        finally:
+            self._syncing_map_context = False
+
+    def _refresh_nodes_context_bar(self) -> None:
+        if not hasattr(self, "nodes_context_bar"):
+            return
+        context = self._map_nodes_context
+        if context is None:
+            self.nodes_context_bar.hide()
+            return
+
+        live_count = len(filter_snapshots_for_context(self._last_runtime_node_snapshots, context))
+        if self._is_nodes_filter_active(context):
+            base_text = (
+                f"Mostrando {context.box_label} · {live_count} en vivo / "
+                f"{len(context.expected_node_ids)} esperados."
+            )
+            clear_text = "Ver todos"
+        else:
+            base_text = (
+                f"Foco sincronizado en {context.box_label} · {live_count} en vivo / "
+                f"{len(context.expected_node_ids)} esperados."
+            )
+            clear_text = "Quitar foco"
+
+        if context.selected_node_id is not None:
+            selected_node_label = context.selected_node_label or "Nodo"
+            detail_text = f"Nodo activo: {selected_node_label} · ID {context.selected_node_id}."
+        else:
+            detail_text = "Puedes limpiar el contexto o volver a Inicio."
+
+        self.nodes_context_label.setText(f"{base_text} {detail_text}")
+        self.nodes_clear_context_button.setText(clear_text)
+        self.nodes_context_bar.show()
+
+    def _restore_nodes_tree_context_selection(self, context: MapNodesSyncContext | None) -> None:
+        target_item: QTreeWidgetItem | None = None
+        fallback_item: QTreeWidgetItem | None = None
+        target_box_key = context.box_key if context is not None else None
+        target_node_id = context.selected_node_id if context is not None else None
+
+        for index in range(self.nodes_tree.topLevelItemCount()):
+            parent_item = self.nodes_tree.topLevelItem(index)
+            box_key = parent_item.data(0, self._NODE_TREE_ROLE_BOX_KEY)
+            if isinstance(box_key, str) and box_key == target_box_key:
+                fallback_item = parent_item
+            for child_index in range(parent_item.childCount()):
+                child_item = parent_item.child(child_index)
+                raw_node_id = child_item.data(0, self._NODE_TREE_ROLE_NODE_ID)
+                if isinstance(raw_node_id, int) and raw_node_id == target_node_id:
+                    target_item = child_item
+                    break
+            if target_item is not None:
+                break
+
+        selected_item = target_item or fallback_item
+        self._syncing_nodes_context = True
+        try:
+            self.nodes_tree.setCurrentItem(selected_item)
+            if selected_item is not None:
+                self.nodes_tree.scrollToItem(selected_item)
+        finally:
+            self._syncing_nodes_context = False
 
     def _capture_node_box_expanded_state(self) -> dict[int, bool]:
         state: dict[int, bool] = self._node_box_expanded.copy()
@@ -1762,6 +1936,76 @@ class MainWindow(QMainWindow):
         raw_box_index = item.data(0, Qt.UserRole)
         if isinstance(raw_box_index, int):
             self._node_box_expanded[raw_box_index] = False
+
+    def _on_home_map_box_selection_changed(self, selected_box: object) -> None:
+        if self._syncing_map_context:
+            return
+        box_key = getattr(selected_box, "box_key", None)
+        if not isinstance(box_key, str):
+            self._set_map_nodes_context(None, refresh_nodes=False)
+            return
+        selected_node_id = None
+        if self._map_nodes_context is not None and self._map_nodes_context.box_key == box_key:
+            selected_node_id = self._map_nodes_context.selected_node_id
+        context = build_map_nodes_sync_context_for_box(
+            box_key,
+            selected_node_id=selected_node_id,
+            origin="map",
+        )
+        self._set_map_nodes_context(context, refresh_nodes=False)
+
+    def _on_home_map_view_nodes_requested(self, box_key: str) -> None:
+        selected_node_id = None
+        if self._map_nodes_context is not None and self._map_nodes_context.box_key == str(box_key).strip().lower():
+            selected_node_id = self._map_nodes_context.selected_node_id
+        context = build_map_nodes_sync_context_for_box(
+            box_key,
+            selected_node_id=selected_node_id,
+            origin="map",
+        )
+        self._set_map_nodes_context(context, refresh_nodes=False)
+        self.show_nodes_tab()
+
+    def _on_nodes_current_item_changed(
+        self,
+        current: QTreeWidgetItem | None,
+        _previous: QTreeWidgetItem | None,
+    ) -> None:
+        if self._syncing_nodes_context or current is None:
+            return
+        raw_node_id = current.data(0, self._NODE_TREE_ROLE_NODE_ID)
+        if not isinstance(raw_node_id, int):
+            return
+
+        if self._map_nodes_context is not None and self._is_nodes_filter_active(self._map_nodes_context):
+            next_context = build_map_nodes_sync_context_for_box(
+                self._map_nodes_context.box_key,
+                selected_node_id=raw_node_id,
+                origin=self._map_nodes_context.origin,
+            )
+        else:
+            next_context = build_map_nodes_sync_context_for_node(
+                raw_node_id,
+                origin="nodes",
+            )
+        if next_context is None:
+            return
+
+        current_filter = self._active_nodes_filter_context()
+        next_filter = next_context if self._is_nodes_filter_active(next_context) else None
+        refresh_nodes = False
+        if (current_filter is None) != (next_filter is None):
+            refresh_nodes = True
+        elif current_filter is not None and next_filter is not None and current_filter.box_key != next_filter.box_key:
+            refresh_nodes = True
+        self._set_map_nodes_context(next_context, refresh_nodes=refresh_nodes)
+
+    def _clear_map_nodes_context(self) -> None:
+        self._set_map_nodes_context(None)
+
+    def _show_home_map_for_active_context(self) -> None:
+        self._sync_home_map_selection_from_context()
+        self.show_home_tab()
 
     @staticmethod
     def _set_compact_wordwrap_label(label: QLabel) -> None:

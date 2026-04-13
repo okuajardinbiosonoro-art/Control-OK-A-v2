@@ -148,3 +148,17 @@ def test_home_map_panel_exposes_selected_box_detail() -> None:
         assert detail.nodes[-1].is_observed is False
     finally:
         panel.close()
+
+
+def test_home_map_panel_emits_view_nodes_request_for_selected_box() -> None:
+    _ensure_qapp()
+    panel = HomeMapPanel()
+    requested: list[str] = []
+    try:
+        panel.viewNodesRequested.connect(requested.append)
+        panel.select_box("caja_4")
+        panel.request_view_nodes_for_selected_box()
+
+        assert requested == ["caja_4"]
+    finally:
+        panel.close()

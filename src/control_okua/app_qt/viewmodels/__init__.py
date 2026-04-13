@@ -95,6 +95,12 @@ from control_okua.app_qt.viewmodels.home_map_detail_vm import (
     build_home_map_box_detail_state,
     build_home_map_box_detail_states,
 )
+from control_okua.app_qt.viewmodels.map_nodes_sync_vm import (
+    MapNodesSyncContext,
+    build_map_nodes_sync_context_for_box,
+    build_map_nodes_sync_context_for_node,
+    filter_snapshots_for_context,
+)
 from control_okua.app_qt.viewmodels.ota_deploy_vm import (
     OtaDeployArtifactOption,
     OtaDeployNodeOption,
@@ -191,6 +197,10 @@ __all__ = [
     "HomeMapNodeDetailItem",
     "build_home_map_box_detail_state",
     "build_home_map_box_detail_states",
+    "MapNodesSyncContext",
+    "build_map_nodes_sync_context_for_box",
+    "build_map_nodes_sync_context_for_node",
+    "filter_snapshots_for_context",
     "ALL_FIRMWARE_FILTER",
     "FirmwareArtifactDetail",
     "FirmwareCatalogRow",

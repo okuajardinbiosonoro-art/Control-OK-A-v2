@@ -34,6 +34,7 @@ def resolve_home_map_asset_path() -> Path:
 
 class HomeMapPanel(QWidget):
     boxSelectionChanged = Signal(object)
+    viewNodesRequested = Signal(str)
     _MAP_FRAME_INSET = 3.0
     _MAP_CONTENT_GAP = 4.0
     _STATUS_STYLE = {
@@ -75,6 +76,8 @@ class HomeMapPanel(QWidget):
         self._box_details_by_key = {detail.box_key: detail for detail in self._box_details}
         self._selected_box_key: str | None = None
         self._hovered_box_key: str | None = None
+        self._context_action_rect: QRectF | None = None
+        self._context_action_hovered = False
         self.setMinimumHeight(480)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setMouseTracking(True)
@@ -118,6 +121,11 @@ class HomeMapPanel(QWidget):
         self._selected_box_key = canonical_key
         self.boxSelectionChanged.emit(self.selected_box())
         self.update()
+
+    def request_view_nodes_for_selected_box(self) -> None:
+        if self._selected_box_key is None:
+            return
+        self.viewNodesRequested.emit(self._selected_box_key)
 
     def set_box_states(self, box_states: tuple[HomeMapBoxState, ...] | list[HomeMapBoxState] | None) -> None:
         resolved_states = tuple(box_states or ())
@@ -201,6 +209,10 @@ class HomeMapPanel(QWidget):
 
     def mousePressEvent(self, event) -> None:  # type: ignore[override]
         if event.button() == Qt.MouseButton.LeftButton:
+            if self._context_action_rect is not None and self._context_action_rect.contains(event.position()):
+                self.request_view_nodes_for_selected_box()
+                event.accept()
+                return
             hovered_spec = self._spec_at_position(event.position())
             if hovered_spec is not None:
                 self.select_box(hovered_spec.box_key)
@@ -209,13 +221,17 @@ class HomeMapPanel(QWidget):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:  # type: ignore[override]
+        hovered_action = bool(
+            self._context_action_rect is not None and self._context_action_rect.contains(event.position())
+        )
         hovered_spec = self._spec_at_position(event.position())
         hovered_key = hovered_spec.box_key if hovered_spec is not None else None
-        if hovered_key != self._hovered_box_key:
+        if hovered_key != self._hovered_box_key or hovered_action != self._context_action_hovered:
             self._hovered_box_key = hovered_key
+            self._context_action_hovered = hovered_action
             self.setCursor(
                 Qt.CursorShape.PointingHandCursor
-                if hovered_key is not None
+                if hovered_key is not None or hovered_action
                 else Qt.CursorShape.ArrowCursor
             )
             self.update()
@@ -223,6 +239,7 @@ class HomeMapPanel(QWidget):
 
     def leaveEvent(self, event) -> None:  # type: ignore[override]
         self._hovered_box_key = None
+        self._context_action_hovered = False
         self.setCursor(Qt.CursorShape.ArrowCursor)
         self.update()
         super().leaveEvent(event)
@@ -387,6 +404,7 @@ class HomeMapPanel(QWidget):
             painter.setFont(base_font)
 
     def _draw_context_card(self, painter: QPainter, map_rect: QRectF) -> None:
+        self._context_action_rect = None
         selected_box = self.selected_box()
         selected_state = self.selected_box_state()
         selected_detail = self.selected_box_detail()
@@ -512,3 +530,26 @@ class HomeMapPanel(QWidget):
                 Qt.AlignmentFlag.AlignCenter,
                 node.badge_text,
             )
+
+        action_rect = QRectF(card_rect.right() - 112.0, card_rect.bottom() - 34.0, 94.0, 20.0)
+        self._context_action_rect = action_rect
+        action_fill = QColor("#F5EDDD" if not self._context_action_hovered else "#EDE0C8")
+        action_border = QColor("#D8C3A0" if not self._context_action_hovered else "#BB9C6C")
+        painter.setPen(QPen(action_border, 1.0))
+        painter.setBrush(action_fill)
+        painter.drawRoundedRect(action_rect, 10.0, 10.0)
+        action_font = painter.font()
+        action_font.setBold(True)
+        action_font.setPointSize(max(8, action_font.pointSize() - 1))
+        painter.setFont(action_font)
+        painter.setPen(QColor(BRAND_DEEP))
+        painter.drawText(
+            action_rect.adjusted(0.0, 0.0, -8.0, 0.0),
+            Qt.AlignmentFlag.AlignCenter,
+            "Ver nodos",
+        )
+        painter.drawText(
+            QRectF(action_rect.right() - 16.0, action_rect.top(), 10.0, action_rect.height()),
+            Qt.AlignmentFlag.AlignCenter,
+            "›",
+        )
