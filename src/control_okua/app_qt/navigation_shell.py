@@ -11,10 +11,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-BRAND_ACCENT = "#2FAC66"
-BRAND_DEEP = "#0B3B27"
-BRAND_EARTH = "#432918"
-BRAND_SAND = "#CBBBA0"
+from control_okua.app_qt.design_system import BRAND_ACCENT, BRAND_DEEP, BRAND_EARTH, BRAND_SAND
 
 
 @dataclass(frozen=True)

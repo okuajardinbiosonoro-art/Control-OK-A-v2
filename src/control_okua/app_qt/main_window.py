@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from PySide6.QtCore import Qt, QTimer, QUrl
-from PySide6.QtGui import QAction, QBrush, QColor, QDesktopServices, QIcon
+from PySide6.QtGui import QAction, QBrush, QDesktopServices, QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -45,6 +45,7 @@ from control_okua.app_qt.navigation_shell import (
 )
 from control_okua.app_qt.profile_selector_dialog import ProfileSelectorDialog
 from control_okua.app_qt.resources import app_icon_path
+from control_okua.app_qt.design_system import node_status_table_color
 from control_okua.app_qt.widgets.config_view_dialog import ConfigViewDialog
 from control_okua.app_qt.widgets.home_map_panel import HomeMapPanel
 from control_okua.app_qt.widgets.toast_manager import ToastManager
@@ -378,15 +379,18 @@ class MainWindow(QMainWindow):
         quick_actions_row.setSpacing(10)
         self.start_session_button = QPushButton("Iniciar sesión")
         self.start_session_button.setObjectName("primarySessionButton")
+        self.start_session_button.setProperty("role", "primary")
         self.start_session_button.clicked.connect(self.start_session)
         quick_actions_row.addWidget(self.start_session_button)
         self.stop_session_button = QPushButton("Detener sesión")
-        self.stop_session_button.setObjectName("primarySessionButton")
+        self.stop_session_button.setObjectName("secondarySessionButton")
+        self.stop_session_button.setProperty("role", "secondary")
         self.stop_session_button.clicked.connect(self.stop_session)
         quick_actions_row.addWidget(self.stop_session_button)
 
         self.home_more_button = QToolButton(self)
         self.home_more_button.setObjectName("secondaryMenuButton")
+        self.home_more_button.setProperty("role", "contextual")
         self.home_more_button.setText("Más")
         self.home_more_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self.home_more_menu = QMenu(self.home_more_button)
@@ -394,9 +398,11 @@ class MainWindow(QMainWindow):
         self.home_more_menu.addAction(self.view_state_action)
         self.home_more_menu.addSeparator()
         self.change_profile_button = QPushButton("Cambiar perfil")
+        self.change_profile_button.setProperty("role", "ghost")
         self.change_profile_button.clicked.connect(self.change_profile)
         self.change_profile_button.hide()
         self.reset_session_error_button = QPushButton("Reiniciar error")
+        self.reset_session_error_button.setProperty("role", "danger")
         self.reset_session_error_button.clicked.connect(self.reset_session_error)
         self.reset_session_error_button.hide()
         self.home_reset_error_action = self.home_more_menu.addAction("Reiniciar error")
@@ -422,6 +428,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(12)
 
         title_label = QLabel("Detalles de sesión")
+        title_label.setObjectName("sectionTitleLabel")
         title_font = title_label.font()
         title_font.setPointSize(title_font.pointSize() + 2)
         title_font.setBold(True)
@@ -431,6 +438,7 @@ class MainWindow(QMainWindow):
         hint_label = QLabel(
             "Resumen actual con scroll interno y secciones que se reordenan automáticamente según el ancho disponible."
         )
+        hint_label.setObjectName("sectionHintLabel")
         hint_label.setWordWrap(True)
         layout.addWidget(hint_label)
 
@@ -510,6 +518,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         title_label = QLabel("Nodos en vivo")
+        title_label.setObjectName("sectionTitleLabel")
         title_font = title_label.font()
         title_font.setPointSize(title_font.pointSize() + 2)
         title_font.setBold(True)
@@ -531,10 +540,12 @@ class MainWindow(QMainWindow):
         nodes_context_layout.addWidget(self.nodes_context_label, 1)
 
         self.nodes_clear_context_button = QPushButton("Ver todos")
+        self.nodes_clear_context_button.setProperty("role", "ghost")
         self.nodes_clear_context_button.clicked.connect(self._clear_map_nodes_context)
         nodes_context_layout.addWidget(self.nodes_clear_context_button, 0)
 
         self.nodes_show_map_button = QPushButton("Ver caja en Inicio")
+        self.nodes_show_map_button.setProperty("role", "contextual")
         self.nodes_show_map_button.clicked.connect(self._show_home_map_for_active_context)
         nodes_context_layout.addWidget(self.nodes_show_map_button, 0)
 
@@ -542,6 +553,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.nodes_context_bar, 0)
 
         self.nodes_empty_state_group = QGroupBox("Estado general")
+        self.nodes_empty_state_group.setProperty("sectionRole", "summary")
         self.nodes_empty_state_group.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Maximum,
@@ -599,6 +611,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         title_label = QLabel("Diagnóstico")
+        title_label.setObjectName("sectionTitleLabel")
         title_font = title_label.font()
         title_font.setPointSize(title_font.pointSize() + 2)
         title_font.setBold(True)
@@ -608,10 +621,12 @@ class MainWindow(QMainWindow):
         hint_label = QLabel(
             "Superficie técnica para readiness, runtime y evidencia del sistema."
         )
+        hint_label.setObjectName("sectionHintLabel")
         hint_label.setWordWrap(True)
         layout.addWidget(hint_label)
 
         summary_group = QGroupBox("Resumen de sistema")
+        summary_group.setProperty("sectionRole", "summary")
         summary_layout = QFormLayout(summary_group)
 
         fields = [
@@ -631,11 +646,13 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(summary_group)
         self.preflight_toggle_button = QPushButton("Ver chequeos previos")
+        self.preflight_toggle_button.setProperty("role", "contextual")
         self.preflight_toggle_button.setCheckable(True)
         self.preflight_toggle_button.toggled.connect(self._on_preflight_toggle_button)
         layout.addWidget(self.preflight_toggle_button)
 
         self.preflight_group = QGroupBox("Chequeos previos")
+        self.preflight_group.setProperty("sectionRole", "technical")
         preflight_layout = QVBoxLayout(self.preflight_group)
 
         preflight_summary_form = QFormLayout()
@@ -665,6 +682,7 @@ class MainWindow(QMainWindow):
         self.preflight_group.setVisible(False)
 
         self.serial_runtime_group = QGroupBox("Detalle serial")
+        self.serial_runtime_group.setProperty("sectionRole", "technical")
         serial_runtime_layout = QVBoxLayout(self.serial_runtime_group)
         self.serial_runtime_table = QTableWidget(0, 2, self)
         self.serial_runtime_table.setHorizontalHeaderLabels(["Campo", "Valor"])
@@ -676,6 +694,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.serial_runtime_group)
 
         self.udp_runtime_group = QGroupBox("Detalle UDP")
+        self.udp_runtime_group.setProperty("sectionRole", "technical")
         udp_runtime_layout = QVBoxLayout(self.udp_runtime_group)
         self.udp_runtime_table = QTableWidget(0, 2, self)
         self.udp_runtime_table.setHorizontalHeaderLabels(["Campo", "Valor"])
@@ -687,6 +706,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.udp_runtime_group)
 
         warnings_group = QGroupBox("Alertas de configuración")
+        warnings_group.setProperty("sectionRole", "technical")
         warnings_layout = QVBoxLayout(warnings_group)
         self.warnings_view = QTextEdit(self)
         self.warnings_view.setReadOnly(True)
@@ -702,6 +722,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         title_label = QLabel("Técnico")
+        title_label.setObjectName("sectionTitleLabel")
         title_font = title_label.font()
         title_font.setPointSize(title_font.pointSize() + 2)
         title_font.setBold(True)
@@ -709,6 +730,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(title_label)
 
         hint_label = QLabel("Lectura, mantenimiento y acciones delicadas del sistema.")
+        hint_label.setObjectName("sectionHintLabel")
         hint_label.setWordWrap(True)
         layout.addWidget(hint_label)
 
@@ -721,21 +743,25 @@ class MainWindow(QMainWindow):
         overview_layout.setSpacing(12)
 
         reading_group = QGroupBox("Lectura técnica")
+        reading_group.setProperty("sectionRole", "summary")
         reading_layout = QVBoxLayout(reading_group)
         reading_hint = QLabel("Revise el estado operativo completo sin salir de la shell principal.")
         reading_hint.setWordWrap(True)
         reading_layout.addWidget(reading_hint)
         self.technical_state_button = QPushButton("Estado actual")
+        self.technical_state_button.setProperty("role", "secondary")
         self.technical_state_button.clicked.connect(self.show_session_details_dialog)
         reading_layout.addWidget(self.technical_state_button, 0, Qt.AlignLeft)
         overview_layout.addWidget(reading_group)
 
         tools_group = QGroupBox("Mantenimiento")
+        tools_group.setProperty("sectionRole", "summary")
         tools_layout = QVBoxLayout(tools_group)
         tools_hint = QLabel("Abra herramientas auxiliares cuando necesite revisar configuración, remoto o firmware.")
         tools_hint.setWordWrap(True)
         tools_layout.addWidget(tools_hint)
         self.technical_tools_button = QPushButton("Herramientas avanzadas")
+        self.technical_tools_button.setProperty("role", "contextual")
         self.technical_tools_button.clicked.connect(self.open_advanced_tools)
         tools_layout.addWidget(self.technical_tools_button, 0, Qt.AlignLeft)
         overview_layout.addWidget(tools_group)
@@ -766,6 +792,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         title_label = QLabel("Firmware / OTA")
+        title_label.setObjectName("sectionTitleLabel")
         title_font = title_label.font()
         title_font.setPointSize(title_font.pointSize() + 2)
         title_font.setBold(True)
@@ -775,21 +802,26 @@ class MainWindow(QMainWindow):
         hint_label = QLabel(
             "Superficie persistente para catálogo técnico, bins y despliegue OTA sin esconder el acceso principal."
         )
+        hint_label.setObjectName("sectionHintLabel")
         hint_label.setWordWrap(True)
         layout.addWidget(hint_label)
 
         actions_group = QGroupBox("Acción principal")
+        actions_group.setProperty("sectionRole", "actions")
         actions_layout = QHBoxLayout(actions_group)
         self.open_firmware_manager_button = QPushButton("Abrir Firmware Manager")
+        self.open_firmware_manager_button.setProperty("role", "primary")
         self.open_firmware_manager_button.clicked.connect(self.open_firmware_manager)
         actions_layout.addWidget(self.open_firmware_manager_button)
         self.firmware_open_technical_button = QPushButton("Ir a Técnico")
+        self.firmware_open_technical_button.setProperty("role", "secondary")
         self.firmware_open_technical_button.clicked.connect(self.show_control_plane_tab)
         actions_layout.addWidget(self.firmware_open_technical_button)
         actions_layout.addStretch(1)
         layout.addWidget(actions_group)
 
         summary_group = QGroupBox("Estado del catálogo")
+        summary_group.setProperty("sectionRole", "summary")
         summary_layout = QFormLayout(summary_group)
         for key, field_name in (
             ("catalog", "Catálogo"),
@@ -812,6 +844,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         title_label = QLabel("Remoto")
+        title_label.setObjectName("sectionTitleLabel")
         title_font = title_label.font()
         title_font.setPointSize(title_font.pointSize() + 2)
         title_font.setBold(True)
@@ -821,10 +854,12 @@ class MainWindow(QMainWindow):
         hint_label = QLabel(
             "Estado y exposición del servicio remoto. Esta superficie evita depender del diálogo avanzado para revisar lo esencial."
         )
+        hint_label.setObjectName("sectionHintLabel")
         hint_label.setWordWrap(True)
         layout.addWidget(hint_label)
 
         summary_group = QGroupBox("Estado del servicio remoto")
+        summary_group.setProperty("sectionRole", "summary")
         summary_layout = QFormLayout(summary_group)
         for key, field_name in (
             ("status", "Estado"),
@@ -842,6 +877,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(summary_group)
 
         controls_group = QGroupBox("Control rápido")
+        controls_group.setProperty("sectionRole", "actions")
         controls_layout = QFormLayout(controls_group)
         self.remote_enabled_checkbox = QCheckBox("Servicio remoto habilitado")
         controls_layout.addRow("Habilitado", self.remote_enabled_checkbox)
@@ -850,9 +886,11 @@ class MainWindow(QMainWindow):
         self.remote_exposure_mode_combo.addItem("Solo Tailscale", "tailscale_only")
         controls_layout.addRow("Modo rápido", self.remote_exposure_mode_combo)
         self.remote_apply_button = QPushButton("Aplicar servicio remoto")
+        self.remote_apply_button.setProperty("role", "primary")
         self.remote_apply_button.clicked.connect(self._apply_remote_settings_from_shell)
         controls_layout.addRow("", self.remote_apply_button)
         self.remote_open_advanced_button = QPushButton("Herramientas avanzadas")
+        self.remote_open_advanced_button.setProperty("role", "contextual")
         self.remote_open_advanced_button.clicked.connect(self.open_advanced_tools)
         controls_layout.addRow("", self.remote_open_advanced_button)
         layout.addWidget(controls_group)
@@ -1812,15 +1850,7 @@ class MainWindow(QMainWindow):
                 child_item.setToolTip(1, runtime_tooltip)
                 child_item.setData(0, self._NODE_TREE_ROLE_KIND, "node")
                 child_item.setData(0, self._NODE_TREE_ROLE_BOX_KEY, f"caja_{box_index}")
-                status_key = str(getattr(getattr(snapshot, "status", None), "value", "")).lower()
-                if status_key == "online":
-                    child_item.setForeground(1, QBrush(QColor("#2F9E44")))
-                elif status_key == "calibrating":
-                    child_item.setForeground(1, QBrush(QColor("#1C7ED6")))
-                elif status_key == "degraded":
-                    child_item.setForeground(1, QBrush(QColor("#E67700")))
-                else:
-                    child_item.setForeground(1, QBrush(QColor("#C92A2A")))
+                child_item.setForeground(1, QBrush(node_status_table_color(getattr(snapshot, "status", None))))
                 try:
                     child_item.setData(0, self._NODE_TREE_ROLE_NODE_ID, int(node_id))
                 except (TypeError, ValueError):

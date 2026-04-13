@@ -65,7 +65,6 @@ class FirmwareManagerDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("firmwareManagerDialog")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setStyleSheet("QDialog#firmwareManagerDialog { background-color: #F7F4EC; }")
         self.setWindowTitle("Firmware Manager")
         self.resize(1240, 760)
 
@@ -93,45 +92,54 @@ class FirmwareManagerDialog(QDialog):
             "Desde aquí puede revisar artifacts, importarlos y abrir el deploy OTA técnico "
             "para nodos seleccionados manualmente."
         )
+        intro.setObjectName("sectionHintLabel")
         intro.setWordWrap(True)
         root_layout.addWidget(intro)
 
         actions_layout = QHBoxLayout()
         self.import_button = QPushButton("Importar firmware…", self)
+        self.import_button.setProperty("role", "primary")
         self.import_button.clicked.connect(self._on_import_clicked)
         actions_layout.addWidget(self.import_button)
 
         self.mark_current_button = QPushButton("Marcar current", self)
+        self.mark_current_button.setProperty("role", "secondary")
         self.mark_current_button.clicked.connect(self._on_mark_current_clicked)
         self.mark_current_button.setEnabled(False)
         actions_layout.addWidget(self.mark_current_button)
 
         self.delete_button = QPushButton("Borrar firmware", self)
+        self.delete_button.setProperty("role", "danger")
         self.delete_button.clicked.connect(self._on_delete_clicked)
         self.delete_button.setEnabled(False)
         actions_layout.addWidget(self.delete_button)
 
         self.refresh_button = QPushButton("Recargar catálogo", self)
+        self.refresh_button.setProperty("role", "contextual")
         self.refresh_button.clicked.connect(self.refresh_catalog)
         actions_layout.addWidget(self.refresh_button)
 
         self.ota_deploy_button = QPushButton("OTA Deploy…", self)
+        self.ota_deploy_button.setProperty("role", "secondary")
         self.ota_deploy_button.clicked.connect(self._on_ota_deploy_clicked)
         self.ota_deploy_button.setEnabled(self._session_controller is not None)
         actions_layout.addWidget(self.ota_deploy_button)
 
         self.ota_campaign_button = QPushButton("OTA Campaign…", self)
+        self.ota_campaign_button.setProperty("role", "secondary")
         self.ota_campaign_button.clicked.connect(self._on_ota_campaign_clicked)
         self.ota_campaign_button.setEnabled(self._session_controller is not None)
         actions_layout.addWidget(self.ota_campaign_button)
 
         self.open_store_button = QPushButton("Abrir carpeta firmware", self)
+        self.open_store_button.setProperty("role", "ghost")
         self.open_store_button.clicked.connect(self._open_managed_store_folder)
         actions_layout.addWidget(self.open_store_button)
         actions_layout.addStretch(1)
         root_layout.addLayout(actions_layout)
 
         filters_group = QGroupBox("Filtros", self)
+        filters_group.setProperty("sectionRole", "actions")
         filters_layout = QHBoxLayout(filters_group)
 
         self.search_edit = QLineEdit(self)
@@ -214,6 +222,7 @@ class FirmwareManagerDialog(QDialog):
         layout = QVBoxLayout(pane)
 
         current_group = QGroupBox("Resumen de selección", self)
+        current_group.setProperty("sectionRole", "summary")
         current_layout = QVBoxLayout(current_group)
         self.current_summary_label = QLabel("Sin selección.", self)
         self.current_summary_label.setWordWrap(True)
@@ -226,6 +235,7 @@ class FirmwareManagerDialog(QDialog):
         detail_layout = QVBoxLayout(detail_content)
 
         scalar_group = QGroupBox("Detalle", detail_content)
+        scalar_group.setProperty("sectionRole", "summary")
         scalar_layout = QFormLayout(scalar_group)
         for key in (
             "Artifact ID",
@@ -253,6 +263,7 @@ class FirmwareManagerDialog(QDialog):
         detail_layout.addWidget(scalar_group)
 
         changelog_group = QGroupBox("Changelog", detail_content)
+        changelog_group.setProperty("sectionRole", "technical")
         changelog_layout = QVBoxLayout(changelog_group)
         self.changelog_edit = QTextEdit(changelog_group)
         self.changelog_edit.setReadOnly(True)
@@ -261,6 +272,7 @@ class FirmwareManagerDialog(QDialog):
         detail_layout.addWidget(changelog_group)
 
         notes_group = QGroupBox("Notas", detail_content)
+        notes_group.setProperty("sectionRole", "technical")
         notes_layout = QVBoxLayout(notes_group)
         self.notes_edit = QTextEdit(notes_group)
         self.notes_edit.setReadOnly(True)

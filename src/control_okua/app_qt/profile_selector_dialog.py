@@ -33,7 +33,6 @@ class ProfileSelectorDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("profileSelectorDialog")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setStyleSheet("QDialog#profileSelectorDialog { background-color: #F7F4EC; }")
         self.setWindowTitle("Seleccionar perfil operativo")
         self.setModal(True)
         self.resize(620, 460)
@@ -64,6 +63,7 @@ class ProfileSelectorDialog(QDialog):
         first_radio: QRadioButton | None = None
         for definition in list_available_profiles():
             group_box = QGroupBox(definition.short_name, self)
+            group_box.setProperty("sectionRole", "summary")
             group_layout = QVBoxLayout(group_box)
 
             radio = QRadioButton("Usar este perfil", group_box)
@@ -90,6 +90,8 @@ class ProfileSelectorDialog(QDialog):
             "Continuar", QDialogButtonBox.AcceptRole
         )
         self.cancel_button = buttons.addButton("Cancelar", QDialogButtonBox.RejectRole)
+        self.confirm_button.setProperty("role", "primary")
+        self.cancel_button.setProperty("role", "secondary")
         self.confirm_button.clicked.connect(self.accept)
         self.cancel_button.clicked.connect(self.reject)
         layout.addWidget(buttons)

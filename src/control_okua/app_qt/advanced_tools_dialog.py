@@ -36,7 +36,6 @@ class AdvancedToolsDialog(QDialog):
         super().__init__(parent)
         self.setObjectName("advancedToolsDialog")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setStyleSheet("QDialog#advancedToolsDialog { background-color: #F7F4EC; }")
         self.setWindowTitle("Herramientas avanzadas")
         self.resize(980, 680)
 
@@ -57,10 +56,12 @@ class AdvancedToolsDialog(QDialog):
         intro_label = QLabel(
             "Use estas herramientas para diagnóstico técnico y revisión de configuración."
         )
+        intro_label.setObjectName("sectionHintLabel")
         intro_label.setWordWrap(True)
         root_layout.addWidget(intro_label)
 
         config_group = QGroupBox("Configuración")
+        config_group.setProperty("sectionRole", "summary")
         config_layout = QVBoxLayout(config_group)
 
         config_form = QFormLayout()
@@ -72,14 +73,17 @@ class AdvancedToolsDialog(QDialog):
         actions_layout = QHBoxLayout()
 
         self.open_folder_button = QPushButton("Abrir carpeta")
+        self.open_folder_button.setProperty("role", "contextual")
         self.open_folder_button.clicked.connect(self._on_open_folder)
         actions_layout.addWidget(self.open_folder_button)
 
         self.view_config_button = QPushButton("Ver config")
+        self.view_config_button.setProperty("role", "secondary")
         self.view_config_button.clicked.connect(self._on_view_config)
         actions_layout.addWidget(self.view_config_button)
 
         self.reload_button = QPushButton("Recargar config")
+        self.reload_button.setProperty("role", "secondary")
         self.reload_button.clicked.connect(self._handle_reload_clicked)
         actions_layout.addWidget(self.reload_button)
         actions_layout.addStretch(1)
@@ -93,6 +97,7 @@ class AdvancedToolsDialog(QDialog):
         root_layout.addWidget(config_group)
 
         remote_group = QGroupBox("Servicio remoto")
+        remote_group.setProperty("sectionRole", "actions")
         remote_layout = QVBoxLayout(remote_group)
         remote_form = QFormLayout()
         self.remote_status_label = QLabel("-")
@@ -125,6 +130,7 @@ class AdvancedToolsDialog(QDialog):
             "Cambie aquí el modo operativo del gateway remoto sin editar config.json. "
             "El servicio se guarda y se intenta reaplicar de inmediato."
         )
+        remote_apply_hint.setObjectName("sectionHintLabel")
         remote_apply_hint.setWordWrap(True)
         remote_layout.addWidget(remote_apply_hint)
 
@@ -139,6 +145,7 @@ class AdvancedToolsDialog(QDialog):
 
         remote_actions_layout = QHBoxLayout()
         self.remote_apply_button = QPushButton("Aplicar servicio remoto")
+        self.remote_apply_button.setProperty("role", "primary")
         self.remote_apply_button.clicked.connect(self._handle_apply_remote_settings_clicked)
         remote_actions_layout.addWidget(self.remote_apply_button)
         remote_actions_layout.addStretch(1)
@@ -146,6 +153,7 @@ class AdvancedToolsDialog(QDialog):
         root_layout.addWidget(remote_group)
 
         firmware_group = QGroupBox("Firmware")
+        firmware_group.setProperty("sectionRole", "summary")
         firmware_layout = QVBoxLayout(firmware_group)
         firmware_hint = QLabel(
             "Abra el Firmware Manager para revisar el catálogo técnico, "
@@ -156,6 +164,7 @@ class AdvancedToolsDialog(QDialog):
 
         firmware_actions_layout = QHBoxLayout()
         self.open_firmware_manager_button = QPushButton("Firmware Manager")
+        self.open_firmware_manager_button.setProperty("role", "contextual")
         self.open_firmware_manager_button.clicked.connect(
             self._handle_open_firmware_manager_clicked
         )
@@ -166,6 +175,7 @@ class AdvancedToolsDialog(QDialog):
         root_layout.addWidget(firmware_group)
 
         midi_group = QGroupBox("Salidas MIDI")
+        midi_group.setProperty("sectionRole", "summary")
         midi_layout = QVBoxLayout(midi_group)
         self.midi_outputs_widget = MidiOutputsWidget(self)
         midi_layout.addWidget(self.midi_outputs_widget)

@@ -220,6 +220,9 @@ def test_home_surface_keeps_primary_action_and_visual_map_as_main_elements() -> 
         assert window.home_map_panel.width() >= 900
         assert len(window.home_map_panel.box_specs()) == 5
         assert window.home_more_button.text() == "Más"
+        assert window.start_session_button.property("role") == "primary"
+        assert window.stop_session_button.property("role") == "secondary"
+        assert window.home_more_button.property("role") == "contextual"
         assert window.change_profile_button.isHidden() is True
         assert window.reset_session_error_button.isHidden() is True
         assert window.shell_subtitle_label.isHidden() is True

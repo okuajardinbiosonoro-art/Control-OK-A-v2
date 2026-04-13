@@ -135,20 +135,23 @@ class ControlPlanePanel(QWidget):
         root.setSpacing(10)
 
         self.group = QGroupBox("Control por nodo (F3)", self)
+        self.group.setProperty("sectionRole", "actions")
         group_layout = QVBoxLayout(self.group)
         group_layout.setSpacing(10)
 
         status_group = QGroupBox("Estado rápido", self)
+        status_group.setProperty("sectionRole", "summary")
         status_layout = QVBoxLayout(status_group)
         self.status_label = QLabel(
             "Listo para enviar comandos. Selecciona un nodo."
         )
+        self.status_label.setObjectName("controlPlaneStatusLabel")
         self.status_label.setWordWrap(True)
-        self.status_label.setStyleSheet("font-weight: 600;")
         status_layout.addWidget(self.status_label)
         group_layout.addWidget(status_group)
 
         target_group = QGroupBox("Nodo seleccionado", self)
+        target_group.setProperty("sectionRole", "summary")
         target_layout = QFormLayout(target_group)
         self.node_search_edit = QLineEdit(self)
         self.node_search_edit.setPlaceholderText("Buscar por ID o alias")
@@ -159,6 +162,7 @@ class ControlPlanePanel(QWidget):
         self.node_selector_combo.currentIndexChanged.connect(self._on_node_selection_changed)
         target_row.addWidget(self.node_selector_combo, 1)
         self.refresh_nodes_button = QPushButton("Actualizar", self)
+        self.refresh_nodes_button.setProperty("role", "contextual")
         self.refresh_nodes_button.clicked.connect(self._refresh_node_options)
         target_row.addWidget(self.refresh_nodes_button)
         target_layout.addRow("Nodo", target_row)
@@ -176,6 +180,7 @@ class ControlPlanePanel(QWidget):
         self._build_snapshot_groups()
 
         policy_group = QGroupBox("Políticas automáticas", self)
+        policy_group.setProperty("sectionRole", "technical")
         policy_layout = QFormLayout(policy_group)
         self.policy_title_label = QLabel("Timeout y reintentos por comando.", self)
         self.policy_title_label.setWordWrap(True)
@@ -187,6 +192,7 @@ class ControlPlanePanel(QWidget):
         group_layout.addWidget(policy_group)
 
         actions_group = QGroupBox("Comandos", self)
+        actions_group.setProperty("sectionRole", "actions")
         actions_layout = QVBoxLayout(actions_group)
         actions_layout.setContentsMargins(8, 8, 8, 8)
         actions_layout.setSpacing(8)
@@ -194,14 +200,17 @@ class ControlPlanePanel(QWidget):
         command_row = QHBoxLayout()
         command_row.setSpacing(8)
         self.ping_button = QPushButton("PING", self)
+        self.ping_button.setProperty("role", "secondary")
         self.ping_button.clicked.connect(self._on_ping_clicked)
         command_row.addWidget(self.ping_button)
 
         self.request_stat_button = QPushButton("Pedir STAT", self)
+        self.request_stat_button.setProperty("role", "secondary")
         self.request_stat_button.clicked.connect(self._on_request_stat_now_clicked)
         command_row.addWidget(self.request_stat_button)
 
         self.reboot_soft_button = QPushButton("Reinicio suave", self)
+        self.reboot_soft_button.setProperty("role", "danger")
         self.reboot_soft_button.clicked.connect(self._on_reboot_soft_clicked)
         command_row.addWidget(self.reboot_soft_button)
         actions_layout.addLayout(command_row)
@@ -217,6 +226,7 @@ class ControlPlanePanel(QWidget):
             self.stat_rate_combo.addItem(f"{value_ms} ms", value_ms)
         stat_rate_layout.addWidget(self.stat_rate_combo, 1)
         self.set_stat_rate_button = QPushButton("Aplicar STAT rate", self)
+        self.set_stat_rate_button.setProperty("role", "contextual")
         self.set_stat_rate_button.clicked.connect(self._on_set_stat_rate_clicked)
         stat_rate_layout.addWidget(self.set_stat_rate_button)
         actions_layout.addWidget(self.stat_rate_controls_widget)
@@ -232,6 +242,7 @@ class ControlPlanePanel(QWidget):
             self.throttle_combo.addItem(f"{value_percent}%", value_percent)
         throttle_layout.addWidget(self.throttle_combo, 1)
         self.set_throttle_button = QPushButton("Aplicar throttle", self)
+        self.set_throttle_button.setProperty("role", "contextual")
         self.set_throttle_button.clicked.connect(self._on_set_throttle_clicked)
         throttle_layout.addWidget(self.set_throttle_button)
         actions_layout.addWidget(self.throttle_controls_widget)
@@ -265,15 +276,16 @@ class ControlPlanePanel(QWidget):
         log_layout.setSpacing(8)
         log_tools_layout = QHBoxLayout()
         self.clear_log_button = QPushButton("Limpiar bitácora", self)
+        self.clear_log_button.setProperty("role", "ghost")
         self.clear_log_button.clicked.connect(self._clear_log)
         log_tools_layout.addWidget(self.clear_log_button)
         log_tools_layout.addStretch(1)
         log_layout.addLayout(log_tools_layout)
 
         self.result_view = QTextEdit(self)
+        self.result_view.setObjectName("monoLogView")
         self.result_view.setReadOnly(True)
         self.result_view.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
-        self.result_view.setStyleSheet("font-family: Consolas, 'Courier New', monospace;")
         self.result_view.setMinimumHeight(320)
         self.result_view.setPlaceholderText(
             "Eventos y resultados de transacciones F3."
@@ -389,6 +401,7 @@ class ControlPlanePanel(QWidget):
 
     def _build_snapshot_groups(self) -> None:
         self.snapshot_identity_group = QGroupBox("Identidad y resolución", self)
+        self.snapshot_identity_group.setProperty("sectionRole", "technical")
         identity_form = QFormLayout(self.snapshot_identity_group)
         self._identity_labels = self._create_form_labels(
             identity_form,
@@ -404,6 +417,7 @@ class ControlPlanePanel(QWidget):
         )
 
         self.snapshot_transaction_group = QGroupBox("Última transacción", self)
+        self.snapshot_transaction_group.setProperty("sectionRole", "technical")
         tx_form = QFormLayout(self.snapshot_transaction_group)
         self._transaction_labels = self._create_form_labels(
             tx_form,
@@ -420,6 +434,7 @@ class ControlPlanePanel(QWidget):
         )
 
         self.snapshot_ack_group = QGroupBox("Último ACK", self)
+        self.snapshot_ack_group.setProperty("sectionRole", "technical")
         ack_form = QFormLayout(self.snapshot_ack_group)
         self._ack_labels = self._create_form_labels(
             ack_form,
@@ -432,6 +447,7 @@ class ControlPlanePanel(QWidget):
         )
 
         self.snapshot_reboot_group = QGroupBox("Verificación de reinicio", self)
+        self.snapshot_reboot_group.setProperty("sectionRole", "technical")
         reboot_form = QFormLayout(self.snapshot_reboot_group)
         self._reboot_labels = self._create_form_labels(
             reboot_form,
@@ -442,6 +458,7 @@ class ControlPlanePanel(QWidget):
         )
 
         self.snapshot_runtime_group = QGroupBox("Señales runtime", self)
+        self.snapshot_runtime_group.setProperty("sectionRole", "technical")
         runtime_form = QFormLayout(self.snapshot_runtime_group)
         self._runtime_labels = self._create_form_labels(
             runtime_form,
@@ -451,6 +468,9 @@ class ControlPlanePanel(QWidget):
                 ("boot_marker", "Marca de arranque"),
             ),
         )
+        resolution_message_label = self._identity_labels.get("resolution_message")
+        if resolution_message_label is not None:
+            resolution_message_label.setObjectName("controlPlaneResolutionMessage")
 
     @staticmethod
     def _create_form_labels(
@@ -553,12 +573,14 @@ class ControlPlanePanel(QWidget):
         message_label = self._identity_labels.get("resolution_message")
         if message_label is None:
             return
-        if view.is_unresolved:
-            message_label.setStyleSheet("font-weight: 600;")
-        elif view.is_stale:
-            message_label.setStyleSheet("font-weight: 600;")
-        else:
-            message_label.setStyleSheet("")
+        should_emphasize = bool(view.is_unresolved or view.is_stale)
+        if bool(message_label.property("emphasis")) == should_emphasize:
+            return
+        message_label.setProperty("emphasis", should_emphasize)
+        style = message_label.style()
+        style.unpolish(message_label)
+        style.polish(message_label)
+        message_label.update()
 
     def _run_transaction(
         self,

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from PySide6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QTimer, Qt
 from PySide6.QtWidgets import (
     QFrame,
@@ -12,21 +10,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-
-@dataclass(frozen=True)
-class ToastPalette:
-    background: str
-    border: str
-    title: str
-    message: str
-
-
-_TOAST_PALETTES: dict[str, ToastPalette] = {
-    "info": ToastPalette("#FFFDF9", "#DCCFB8", "#0B3B27", "#4F6259"),
-    "success": ToastPalette("#EFF8F1", "#ACD8BA", "#0B3B27", "#3F5E51"),
-    "warning": ToastPalette("#FFF6EA", "#E0C187", "#432918", "#6A5139"),
-    "error": ToastPalette("#FFF1EF", "#D9978B", "#7B2C20", "#7B2C20"),
-}
+from control_okua.app_qt.design_system import normalize_toast_level
 
 
 class ToastWidget(QFrame):
@@ -40,22 +24,10 @@ class ToastWidget(QFrame):
     ) -> None:
         super().__init__(parent)
         self.setObjectName("toastNotification")
+        level_key = normalize_toast_level(level)
+        self.setProperty("level", level_key)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setWindowFlags(Qt.WindowType.SubWindow | Qt.WindowType.FramelessWindowHint)
-
-        palette = _TOAST_PALETTES.get(level, _TOAST_PALETTES["info"])
-        self.setStyleSheet(
-            (
-                "QFrame#toastNotification {"
-                f"background-color: {palette.background};"
-                f"border: 1px solid {palette.border};"
-                "border-radius: 16px;"
-                "}"
-                "QLabel { background: transparent; }"
-                f"QLabel#toastTitle {{ color: {palette.title}; font-weight: 700; font-size: 10pt; }}"
-                f"QLabel#toastMessage {{ color: {palette.message}; }}"
-            )
-        )
 
         root = QHBoxLayout(self)
         root.setContentsMargins(16, 14, 16, 14)
@@ -64,12 +36,7 @@ class ToastWidget(QFrame):
         accent = QFrame(self)
         accent.setFixedWidth(5)
         accent.setObjectName("toastAccent")
-        accent.setStyleSheet(
-            "QFrame#toastAccent {"
-            f"background-color: {palette.border};"
-            "border-radius: 2px;"
-            "}"
-        )
+        accent.setProperty("level", level_key)
         root.addWidget(accent)
 
         text_col = QVBoxLayout()

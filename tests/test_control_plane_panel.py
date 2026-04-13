@@ -490,6 +490,8 @@ def test_set_stat_rate_ui_is_curated_and_dispatches_command() -> None:
         assert panel.ping_button.isVisible()
         assert panel.request_stat_button.isVisible()
         assert panel.reboot_soft_button.isVisible()
+        assert panel.ping_button.property("role") == "secondary"
+        assert panel.reboot_soft_button.property("role") == "danger"
         assert panel.stat_rate_controls_widget.isVisible()
         assert panel.set_stat_rate_button.isVisible()
         assert panel.throttle_controls_widget.isVisible()

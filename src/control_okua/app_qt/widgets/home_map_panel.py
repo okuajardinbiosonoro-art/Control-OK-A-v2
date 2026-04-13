@@ -14,6 +14,7 @@ from control_okua.app_qt.contracts.home_map_layout_contract import (
     resolve_home_map_box,
 )
 from control_okua.app_qt.navigation_shell import BRAND_ACCENT, BRAND_DEEP, BRAND_SAND
+from control_okua.app_qt.design_system import node_status_map_style
 from control_okua.app_qt.viewmodels.home_map_state_vm import (
     HomeMapBoxState,
     build_home_map_box_states,
@@ -41,32 +42,7 @@ class HomeMapPanel(QWidget):
     _ANIMATION_TICK_MS = 33
     _STATUS_TRANSITION_DURATION_S = 0.28
     _SELECTION_TRANSITION_DURATION_S = 0.18
-    _STATUS_STYLE = {
-        NodeStatus.ONLINE: {
-            "accent": QColor("#2FAC66"),
-            "halo": QColor(47, 172, 102, 42),
-            "fill": QColor(246, 253, 249, 242),
-            "badge_fill": QColor(238, 250, 243, 244),
-        },
-        NodeStatus.CALIBRATING: {
-            "accent": QColor("#2F7ED8"),
-            "halo": QColor(47, 126, 216, 40),
-            "fill": QColor(246, 250, 255, 242),
-            "badge_fill": QColor(239, 246, 255, 244),
-        },
-        NodeStatus.DEGRADED: {
-            "accent": QColor("#DD8A12"),
-            "halo": QColor(221, 138, 18, 42),
-            "fill": QColor(255, 250, 244, 242),
-            "badge_fill": QColor(255, 246, 235, 244),
-        },
-        NodeStatus.OFFLINE: {
-            "accent": QColor("#C45245"),
-            "halo": QColor(196, 82, 69, 42),
-            "fill": QColor(255, 248, 247, 242),
-            "badge_fill": QColor(255, 239, 237, 244),
-        },
-    }
+    _STATUS_STYLE = {status: node_status_map_style(status) for status in NodeStatus}
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
