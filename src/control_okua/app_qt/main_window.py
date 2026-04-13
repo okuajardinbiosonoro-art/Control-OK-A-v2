@@ -883,7 +883,7 @@ class MainWindow(QMainWindow):
         controls_layout.addRow("Habilitado", self.remote_enabled_checkbox)
         self.remote_exposure_mode_combo = QComboBox(self)
         self.remote_exposure_mode_combo.addItem("Solo este equipo", "local_only")
-        self.remote_exposure_mode_combo.addItem("Solo Tailscale", "tailscale_only")
+        self.remote_exposure_mode_combo.addItem("Solo red Tailscale", "tailscale_only")
         controls_layout.addRow("Modo rápido", self.remote_exposure_mode_combo)
         self.remote_apply_button = QPushButton("Aplicar servicio remoto")
         self.remote_apply_button.setProperty("role", "primary")
