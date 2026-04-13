@@ -882,7 +882,7 @@ class MainWindow(QMainWindow):
         self.remote_enabled_checkbox = QCheckBox("Servicio remoto habilitado")
         controls_layout.addRow("Habilitado", self.remote_enabled_checkbox)
         self.remote_exposure_mode_combo = QComboBox(self)
-        self.remote_exposure_mode_combo.addItem("Solo este PC", "local_only")
+        self.remote_exposure_mode_combo.addItem("Solo este equipo", "local_only")
         self.remote_exposure_mode_combo.addItem("Solo Tailscale", "tailscale_only")
         controls_layout.addRow("Modo rápido", self.remote_exposure_mode_combo)
         self.remote_apply_button = QPushButton("Aplicar servicio remoto")
@@ -1551,11 +1551,11 @@ class MainWindow(QMainWindow):
             self,
             "Acerca de",
             (
-                f"{APP_ABOUT_NAME}\n"
-                f"Versión de configuración: {version_text}\n"
-                f"Perfil activo: {active_profile}\n\n"
-                "Aplicación de operación para monitoreo de nodos,\n"
-                "control de sesión serial/UDP y gestión remota."
+                f"{APP_DISPLAY_NAME}\n\n"
+                "Monitoreo de nodos, control de sesión y gestión remota\n"
+                "para instalaciones OKÚA.\n\n"
+                f"Perfil activo: {active_profile}\n"
+                f"Versión de configuración: {version_text}"
             ),
         )
 

@@ -37,7 +37,7 @@ PROFILE_DEFINITIONS: Final[tuple[ProfileDefinition, ...]] = (
         description="Uso de pruebas reproducibles sin operación final",
         mode="udp",
         usage_level="Laboratorio",
-        operation_summary="Perfil de laboratorio; sesión/simulador aún pendientes.",
+        operation_summary="Perfil de laboratorio para pruebas reproducibles.",
     ),
 )
 

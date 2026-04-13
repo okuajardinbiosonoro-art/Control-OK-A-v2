@@ -71,7 +71,7 @@ class OtaDeployDialog(QDialog):
         parent=None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("OTA Deploy")
+        self.setWindowTitle("Despliegue OTA")
         self.resize(1120, 760)
 
         self._session_controller = session_controller

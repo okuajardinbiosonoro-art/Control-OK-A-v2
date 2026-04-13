@@ -43,7 +43,7 @@ def build_primary_shell_items(*, include_remote: bool = True) -> tuple[ShellNavI
         ShellNavItem(
             key="diagnostics",
             label="Diagnóstico",
-            subtitle="Salud del sistema, preflight y runtime.",
+            subtitle="Salud del sistema, diagnóstico y runtime.",
         ),
         ShellNavItem(
             key="firmware",

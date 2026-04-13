@@ -47,10 +47,10 @@ def build_profile_summary(cfg: dict[str, Any]) -> str:
 
 def build_profile_mode_summary(cfg: dict[str, Any]) -> str:
     profile_summary = build_profile_ui_summary(_active_profile_id(cfg), cfg)
-    mode_value = profile_summary.get("mode", "No disponible aún")
+    mode_value = profile_summary.get("mode", "No disponible")
     if mode_value in {"serial", "udp"}:
         return f"Modo asociado: {str(mode_value).upper()}"
-    return "Modo asociado: No disponible aún"
+    return "Modo asociado: No disponible"
 
 
 def build_operation_summary(cfg: dict[str, Any]) -> str:
@@ -58,7 +58,7 @@ def build_operation_summary(cfg: dict[str, Any]) -> str:
     operation_text = profile_summary.get("operation_summary", "").strip()
     if operation_text:
         return f"Uso esperado: {operation_text}"
-    return "Uso esperado: No disponible aún"
+    return "Uso esperado: No disponible"
 
 
 def build_transport_summary(cfg: dict[str, Any]) -> str:
@@ -83,7 +83,7 @@ def build_transport_summary(cfg: dict[str, Any]) -> str:
             f"UDP ({bind_ip} | evt:{evt_port} stat:{stat_port} cmd:{cmd_port})"
         )
 
-    return "Transporte configurado: No disponible aún"
+    return "Transporte configurado: No disponible"
 
 
 def build_midi_summary(cfg: dict[str, Any]) -> str:
@@ -116,7 +116,7 @@ def build_logging_summary(cfg: dict[str, Any]) -> str:
             return "Logging: habilitado"
         return "Logging: deshabilitado"
 
-    return "Logging: No disponible aún"
+    return "Logging: No disponible"
 
 
 def build_general_status_summary(cfg: dict[str, Any], warnings: list[str] | None) -> str:
@@ -139,7 +139,7 @@ def build_general_status_summary(cfg: dict[str, Any], warnings: list[str] | None
     if mode_value not in {"serial", "udp"}:
         return "Estado general: modo pendiente / sesión no iniciada"
 
-    return "Estado general: aplicación lista / sesión aún no iniciada"
+    return "Estado general: listo para iniciar sesión"
 
 
 def _session_state_label(state: SessionState) -> str:
@@ -207,7 +207,7 @@ def build_preflight_status_label(report: PreflightReport | None) -> str:
 
 def build_preflight_summary_text(report: PreflightReport | None) -> str:
     if report is None:
-        return "Resumen: autodiagnóstico aún no ejecutado."
+        return "Resumen: diagnóstico no ejecutado."
     summary = report.summary.strip()
     if not summary:
         return "Resumen: sin datos de readiness."
@@ -240,7 +240,7 @@ def _first_finding_message(report: PreflightReport, *, prefer_blocking: bool) ->
 
 def build_preflight_primary_message(report: PreflightReport | None) -> str:
     if report is None:
-        return "Autodiagnóstico aún no ejecutado."
+        return "Diagnóstico no ejecutado."
 
     if report.readiness is ReadinessLevel.BLOCKED:
         message = _first_finding_message(report, prefer_blocking=True)

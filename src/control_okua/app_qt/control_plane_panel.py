@@ -204,7 +204,7 @@ class ControlPlanePanel(QWidget):
         self.ping_button.clicked.connect(self._on_ping_clicked)
         command_row.addWidget(self.ping_button)
 
-        self.request_stat_button = QPushButton("Pedir STAT", self)
+        self.request_stat_button = QPushButton("Solicitar STAT", self)
         self.request_stat_button.setProperty("role", "secondary")
         self.request_stat_button.clicked.connect(self._on_request_stat_now_clicked)
         command_row.addWidget(self.request_stat_button)
@@ -390,7 +390,7 @@ class ControlPlanePanel(QWidget):
             "Control F3",
             (
                 "Este panel envía comandos reales a nodos del runtime.\n\n"
-                "- PING y Pedir STAT son diagnósticos.\n"
+                "- PING y Solicitar STAT son diagnósticos.\n"
                 "- Throttle planta ajusta el ritmo de emisión en presets curados.\n"
                 "- STAT rate ajusta la cadencia de STAT del nodo (presets curados).\n"
                 "- Reinicio suave puede interrumpir conectividad por unos segundos.\n\n"

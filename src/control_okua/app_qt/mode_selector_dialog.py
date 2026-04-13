@@ -14,14 +14,14 @@ from PySide6.QtWidgets import (
 class ModeSelectorDialog(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Seleccionar modo de operacion")
+        self.setWindowTitle("Seleccionar modo de operación")
         self.setModal(True)
         self.resize(460, 220)
 
         layout = QVBoxLayout(self)
 
         title = QLabel(
-            "Seleccione como desea operar Control OKUA v2.\n"
+            "Seleccione cómo desea operar Control OKÚA.\n"
             "Serial: usa puertos COM (compatibilidad CKv1).\n"
             "Ethernet/UDP: recibe paquetes UDP desde la red (CKv2)."
         )

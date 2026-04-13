@@ -71,7 +71,7 @@ class OtaCampaignDialog(QDialog):
         parent=None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("OTA Campaign")
+        self.setWindowTitle("Campaña OTA")
         self.resize(1240, 840)
 
         self._session_controller = session_controller

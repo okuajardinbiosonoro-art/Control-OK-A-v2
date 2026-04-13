@@ -107,7 +107,7 @@ def test_general_status_with_and_without_warnings() -> None:
     no_warnings_status = build_general_status_summary(cfg, [])
     with_warnings_status = build_general_status_summary(cfg, ["warning 1"])
 
-    assert no_warnings_status == "Estado general: aplicación lista / sesión aún no iniciada"
+    assert no_warnings_status == "Estado general: listo para iniciar sesión"
     assert "advertencias (1)" in with_warnings_status
 
 
@@ -338,9 +338,9 @@ def test_preflight_helpers_render_when_report_is_missing() -> None:
     primary = build_preflight_primary_message(None)
 
     assert status == "Preparación de sesión: Sin evaluación"
-    assert "autodiagnóstico" in summary.lower()
+    assert "diagnóstico" in summary.lower()
     assert "bloqueos: -" in counts.lower()
-    assert "aún no ejecutado" in primary.lower()
+    assert "no ejecutado" in primary.lower()
 
 
 def test_preflight_helpers_render_ready_ready_with_warnings_and_blocked() -> None:

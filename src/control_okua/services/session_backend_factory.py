@@ -68,7 +68,7 @@ class SessionBackendFactory:
     """Factory used by SessionController to resolve a backend from SessionSpec."""
 
     _DEFAULT_UNAVAILABLE_REASONS: dict[BackendKind, str] = {
-        BackendKind.LAB: "Lab backend aún no implementado en este ticket.",
+        BackendKind.LAB: "Modo laboratorio no disponible en esta versión.",
     }
 
     def __init__(

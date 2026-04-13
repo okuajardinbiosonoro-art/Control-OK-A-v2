@@ -139,12 +139,12 @@ def test_control_plane_panel_is_separated_from_diagnostics() -> None:
     try:
         diagnostics_buttons = [btn.text() for btn in window.diagnostics_tab.findChildren(QPushButton)]
         assert "PING" not in diagnostics_buttons
-        assert "Pedir STAT" not in diagnostics_buttons
+        assert "Solicitar STAT" not in diagnostics_buttons
         assert "Reinicio suave" not in diagnostics_buttons
 
         control_buttons = [btn.text() for btn in window.control_plane_tab.findChildren(QPushButton)]
         assert "PING" in control_buttons
-        assert "Pedir STAT" in control_buttons
+        assert "Solicitar STAT" in control_buttons
         assert "Reinicio suave" in control_buttons
         assert "Limpiar bitácora" in control_buttons
         assert not hasattr(window.control_plane_panel, "node_ip_edit")
@@ -643,8 +643,10 @@ def test_help_menu_has_about_action_and_uses_qmessagebox(monkeypatch) -> None:
 
         window.show_about_dialog()
         assert called["title"] == "Acerca de"
-        assert "Control OKÚA CKv2" in called["text"]
+        assert "OKÚA" in called["text"]
+        assert "CKv2" in called["text"]
         assert "Perfil activo:" in called["text"]
+        assert "instalaciones OKÚA" in called["text"]
     finally:
         window.close()
 

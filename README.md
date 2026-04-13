@@ -1,4 +1,4 @@
-# Control OKUA CKv2
+# Control OKÚA CKv2
 
 ## Arranque rapido
 

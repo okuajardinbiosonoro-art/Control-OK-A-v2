@@ -45,7 +45,7 @@ def build_profile_ui_summary(profile_id: str | None, cfg: dict[str, Any]) -> dic
             "profile_id": str(profile_id),
             "short_name": "Perfil no definido",
             "description": "No hay un perfil operativo válido seleccionado.",
-            "mode": "No disponible aún",
+            "mode": "No disponible",
             "usage_level": "No definido",
             "operation_summary": "Seleccione un perfil para continuar.",
             "effective_mode": cfg_mode_text,
