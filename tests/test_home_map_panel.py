@@ -162,3 +162,51 @@ def test_home_map_panel_emits_view_nodes_request_for_selected_box() -> None:
         assert requested == ["caja_4"]
     finally:
         panel.close()
+
+
+def test_home_map_panel_tracks_microtransitions_for_status_changes() -> None:
+    _ensure_qapp()
+    panel = HomeMapPanel()
+    try:
+        panel.set_box_states(
+            build_home_map_box_states(
+                [
+                    _node_snapshot(node_id=1, status=NodeStatus.ONLINE),
+                    _node_snapshot(node_id=2, status=NodeStatus.ONLINE),
+                    _node_snapshot(node_id=3, status=NodeStatus.ONLINE),
+                    _node_snapshot(node_id=4, status=NodeStatus.ONLINE),
+                    _node_snapshot(node_id=5, status=NodeStatus.ONLINE),
+                ]
+            )
+        )
+        assert "caja_1" in panel._status_transition_by_box_key
+        assert panel._animation_timer.isActive() is True
+        _, started_at = panel._status_transition_by_box_key["caja_1"]
+
+        panel._cleanup_finished_transitions(
+            now_monotonic=started_at + panel._STATUS_TRANSITION_DURATION_S + 0.01
+        )
+        assert panel._status_transition_by_box_key == {}
+    finally:
+        panel.close()
+
+
+def test_home_map_panel_tracks_selection_transition_without_breaking_selection() -> None:
+    _ensure_qapp()
+    panel = HomeMapPanel()
+    try:
+        panel.select_box("caja_2")
+        panel.select_box("caja_3")
+
+        assert panel.selected_box() is not None
+        assert panel.selected_box().box_key == "caja_3"
+        assert panel._selection_transition is not None
+        assert panel._animation_timer.isActive() is True
+        _, _, started_at = panel._selection_transition
+
+        panel._cleanup_finished_transitions(
+            now_monotonic=started_at + panel._SELECTION_TRANSITION_DURATION_S + 0.01
+        )
+        assert panel._selection_transition is None
+    finally:
+        panel.close()

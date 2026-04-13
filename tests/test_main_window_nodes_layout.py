@@ -15,7 +15,10 @@ if str(SRC_DIR) not in sys.path:
 
 from control_okua.app_qt.advanced_tools_dialog import AdvancedToolsDialog  # noqa: E402
 from control_okua.app_qt.main_window import MainWindow  # noqa: E402
-from control_okua.app_qt.viewmodels import NodesTabViewState  # noqa: E402
+from control_okua.app_qt.viewmodels import (  # noqa: E402
+    NodesTabViewState,
+    build_map_nodes_sync_context_for_box,
+)
 from control_okua.core.registry import NodeSnapshot, NodeStatus  # noqa: E402
 from control_okua.core.session import BackendKind, SessionSnapshot, SessionState  # noqa: E402
 from control_okua.services.remote_api_bootstrap import (  # noqa: E402
@@ -333,6 +336,85 @@ def test_home_map_panel_receives_compact_node_detail_for_selected_box() -> None:
         assert detail.nodes[1].status_label == "En calibración"
         assert detail.nodes[2].badge_text == "DEG"
         assert detail.nodes[4].is_observed is False
+    finally:
+        window.close()
+
+
+def test_home_map_refresh_policy_throttles_and_keeps_alive_updates() -> None:
+    _ensure_qapp()
+    window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
+    try:
+        snapshots = [_node_snapshot(node_id=1, status=NodeStatus.ONLINE)]
+        window.session_controller.get_node_snapshots = lambda now=None: snapshots  # type: ignore[method-assign]
+        calls = {"states": 0, "details": 0}
+
+        def _track_states(_states) -> None:
+            calls["states"] += 1
+
+        def _track_details(_details) -> None:
+            calls["details"] += 1
+
+        window.home_map_panel.set_box_states = _track_states  # type: ignore[method-assign]
+        window.home_map_panel.set_box_details = _track_details  # type: ignore[method-assign]
+
+        window._refresh_home_map_states(now_monotonic=100.0, force=True)
+        window._refresh_home_map_states(now_monotonic=100.2)
+        window._refresh_home_map_states(now_monotonic=100.9)
+        window._refresh_home_map_states(now_monotonic=103.5)
+
+        assert calls == {"states": 2, "details": 2}
+    finally:
+        window.close()
+
+
+def test_home_map_refresh_policy_updates_when_payload_changes_before_keepalive() -> None:
+    _ensure_qapp()
+    window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
+    try:
+        snapshot_holder = {"rows": [_node_snapshot(node_id=1, status=NodeStatus.ONLINE)]}
+        window.session_controller.get_node_snapshots = lambda now=None: snapshot_holder["rows"]  # type: ignore[method-assign]
+        calls = {"states": 0, "details": 0}
+
+        def _track_states(_states) -> None:
+            calls["states"] += 1
+
+        def _track_details(_details) -> None:
+            calls["details"] += 1
+
+        window.home_map_panel.set_box_states = _track_states  # type: ignore[method-assign]
+        window.home_map_panel.set_box_details = _track_details  # type: ignore[method-assign]
+
+        window._refresh_home_map_states(now_monotonic=200.0, force=True)
+        snapshot_holder["rows"] = [_node_snapshot(node_id=1, status=NodeStatus.DEGRADED)]
+        window._refresh_home_map_states(now_monotonic=200.8)
+
+        assert calls == {"states": 2, "details": 2}
+    finally:
+        window.close()
+
+
+def test_home_map_selection_and_shared_context_survive_live_refresh() -> None:
+    _ensure_qapp()
+    window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
+    try:
+        window.home_map_panel.select_box("caja_3")
+        window._map_nodes_context = build_map_nodes_sync_context_for_box("caja_3", origin="map")
+        snapshots = [
+            _node_snapshot(node_id=11, status=NodeStatus.ONLINE),
+            _node_snapshot(node_id=12, status=NodeStatus.CALIBRATING),
+            _node_snapshot(node_id=13, status=NodeStatus.ONLINE),
+            _node_snapshot(node_id=14, status=NodeStatus.ONLINE),
+        ]
+        window.session_controller.get_node_snapshots = lambda now=None: snapshots  # type: ignore[method-assign]
+
+        window._refresh_home_map_states(now_monotonic=300.0, force=True)
+
+        assert window.home_map_panel.selected_box() is not None
+        assert window.home_map_panel.selected_box().box_key == "caja_3"
+        assert window.home_map_panel.selected_box_state() is not None
+        assert window.home_map_panel.selected_box_state().aggregated_status is NodeStatus.DEGRADED
+        assert window._map_nodes_context is not None
+        assert window._map_nodes_context.box_key == "caja_3"
     finally:
         window.close()
 

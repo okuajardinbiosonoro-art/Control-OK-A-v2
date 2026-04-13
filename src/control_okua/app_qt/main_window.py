@@ -112,6 +112,8 @@ class MainWindow(QMainWindow):
     _NODE_TREE_ROLE_KIND = Qt.ItemDataRole.UserRole + 1
     _NODE_TREE_ROLE_BOX_KEY = Qt.ItemDataRole.UserRole + 2
     _NODE_TREE_ROLE_NODE_ID = Qt.ItemDataRole.UserRole + 3
+    _HOME_MAP_REFRESH_MIN_INTERVAL_S = 0.7
+    _HOME_MAP_REFRESH_KEEPALIVE_S = 2.4
 
     def __init__(
         self,
@@ -159,6 +161,8 @@ class MainWindow(QMainWindow):
         self._widget_to_page_key: dict[QWidget, str] = {}
         self._map_nodes_context: MapNodesSyncContext | None = None
         self._last_runtime_node_snapshots: tuple[object, ...] = ()
+        self._last_home_map_refresh_monotonic = 0.0
+        self._last_home_map_payload: tuple[object, object] | None = None
         self._syncing_map_context = False
         self._syncing_nodes_context = False
         self.session_controller = session_controller or SessionController(
@@ -169,7 +173,7 @@ class MainWindow(QMainWindow):
         self._preflight_report: PreflightReport | None = self.session_controller.get_last_preflight_report()
         self._connect_session_signals()
         self._serial_runtime_refresh_timer = QTimer(self)
-        self._serial_runtime_refresh_timer.setInterval(1500)
+        self._serial_runtime_refresh_timer.setInterval(1200)
         self._serial_runtime_refresh_timer.timeout.connect(
             self._on_runtime_refresh_tick
         )
@@ -980,7 +984,7 @@ class MainWindow(QMainWindow):
 
         self._set_home_status_chip_text(session_status_summary)
         self.home_profile_label.setText(f"{profile_summary} · {general_summary}")
-        self._refresh_home_map_states(now_monotonic=now_monotonic)
+        self._refresh_home_map_states(now_monotonic=now_monotonic, force=True)
 
         self.start_session_button.setEnabled(session_action_state.can_start_session)
         self.stop_session_button.setEnabled(session_action_state.can_stop_session)
@@ -1468,7 +1472,7 @@ class MainWindow(QMainWindow):
         if self._is_runtime_view_visible():
             runtime_snapshot = self.session_controller.get_backend_runtime_snapshot()
             self._refresh_runtime_views(runtime_snapshot, force=True)
-            self._refresh_home_map_states(now_monotonic=time.monotonic())
+            self._refresh_home_map_states(now_monotonic=time.monotonic(), force=True)
 
     def show_session_details_dialog(self) -> None:
         if self._details_dialog is None:
@@ -1713,13 +1717,30 @@ class MainWindow(QMainWindow):
         self._apply_nodes_view_state(view_state)
         self._refresh_nodes_context_bar()
 
-    def _refresh_home_map_states(self, *, now_monotonic: float) -> None:
+    def _refresh_home_map_states(
+        self,
+        *,
+        now_monotonic: float,
+        force: bool = False,
+    ) -> None:
+        elapsed = max(0.0, float(now_monotonic) - float(self._last_home_map_refresh_monotonic))
+        if not force and elapsed < self._HOME_MAP_REFRESH_MIN_INTERVAL_S:
+            return
+
         node_snapshots = self.session_controller.get_node_snapshots(now=now_monotonic)
         box_states = build_home_map_box_states(node_snapshots)
+        box_details = build_home_map_box_detail_states(node_snapshots, box_states=box_states)
+        next_payload: tuple[object, object] = (box_states, box_details)
+        payload_changed = self._last_home_map_payload != next_payload
+
+        should_refresh = force or payload_changed or elapsed >= self._HOME_MAP_REFRESH_KEEPALIVE_S
+        if not should_refresh:
+            return
+
         self.home_map_panel.set_box_states(box_states)
-        self.home_map_panel.set_box_details(
-            build_home_map_box_detail_states(node_snapshots, box_states=box_states)
-        )
+        self.home_map_panel.set_box_details(box_details)
+        self._last_home_map_payload = next_payload
+        self._last_home_map_refresh_monotonic = float(now_monotonic)
 
     def _refresh_nodes_tree(
         self,

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt, Signal, QTimer
 from PySide6.QtGui import QColor, QImage, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import QSizePolicy, QWidget
 
@@ -37,6 +38,9 @@ class HomeMapPanel(QWidget):
     viewNodesRequested = Signal(str)
     _MAP_FRAME_INSET = 3.0
     _MAP_CONTENT_GAP = 4.0
+    _ANIMATION_TICK_MS = 33
+    _STATUS_TRANSITION_DURATION_S = 0.28
+    _SELECTION_TRANSITION_DURATION_S = 0.18
     _STATUS_STYLE = {
         NodeStatus.ONLINE: {
             "accent": QColor("#2FAC66"),
@@ -78,6 +82,11 @@ class HomeMapPanel(QWidget):
         self._hovered_box_key: str | None = None
         self._context_action_rect: QRectF | None = None
         self._context_action_hovered = False
+        self._status_transition_by_box_key: dict[str, tuple[NodeStatus, float]] = {}
+        self._selection_transition: tuple[str | None, str | None, float] | None = None
+        self._animation_timer = QTimer(self)
+        self._animation_timer.setInterval(self._ANIMATION_TICK_MS)
+        self._animation_timer.timeout.connect(self._on_animation_tick)
         self.setMinimumHeight(480)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setMouseTracking(True)
@@ -118,8 +127,11 @@ class HomeMapPanel(QWidget):
         canonical_key = str(box_key).strip().lower() if isinstance(box_key, str) else None
         if canonical_key == self._selected_box_key:
             return
+        previous_key = self._selected_box_key
+        self._selection_transition = (previous_key, canonical_key, time.monotonic())
         self._selected_box_key = canonical_key
         self.boxSelectionChanged.emit(self.selected_box())
+        self._ensure_animation_running()
         self.update()
 
     def request_view_nodes_for_selected_box(self) -> None:
@@ -131,8 +143,22 @@ class HomeMapPanel(QWidget):
         resolved_states = tuple(box_states or ())
         if resolved_states == self._box_states:
             return
+        previous_status_by_key = {
+            state.box_key: state.aggregated_status
+            for state in self._box_states
+        }
         self._box_states = resolved_states
         self._box_states_by_key = {state.box_key: state for state in resolved_states}
+        now_monotonic = time.monotonic()
+        has_status_transition = False
+        for state in resolved_states:
+            previous_status = previous_status_by_key.get(state.box_key)
+            if previous_status is None or previous_status is state.aggregated_status:
+                continue
+            self._status_transition_by_box_key[state.box_key] = (previous_status, now_monotonic)
+            has_status_transition = True
+        if has_status_transition:
+            self._ensure_animation_running()
         self.update()
 
     def set_box_details(
@@ -335,12 +361,17 @@ class HomeMapPanel(QWidget):
             marker_rect = self._marker_rect_for_spec(spec, map_rect)
             state = self._box_states_by_key.get(spec.box_key)
             status = NodeStatus.OFFLINE if state is None else state.aggregated_status
-            style = self._STATUS_STYLE[status]
+            style = self._resolved_style_for_box(spec.box_key, status)
             is_selected = spec.box_key == self._selected_box_key
             is_hovered = spec.box_key == self._hovered_box_key
+            selection_strength = self._selection_strength_for_box(
+                spec.box_key,
+                is_selected=is_selected,
+                is_hovered=is_hovered,
+            )
             base_font = painter.font()
             body_rect = marker_rect.adjusted(4.0, 4.0, -4.0, -4.0)
-            dot_diameter = 9.0 if is_selected else 8.0
+            dot_diameter = 8.0 + selection_strength
             dot_rect = QRectF(
                 body_rect.right() - dot_diameter - 5.0,
                 body_rect.top() + 5.0,
@@ -360,13 +391,14 @@ class HomeMapPanel(QWidget):
                 body_rect.height() - 8.0,
             )
 
-            if is_selected or is_hovered:
+            if selection_strength > 0.0 or is_hovered:
                 glow_rect = body_rect.adjusted(-5.0, -5.0, 5.0, 5.0)
                 glow_fill = QColor(style["halo"])
-                glow_fill.setAlpha(82 if is_selected else 42)
+                glow_alpha = 34 + int(52.0 * selection_strength) + (10 if is_hovered else 0)
+                glow_fill.setAlpha(max(24, min(98, glow_alpha)))
                 glow_border = QColor(style["accent"])
-                glow_border.setAlpha(118 if is_selected else 52)
-                painter.setPen(QPen(glow_border, 1.6 if is_selected else 0.9))
+                glow_border.setAlpha(48 + int(70.0 * selection_strength))
+                painter.setPen(QPen(glow_border, 0.9 + (0.7 * selection_strength)))
                 painter.setBrush(glow_fill)
                 painter.drawRoundedRect(glow_rect, 14.0, 14.0)
 
@@ -376,9 +408,9 @@ class HomeMapPanel(QWidget):
             painter.drawRoundedRect(shadow_rect, 12.0, 12.0)
 
             marker_fill = QColor(style["fill"])
-            marker_fill.setAlpha(255 if is_selected else (249 if is_hovered else 244))
+            marker_fill.setAlpha(max(236, min(255, 242 + int(13.0 * selection_strength) + (4 if is_hovered else 0))))
             painter.setBrush(marker_fill)
-            painter.setPen(QPen(QColor(style["accent"]), 1.8 if is_selected else 1.15))
+            painter.setPen(QPen(QColor(style["accent"]), 1.1 + (0.7 * selection_strength)))
             painter.drawRoundedRect(body_rect, 12.0, 12.0)
 
             painter.setPen(Qt.PenStyle.NoPen)
@@ -445,7 +477,7 @@ class HomeMapPanel(QWidget):
         body_font.setBold(False)
         painter.setFont(body_font)
         if selected_state is not None:
-            state_style = self._STATUS_STYLE[selected_state.aggregated_status]
+            state_style = self._resolved_style_for_box(selected_box.box_key, selected_state.aggregated_status)
             status_rect = QRectF(card_rect.left() + 14.0, card_rect.top() + 36.0, 126.0, 22.0)
             painter.setPen(QPen(QColor(state_style["accent"]), 1.0))
             painter.setBrush(QColor(state_style["badge_fill"]))
@@ -552,4 +584,101 @@ class HomeMapPanel(QWidget):
             QRectF(action_rect.right() - 16.0, action_rect.top(), 10.0, action_rect.height()),
             Qt.AlignmentFlag.AlignCenter,
             "›",
+        )
+
+    def _on_animation_tick(self) -> None:
+        now_monotonic = time.monotonic()
+        self._cleanup_finished_transitions(now_monotonic)
+        if not self._has_active_visual_transition():
+            self._animation_timer.stop()
+            return
+        self.update()
+
+    def _ensure_animation_running(self) -> None:
+        if not self._animation_timer.isActive():
+            self._animation_timer.start()
+
+    def _cleanup_finished_transitions(self, now_monotonic: float) -> None:
+        completed_status_keys = [
+            box_key
+            for box_key, (_, started_at) in self._status_transition_by_box_key.items()
+            if (now_monotonic - started_at) >= self._STATUS_TRANSITION_DURATION_S
+        ]
+        for box_key in completed_status_keys:
+            self._status_transition_by_box_key.pop(box_key, None)
+
+        if self._selection_transition is not None:
+            _, _, started_at = self._selection_transition
+            if (now_monotonic - started_at) >= self._SELECTION_TRANSITION_DURATION_S:
+                self._selection_transition = None
+
+    def _selection_strength_for_box(
+        self,
+        box_key: str,
+        *,
+        is_selected: bool,
+        is_hovered: bool,
+    ) -> float:
+        strength = 1.0 if is_selected else 0.0
+        if is_hovered and not is_selected:
+            strength = max(strength, 0.35)
+        if self._selection_transition is None:
+            return strength
+
+        from_key, to_key, started_at = self._selection_transition
+        progress = self._transition_progress(
+            now_monotonic=time.monotonic(),
+            started_at=started_at,
+            duration_s=self._SELECTION_TRANSITION_DURATION_S,
+        )
+        eased = self._smooth_step(progress)
+        if box_key == from_key:
+            strength = max(strength, 1.0 - eased)
+        if box_key == to_key:
+            strength = max(strength, eased)
+        return strength
+
+    def _resolved_style_for_box(self, box_key: str, status: NodeStatus) -> dict[str, QColor]:
+        target_style = self._STATUS_STYLE[status]
+        transition = self._status_transition_by_box_key.get(box_key)
+        if transition is None:
+            return target_style
+
+        source_status, started_at = transition
+        source_style = self._STATUS_STYLE[source_status]
+        progress = self._transition_progress(
+            now_monotonic=time.monotonic(),
+            started_at=started_at,
+            duration_s=self._STATUS_TRANSITION_DURATION_S,
+        )
+        eased = self._smooth_step(progress)
+        return {
+            key: self._blend_color(source_style[key], target_style[key], eased)
+            for key in target_style.keys()
+        }
+
+    def _has_active_visual_transition(self) -> bool:
+        return bool(self._status_transition_by_box_key) or self._selection_transition is not None
+
+    @staticmethod
+    def _transition_progress(*, now_monotonic: float, started_at: float, duration_s: float) -> float:
+        if duration_s <= 0.0:
+            return 1.0
+        elapsed = max(0.0, now_monotonic - started_at)
+        return min(1.0, elapsed / duration_s)
+
+    @staticmethod
+    def _smooth_step(progress: float) -> float:
+        clamped = max(0.0, min(1.0, float(progress)))
+        return clamped * clamped * (3.0 - (2.0 * clamped))
+
+    @staticmethod
+    def _blend_color(source: QColor, target: QColor, weight: float) -> QColor:
+        ratio = max(0.0, min(1.0, float(weight)))
+        inverse = 1.0 - ratio
+        return QColor(
+            int((source.red() * inverse) + (target.red() * ratio)),
+            int((source.green() * inverse) + (target.green() * ratio)),
+            int((source.blue() * inverse) + (target.blue() * ratio)),
+            int((source.alpha() * inverse) + (target.alpha() * ratio)),
         )
