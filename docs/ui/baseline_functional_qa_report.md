@@ -330,3 +330,4 @@ Una vez que esos tres puntos estén verificados, la baseline puede considerarse 
 | 34.2 | Higiene técnica | CERRADO |
 | 34.3 | QA baseline GUI + smoke packaging | CERRADO |
 | 34.4 | QA funcional de campo + acta de validación | CERRADO (automáticas PASAN; campo pendiente de hardware) |
+| 34.5 | Ejecución real de validación funcional | CERRADO PARCIALMENTE — smoke launch sin crash; validación visual y sesión real pendientes de ejecución humana — ver `docs/ui/baseline_functional_qa_execution.md` |
