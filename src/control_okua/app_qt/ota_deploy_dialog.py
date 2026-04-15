@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
-    QSizePolicy,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -209,28 +208,27 @@ class OtaDeployDialog(QDialog):
     def _build_rollout_group(self) -> QWidget:
         group = QGroupBox("Configuración de red", self)
         layout = QFormLayout(group)
-        layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
         self.advertise_host_edit = QLineEdit("127.0.0.1", self)
-        self.advertise_host_edit.setMaximumWidth(240)
+        self.advertise_host_edit.setFixedWidth(200)
         layout.addRow("IP accesible por el nodo:", self.advertise_host_edit)
 
         self.bind_host_edit = QLineEdit("0.0.0.0", self)
-        self.bind_host_edit.setMaximumWidth(240)
+        self.bind_host_edit.setFixedWidth(200)
         layout.addRow("Dirección local:", self.bind_host_edit)
 
         self.port_spin = QSpinBox(self)
         self.port_spin.setRange(1, 65535)
         self.port_spin.setValue(8080)
-        self.port_spin.setMaximumWidth(110)
+        self.port_spin.setFixedWidth(100)
         layout.addRow("Puerto OTA:", self.port_spin)
 
         self.rollout_token_edit = QLineEdit(build_default_rollout_token(), self)
-        self.rollout_token_edit.setMaximumWidth(320)
+        self.rollout_token_edit.setFixedWidth(300)
         layout.addRow("Token de actualización:", self.rollout_token_edit)
 
         self.rollout_channel_combo = QComboBox(self)
-        self.rollout_channel_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.rollout_channel_combo.setFixedWidth(160)
         self.rollout_channel_combo.addItem("Estable", "stable")
         self.rollout_channel_combo.addItem("Beta", "beta")
         self.rollout_channel_combo.addItem("Situacional", "situational")
@@ -240,13 +238,13 @@ class OtaDeployDialog(QDialog):
         self.ack_timeout_spin.setRange(100, 10000)
         self.ack_timeout_spin.setValue(600)
         self.ack_timeout_spin.setSuffix(" ms")
-        self.ack_timeout_spin.setMaximumWidth(110)
+        self.ack_timeout_spin.setFixedWidth(100)
         layout.addRow("Tiempo de respuesta:", self.ack_timeout_spin)
 
         self.max_retries_spin = QSpinBox(self)
         self.max_retries_spin.setRange(0, 3)
         self.max_retries_spin.setValue(0)
-        self.max_retries_spin.setMaximumWidth(80)
+        self.max_retries_spin.setFixedWidth(70)
         layout.addRow("Reintentos:", self.max_retries_spin)
 
         self.allow_downgrade_check = QCheckBox(

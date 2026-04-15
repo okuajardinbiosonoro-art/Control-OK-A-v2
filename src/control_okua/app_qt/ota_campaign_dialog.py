@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
-    QSizePolicy,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -241,11 +240,11 @@ class OtaCampaignDialog(QDialog):
     def _build_canary_group(self) -> QWidget:
         group = QGroupBox("Estrategia de olas", self)
         layout = QFormLayout(group)
-        layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
         self.require_canary_checkbox = QPushButton("Validación previa: Activada", self)
         self.require_canary_checkbox.setCheckable(True)
         self.require_canary_checkbox.setChecked(True)
+        self.require_canary_checkbox.setFixedWidth(200)
         self.require_canary_checkbox.toggled.connect(self._on_require_canary_toggled)
         layout.addRow("Validación previa:", self.require_canary_checkbox)
 
@@ -258,7 +257,7 @@ class OtaCampaignDialog(QDialog):
         self.wave_size_spin = QSpinBox(self)
         self.wave_size_spin.setRange(1, 64)
         self.wave_size_spin.setValue(1)
-        self.wave_size_spin.setMaximumWidth(80)
+        self.wave_size_spin.setFixedWidth(70)
         self.wave_size_spin.valueChanged.connect(self._update_wave_preview)
         layout.addRow("Nodos por ola:", self.wave_size_spin)
         return group
@@ -266,28 +265,27 @@ class OtaCampaignDialog(QDialog):
     def _build_rollout_group(self) -> QWidget:
         group = QGroupBox("Configuración de red", self)
         layout = QFormLayout(group)
-        layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
         self.advertise_host_edit = QLineEdit("127.0.0.1", self)
-        self.advertise_host_edit.setMaximumWidth(240)
+        self.advertise_host_edit.setFixedWidth(200)
         layout.addRow("IP accesible por el nodo:", self.advertise_host_edit)
 
         self.bind_host_edit = QLineEdit("0.0.0.0", self)
-        self.bind_host_edit.setMaximumWidth(240)
+        self.bind_host_edit.setFixedWidth(200)
         layout.addRow("Dirección local:", self.bind_host_edit)
 
         self.port_spin = QSpinBox(self)
         self.port_spin.setRange(1, 65535)
         self.port_spin.setValue(8080)
-        self.port_spin.setMaximumWidth(110)
+        self.port_spin.setFixedWidth(100)
         layout.addRow("Puerto OTA:", self.port_spin)
 
         self.rollout_token_edit = QLineEdit(build_default_rollout_token(), self)
-        self.rollout_token_edit.setMaximumWidth(320)
+        self.rollout_token_edit.setFixedWidth(300)
         layout.addRow("Token de actualización:", self.rollout_token_edit)
 
         self.rollout_channel_combo = QComboBox(self)
-        self.rollout_channel_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.rollout_channel_combo.setFixedWidth(160)
         self.rollout_channel_combo.addItem("Estable", "stable")
         self.rollout_channel_combo.addItem("Beta", "beta")
         self.rollout_channel_combo.addItem("Situacional", "situational")
@@ -297,13 +295,13 @@ class OtaCampaignDialog(QDialog):
         self.ack_timeout_spin.setRange(100, 10000)
         self.ack_timeout_spin.setValue(600)
         self.ack_timeout_spin.setSuffix(" ms")
-        self.ack_timeout_spin.setMaximumWidth(110)
+        self.ack_timeout_spin.setFixedWidth(100)
         layout.addRow("Tiempo de respuesta:", self.ack_timeout_spin)
 
         self.max_retries_spin = QSpinBox(self)
         self.max_retries_spin.setRange(0, 3)
         self.max_retries_spin.setValue(0)
-        self.max_retries_spin.setMaximumWidth(80)
+        self.max_retries_spin.setFixedWidth(70)
         layout.addRow("Reintentos:", self.max_retries_spin)
         return group
 
