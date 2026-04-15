@@ -71,6 +71,8 @@ class OtaCampaignDialog(QDialog):
         parent=None,
     ) -> None:
         super().__init__(parent)
+        self.setObjectName("otaCampaignDialog")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setWindowTitle("Campaña OTA")
         self.resize(1240, 840)
 

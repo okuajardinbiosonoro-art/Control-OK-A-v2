@@ -379,10 +379,13 @@ class ControlPlanePanel(QWidget):
         )
         if callable(self._on_notify):
             self._on_notify(
-                title="Control F3",
-                message="Este panel envía comandos reales. Use reboot, throttle y STAT rate con criterio.",
+                title="Control F3 — Comandos reales",
+                message=(
+                    "Este panel envía comandos reales a nodos del runtime. "
+                    "PING y STAT son diagnósticos; reboot puede interrumpir conectividad brevemente."
+                ),
                 level="warning",
-                duration_ms=4200,
+                duration_ms=7000,
             )
             return
         QMessageBox.information(

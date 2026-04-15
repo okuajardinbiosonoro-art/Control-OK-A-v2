@@ -325,7 +325,7 @@ def test_section_warning_uses_notify_callback_when_available() -> None:
     try:
         panel.on_section_activated()
         assert notifications
-        assert notifications[-1]["title"] == "Control F3"
+        assert notifications[-1]["title"] == "Control F3 — Comandos reales"
         assert notifications[-1]["level"] == "warning"
     finally:
         panel.close()

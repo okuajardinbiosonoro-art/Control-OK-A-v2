@@ -5,14 +5,11 @@ from typing import Any, Callable
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QCheckBox,
-    QComboBox,
     QDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QPushButton,
     QVBoxLayout,
 )
@@ -26,8 +23,6 @@ class AdvancedToolsDialog(QDialog):
         on_open_folder: Callable[[], None],
         on_view_config: Callable[[], None],
         on_reload_config: Callable[[], None],
-        on_apply_remote_settings: Callable[[bool, str], tuple[Any, str]],
-        on_open_firmware_manager: Callable[[], None],
         on_notify: Callable[..., None] | None,
         state_provider: Callable[[], tuple[dict[str, Any], Path, list[str]]],
         remote_status_provider: Callable[[], Any | None],
@@ -37,13 +32,11 @@ class AdvancedToolsDialog(QDialog):
         self.setObjectName("advancedToolsDialog")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setWindowTitle("Centro técnico")
-        self.resize(980, 680)
+        self.resize(920, 580)
 
         self._on_open_folder = on_open_folder
         self._on_view_config = on_view_config
         self._on_reload_config = on_reload_config
-        self._on_apply_remote_settings = on_apply_remote_settings
-        self._on_open_firmware_manager = on_open_firmware_manager
         self._on_notify = on_notify
         self._state_provider = state_provider
         self._remote_status_provider = remote_status_provider
@@ -97,7 +90,7 @@ class AdvancedToolsDialog(QDialog):
         root_layout.addWidget(config_group)
 
         remote_group = QGroupBox("Servicio remoto")
-        remote_group.setProperty("sectionRole", "actions")
+        remote_group.setProperty("sectionRole", "summary")
         remote_layout = QVBoxLayout(remote_group)
         remote_form = QFormLayout()
         self.remote_status_label = QLabel("-")
@@ -126,52 +119,11 @@ class AdvancedToolsDialog(QDialog):
         remote_form.addRow("Último error:", self.remote_failure_label)
         remote_layout.addLayout(remote_form)
 
-        remote_apply_hint = QLabel(
-            "Ajusta el modo del servicio remoto sin editar archivos manualmente."
-        )
-        remote_apply_hint.setObjectName("sectionHintLabel")
-        remote_apply_hint.setWordWrap(True)
-        remote_layout.addWidget(remote_apply_hint)
-
-        remote_apply_form = QFormLayout()
-        self.remote_enabled_checkbox = QCheckBox("Servicio remoto habilitado")
-        remote_apply_form.addRow("Habilitado:", self.remote_enabled_checkbox)
-        self.remote_exposure_mode_combo = QComboBox(self)
-        self.remote_exposure_mode_combo.addItem("Solo este equipo", "local_only")
-        self.remote_exposure_mode_combo.addItem("Solo red Tailscale", "tailscale_only")
-        remote_apply_form.addRow("Modo rápido:", self.remote_exposure_mode_combo)
-        remote_layout.addLayout(remote_apply_form)
-
-        remote_actions_layout = QHBoxLayout()
-        self.remote_apply_button = QPushButton("Aplicar servicio remoto")
-        self.remote_apply_button.setProperty("role", "primary")
-        self.remote_apply_button.clicked.connect(self._handle_apply_remote_settings_clicked)
-        remote_actions_layout.addWidget(self.remote_apply_button)
-        remote_actions_layout.addStretch(1)
-        remote_layout.addLayout(remote_actions_layout)
+        remote_hint = QLabel("Para cambiar el modo o activar el servicio, usa la pestaña Remoto.")
+        remote_hint.setObjectName("sectionHintLabel")
+        remote_hint.setWordWrap(True)
+        remote_layout.addWidget(remote_hint)
         root_layout.addWidget(remote_group)
-
-        firmware_group = QGroupBox("Firmware")
-        firmware_group.setProperty("sectionRole", "summary")
-        firmware_layout = QVBoxLayout(firmware_group)
-        firmware_hint = QLabel(
-            "Abra el gestor de firmware para revisar el catálogo técnico, "
-            "importar bins y marcar current por target."
-        )
-        firmware_hint.setWordWrap(True)
-        firmware_layout.addWidget(firmware_hint)
-
-        firmware_actions_layout = QHBoxLayout()
-        self.open_firmware_manager_button = QPushButton("Abrir gestor de firmware")
-        self.open_firmware_manager_button.setProperty("role", "contextual")
-        self.open_firmware_manager_button.clicked.connect(
-            self._handle_open_firmware_manager_clicked
-        )
-        firmware_actions_layout.addWidget(self.open_firmware_manager_button)
-        firmware_actions_layout.addStretch(1)
-        firmware_layout.addLayout(firmware_actions_layout)
-
-        root_layout.addWidget(firmware_group)
 
         midi_group = QGroupBox("Salidas MIDI")
         midi_group.setProperty("sectionRole", "summary")
@@ -190,18 +142,6 @@ class AdvancedToolsDialog(QDialog):
         self.config_path_label.setText(str(config_path))
         self.warnings_label.setText(f"Advertencias de configuración: {warning_count}")
         self.midi_outputs_widget.refresh_from_config(cfg)
-        remote_cfg = cfg.get("remote_api")
-        remote_enabled = False
-        configured_exposure_mode = "local_only"
-        if isinstance(remote_cfg, dict):
-            remote_enabled = remote_cfg.get("enabled") is True
-            raw_exposure_mode = remote_cfg.get("exposure_mode")
-            if raw_exposure_mode in {"local_only", "tailscale_only"}:
-                configured_exposure_mode = str(raw_exposure_mode)
-        self.remote_enabled_checkbox.setChecked(remote_enabled)
-        exposure_index = self.remote_exposure_mode_combo.findData(configured_exposure_mode)
-        if exposure_index >= 0:
-            self.remote_exposure_mode_combo.setCurrentIndex(exposure_index)
         remote_status = self._remote_status_provider()
         if remote_status is None:
             self.remote_status_label.setText("-")
@@ -220,42 +160,19 @@ class AdvancedToolsDialog(QDialog):
         self.remote_bind_label.setText(str(bind_text))
         self.remote_port_label.setText(str(getattr(remote_status, "port", "-")))
         self.remote_local_url_label.setText(
-            str(getattr(remote_status, "local_access_url", None) or "No sugerida")
+            str(getattr(remote_status, "local_access_url", None) or "No disponible")
         )
         self.remote_remote_url_label.setText(
-            str(getattr(remote_status, "remote_access_url", None) or "No sugerida")
+            str(getattr(remote_status, "remote_access_url", None) or "No disponible")
         )
         self.remote_store_label.setText(
-            str(getattr(remote_status, "user_store_path", None) or "No disponible")
+            str(getattr(remote_status, "user_store_path", None) or "No configurado")
         )
         self.remote_failure_label.setText(
-            str(getattr(remote_status, "failure_message", None) or "Ninguno")
+            str(getattr(remote_status, "failure_message", None) or "Sin errores")
         )
 
     def _handle_reload_clicked(self) -> None:
         self._on_reload_config()
         cfg, config_path, warnings = self._state_provider()
         self.set_state(cfg, config_path, warnings)
-
-    def _handle_apply_remote_settings_clicked(self) -> None:
-        exposure_mode = str(self.remote_exposure_mode_combo.currentData() or "local_only")
-        enabled = self.remote_enabled_checkbox.isChecked()
-        try:
-            _status, message = self._on_apply_remote_settings(enabled, exposure_mode)
-        except Exception as exc:
-            cfg, config_path, warnings = self._state_provider()
-            self.set_state(cfg, config_path, warnings)
-            QMessageBox.warning(
-                self,
-                "Servicio remoto",
-                f"No se pudo actualizar el servicio remoto: {exc}",
-            )
-            return
-
-        cfg, config_path, warnings = self._state_provider()
-        self.set_state(cfg, config_path, warnings)
-        if callable(self._on_notify):
-            self._on_notify(title="Servicio remoto", message=message, level="success")
-
-    def _handle_open_firmware_manager_clicked(self) -> None:
-        self._on_open_firmware_manager()

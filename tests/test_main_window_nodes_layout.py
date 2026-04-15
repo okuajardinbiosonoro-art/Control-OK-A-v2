@@ -624,16 +624,21 @@ def test_nodes_tree_uses_available_width_and_keeps_pps_loss_readable() -> None:
         window.close()
 
 
-def test_help_menu_has_about_action_and_uses_qmessagebox(monkeypatch) -> None:
+def test_help_menu_has_about_action_and_uses_about_dialog(monkeypatch) -> None:
     _ensure_qapp()
     window = MainWindow(cfg=_build_cfg(), config_path=Path("config.json"), warnings=[])
-    called: dict[str, str] = {}
+    captured: list = []
 
-    def _fake_about(_parent, title: str, text: str) -> None:
-        called["title"] = title
-        called["text"] = text
+    from control_okua.app_qt.widgets.about_dialog import AboutDialog
 
-    monkeypatch.setattr("control_okua.app_qt.main_window.QMessageBox.about", _fake_about)
+    original_init = AboutDialog.__init__
+
+    def _intercept_init(self, *, version=None, active_profile=None, parent=None):
+        original_init(self, version=version, active_profile=active_profile, parent=parent)
+        captured.append(self)
+
+    monkeypatch.setattr(AboutDialog, "__init__", _intercept_init)
+    monkeypatch.setattr(AboutDialog, "exec", lambda self: None)
     try:
         menu_titles = [action.text() for action in window.menuBar().actions()]
         assert menu_titles == ["Aplicación", "Ayuda"]
@@ -642,11 +647,10 @@ def test_help_menu_has_about_action_and_uses_qmessagebox(monkeypatch) -> None:
         assert not hasattr(window, "view_nodes_action")
 
         window.show_about_dialog()
-        assert called["title"] == "Acerca de"
-        assert "OKÚA" in called["text"]
-        assert "CKv2" in called["text"]
-        assert "Perfil activo:" in called["text"]
-        assert "instalaciones OKÚA" in called["text"]
+        assert captured, "AboutDialog should have been instantiated"
+        dlg = captured[0]
+        assert dlg.windowTitle() == "Acerca de"
+        assert dlg._active_profile is not None
     finally:
         window.close()
 
@@ -678,76 +682,48 @@ def test_advanced_tools_dialog_surfaces_remote_api_runtime_status(monkeypatch) -
         assert dialog.remote_exposure_mode_label.text() == "tailscale_only"
         assert dialog.remote_bind_label.text() == "100.88.127.119"
         assert dialog.remote_port_label.text() == "8788"
-        assert dialog.remote_local_url_label.text() == "No sugerida"
+        assert dialog.remote_local_url_label.text() == "No disponible"
         assert dialog.remote_remote_url_label.text() == "http://100.88.127.119:8788/remote/"
         assert dialog.remote_store_label.text() == "remote_api_users.json"
-        assert dialog.remote_failure_label.text() == "Ninguno"
+        assert dialog.remote_failure_label.text() == "Sin errores"
     finally:
         window.close()
 
 
-def test_advanced_tools_dialog_applies_remote_settings_from_ui(monkeypatch) -> None:
+def test_advanced_tools_dialog_shows_config_and_remote_status_read_only() -> None:
     _ensure_qapp()
     cfg = _build_cfg()
-    cfg["remote_api"] = {
-        "enabled": True,
-        "exposure_mode": "local_only",
-    }
-    status_holder = {
-        "status": RemoteApiRuntimeStatus(
-            enabled=True,
-            service_state="running",
-            exposure_mode="local_only",
-            effective_bind_host="127.0.0.1",
-            port=8788,
-            local_access_url="http://127.0.0.1:8788/remote/",
-            remote_access_url=None,
-            access_urls=("http://127.0.0.1:8788/remote/",),
-            failure_message=None,
-            user_store_path=Path("remote_api_users.json"),
-        )
-    }
-    captured: dict[str, object] = {}
-    notifications: list[dict[str, str]] = []
-
-    def _apply_remote_settings(enabled: bool, exposure_mode: str) -> tuple[object, str]:
-        captured["enabled"] = enabled
-        captured["exposure_mode"] = exposure_mode
-        cfg["remote_api"]["enabled"] = enabled
-        cfg["remote_api"]["exposure_mode"] = exposure_mode
-        status_holder["status"] = RemoteApiRuntimeStatus(
-            enabled=enabled,
-            service_state="running",
-            exposure_mode=exposure_mode,
-            effective_bind_host="100.88.127.119",
-            port=8788,
-            local_access_url=None,
-            remote_access_url="http://100.88.127.119:8788/remote/",
-            access_urls=("http://100.88.127.119:8788/remote/",),
-            failure_message=None,
-            user_store_path=Path("remote_api_users.json"),
-        )
-        return status_holder["status"], "Servicio remoto actualizado."
+    status = RemoteApiRuntimeStatus(
+        enabled=True,
+        service_state="stopped",
+        exposure_mode="local_only",
+        effective_bind_host="127.0.0.1",
+        port=8788,
+        local_access_url="http://127.0.0.1:8788/remote/",
+        remote_access_url=None,
+        access_urls=("http://127.0.0.1:8788/remote/",),
+        failure_message=None,
+        user_store_path=Path("remote_api_users.json"),
+    )
 
     dialog = AdvancedToolsDialog(
         on_open_folder=lambda: None,
         on_view_config=lambda: None,
         on_reload_config=lambda: None,
-        on_apply_remote_settings=_apply_remote_settings,
-        on_open_firmware_manager=lambda: None,
-        on_notify=lambda **payload: notifications.append(payload),
+        on_notify=None,
         state_provider=lambda: (cfg, Path("config.json"), []),
-        remote_status_provider=lambda: status_holder["status"],
+        remote_status_provider=lambda: status,
     )
     try:
         dialog.set_state(cfg, Path("config.json"), [])
-        dialog.remote_enabled_checkbox.setChecked(True)
-        dialog.remote_exposure_mode_combo.setCurrentIndex(1)
-        dialog._handle_apply_remote_settings_clicked()
-
-        assert captured == {"enabled": True, "exposure_mode": "tailscale_only"}
-        assert dialog.remote_remote_url_label.text() == "http://100.88.127.119:8788/remote/"
-        assert notifications[-1]["title"] == "Servicio remoto"
-        assert "actualizado" in notifications[-1]["message"].lower()
+        assert dialog.config_path_label.text() == "config.json"
+        assert dialog.remote_status_label.text() == "stopped"
+        assert dialog.remote_exposure_mode_label.text() == "local_only"
+        assert dialog.remote_bind_label.text() == "127.0.0.1"
+        assert dialog.remote_port_label.text() == "8788"
+        assert dialog.remote_local_url_label.text() == "http://127.0.0.1:8788/remote/"
+        assert dialog.remote_failure_label.text() == "Sin errores"
+        assert not hasattr(dialog, "remote_enabled_checkbox")
+        assert not hasattr(dialog, "remote_apply_button")
     finally:
         dialog.close()

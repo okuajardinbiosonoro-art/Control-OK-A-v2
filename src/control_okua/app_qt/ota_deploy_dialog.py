@@ -71,6 +71,8 @@ class OtaDeployDialog(QDialog):
         parent=None,
     ) -> None:
         super().__init__(parent)
+        self.setObjectName("otaDeployDialog")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setWindowTitle("Despliegue OTA")
         self.resize(1120, 760)
 

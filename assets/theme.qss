@@ -37,10 +37,27 @@ QDialog#sessionDetailsDialog,
 QDialog#advancedToolsDialog,
 QDialog#firmwareManagerDialog,
 QDialog#profileSelectorDialog,
+QDialog#firmwareImportDialog,
+QDialog#otaDeployDialog,
+QDialog#otaCampaignDialog,
+QDialog#aboutDialog,
 QWidget#sessionDetailsTab,
 QWidget#sessionDetailsContent,
 QWidget#sessionDetailsViewport {
     background-color: #F7F4EC;
+}
+
+QMessageBox {
+    background-color: #F7F4EC;
+}
+
+QMessageBox QLabel {
+    color: #0B3B27;
+    background-color: transparent;
+}
+
+QMessageBox QPushButton {
+    min-width: 88px;
 }
 
 QToolTip {
@@ -533,7 +550,7 @@ QLabel#navigationBrandLabel {
 QLabel#navigationEditionLabel {
     color: #4F6259;
     font-size: 9pt;
-    margin-top: -6px;
+    margin-top: 2px;
     margin-bottom: 6px;
 }
 
@@ -663,4 +680,39 @@ QFrame#toastNotification[level="warning"] QLabel#toastMessage {
 
 QFrame#toastNotification[level="error"] QLabel#toastMessage {
     color: #7B2C20;
+}
+
+/* About dialog */
+QLabel#aboutBrandLabel {
+    color: #0B3B27;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+
+QLabel#aboutEditionLabel {
+    color: #4F6259;
+    font-size: 10pt;
+    margin-top: 2px;
+}
+
+QLabel#aboutDescLabel {
+    color: #0B3B27;
+    font-size: 10pt;
+    line-height: 1.5;
+}
+
+QLabel#aboutFieldLabel {
+    color: #5B6F66;
+    font-size: 9.5pt;
+}
+
+QLabel#aboutFieldValue {
+    color: #0B3B27;
+    font-size: 9.5pt;
+    font-weight: 600;
+}
+
+QLabel#aboutBuildNoteLabel {
+    color: #7A8E85;
+    font-size: 9pt;
 }

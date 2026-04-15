@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -33,6 +34,8 @@ from control_okua.core.firmware import (
 class FirmwareImportDialog(QDialog):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        self.setObjectName("firmwareImportDialog")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setWindowTitle("Importar firmware")
         self.setModal(True)
         self.resize(720, 620)

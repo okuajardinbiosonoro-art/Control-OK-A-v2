@@ -605,7 +605,11 @@ class MainWindow(QMainWindow):
         return tab
 
     def _build_diagnostics_tab(self) -> QWidget:
-        tab = QWidget(self)
+        scroll = QScrollArea(self)
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+
+        tab = QWidget()
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(10)
@@ -690,6 +694,7 @@ class MainWindow(QMainWindow):
         self.serial_runtime_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.serial_runtime_table.setSelectionMode(QAbstractItemView.NoSelection)
         self.serial_runtime_table.verticalHeader().setVisible(False)
+        self.serial_runtime_table.setMinimumHeight(180)
         serial_runtime_layout.addWidget(self.serial_runtime_table)
         layout.addWidget(self.serial_runtime_group)
 
@@ -702,6 +707,7 @@ class MainWindow(QMainWindow):
         self.udp_runtime_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.udp_runtime_table.setSelectionMode(QAbstractItemView.NoSelection)
         self.udp_runtime_table.verticalHeader().setVisible(False)
+        self.udp_runtime_table.setMinimumHeight(200)
         udp_runtime_layout.addWidget(self.udp_runtime_table)
         layout.addWidget(self.udp_runtime_group)
 
@@ -710,10 +716,13 @@ class MainWindow(QMainWindow):
         warnings_layout = QVBoxLayout(warnings_group)
         self.warnings_view = QTextEdit(self)
         self.warnings_view.setReadOnly(True)
+        self.warnings_view.setMinimumHeight(100)
         warnings_layout.addWidget(self.warnings_view)
-        layout.addWidget(warnings_group, 1)
+        layout.addWidget(warnings_group)
+        layout.addStretch(1)
 
-        return tab
+        scroll.setWidget(tab)
+        return scroll
 
     def _build_control_plane_tab(self) -> QWidget:
         tab = QWidget(self)
@@ -813,10 +822,6 @@ class MainWindow(QMainWindow):
         self.open_firmware_manager_button.setProperty("role", "primary")
         self.open_firmware_manager_button.clicked.connect(self.open_firmware_manager)
         actions_layout.addWidget(self.open_firmware_manager_button)
-        self.firmware_open_technical_button = QPushButton("Ir a Técnico")
-        self.firmware_open_technical_button.setProperty("role", "secondary")
-        self.firmware_open_technical_button.clicked.connect(self.show_control_plane_tab)
-        actions_layout.addWidget(self.firmware_open_technical_button)
         actions_layout.addStretch(1)
         layout.addWidget(actions_group)
 
@@ -889,10 +894,6 @@ class MainWindow(QMainWindow):
         self.remote_apply_button.setProperty("role", "primary")
         self.remote_apply_button.clicked.connect(self._apply_remote_settings_from_shell)
         controls_layout.addRow("", self.remote_apply_button)
-        self.remote_open_advanced_button = QPushButton("Herramientas avanzadas")
-        self.remote_open_advanced_button.setProperty("role", "contextual")
-        self.remote_open_advanced_button.clicked.connect(self.open_advanced_tools)
-        controls_layout.addRow("", self.remote_open_advanced_button)
         layout.addWidget(controls_group)
         layout.addStretch(1)
         return tab
@@ -1129,8 +1130,6 @@ class MainWindow(QMainWindow):
                 on_open_folder=self.open_config_folder,
                 on_view_config=self.view_config,
                 on_reload_config=self.reload_config,
-                on_apply_remote_settings=self.apply_remote_settings,
-                on_open_firmware_manager=self.open_firmware_manager,
                 on_notify=self._show_toast,
                 state_provider=self._advanced_state,
                 remote_status_provider=self._remote_api_status_provider,
@@ -1140,9 +1139,6 @@ class MainWindow(QMainWindow):
 
         self._advanced_dialog.set_state(self.cfg, self.config_path, self.warnings)
         self._advanced_dialog.reload_button.setEnabled(
-            build_session_action_state(self._session_snapshot).can_edit_configuration
-        )
-        self._advanced_dialog.remote_apply_button.setEnabled(
             build_session_action_state(self._session_snapshot).can_edit_configuration
         )
         self._advanced_dialog.show()
@@ -1260,34 +1256,34 @@ class MainWindow(QMainWindow):
         status = self._remote_api_status
         if status is None:
             self._remote_summary_labels["status"].setText("No disponible")
-            self._remote_summary_labels["mode"].setText(configured_mode)
+            self._remote_summary_labels["mode"].setText(_remote_mode_label(configured_mode))
             self._remote_summary_labels["bind"].setText("-")
             self._remote_summary_labels["local_url"].setText("-")
             self._remote_summary_labels["remote_url"].setText("-")
             self._remote_summary_labels["store"].setText("No disponible")
-            self._remote_summary_labels["failure"].setText("Sin runtime remoto informado.")
+            self._remote_summary_labels["failure"].setText("Sin información de inicio.")
             return
 
         self._remote_summary_labels["status"].setText(
-            str(getattr(status, "service_state", "desconocido"))
+            _remote_state_label(getattr(status, "service_state", ""))
         )
         self._remote_summary_labels["mode"].setText(
-            str(getattr(status, "exposure_mode", configured_mode))
+            _remote_mode_label(str(getattr(status, "exposure_mode", configured_mode)))
         )
         self._remote_summary_labels["bind"].setText(
             str(getattr(status, "effective_bind_host", None) or "-")
         )
         self._remote_summary_labels["local_url"].setText(
-            str(getattr(status, "local_access_url", None) or "No sugerida")
+            str(getattr(status, "local_access_url", None) or "No disponible")
         )
         self._remote_summary_labels["remote_url"].setText(
-            str(getattr(status, "remote_access_url", None) or "No sugerida")
+            str(getattr(status, "remote_access_url", None) or "No disponible")
         )
         self._remote_summary_labels["store"].setText(
-            str(getattr(status, "user_store_path", None) or "No disponible")
+            str(getattr(status, "user_store_path", None) or "No configurado")
         )
         self._remote_summary_labels["failure"].setText(
-            str(getattr(status, "failure_message", None) or "Ninguno")
+            _remote_failure_label(getattr(status, "failure_message", None))
         )
 
     def open_config_folder(self) -> None:
@@ -1438,9 +1434,15 @@ class MainWindow(QMainWindow):
         if action_state.can_edit_configuration:
             return True
 
-        message = "Detenga la sesión antes de cambiar perfil o recargar configuración."
+        message = "Detenga la sesión activa antes de cambiar perfil o recargar configuración."
         self.operation_subtitle_label.setText(message)
         self.statusBar().showMessage(message)
+        self._show_toast(
+            title="Sesión activa",
+            message=message,
+            level="warning",
+            duration_ms=4000,
+        )
         return False
 
     def _apply_summary_values(self, values: dict[str, str]) -> None:
@@ -1544,20 +1546,15 @@ class MainWindow(QMainWindow):
         self.tabs.setCurrentWidget(self.remote_tab)
 
     def show_about_dialog(self) -> None:
+        from control_okua.app_qt.widgets.about_dialog import AboutDialog
         version = self.cfg.get("version")
-        version_text = str(version) if version is not None else "No disponible"
         active_profile = self._active_profile_id() or "sin perfil"
-        QMessageBox.about(
-            self,
-            "Acerca de",
-            (
-                f"{APP_DISPLAY_NAME}\n\n"
-                "Monitoreo de nodos, control de sesión y gestión remota\n"
-                "para instalaciones OKÚA.\n\n"
-                f"Perfil activo: {active_profile}\n"
-                f"Versión de configuración: {version_text}"
-            ),
+        dlg = AboutDialog(
+            version=str(version) if version is not None else None,
+            active_profile=active_profile,
+            parent=self,
         )
+        dlg.exec()
 
     def _show_toast(
         self,
@@ -2124,3 +2121,44 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         super().closeEvent(event)
+
+
+# ---------------------------------------------------------------------------
+# Helpers de microcopy para sección Remoto
+# ---------------------------------------------------------------------------
+
+_REMOTE_STATE_LABELS: dict[str, str] = {
+    "running": "Activo",
+    "stopped": "Detenido",
+    "failed": "Error al iniciar",
+    "starting": "Iniciando…",
+    "stopping": "Deteniéndose…",
+}
+
+_REMOTE_MODE_LABELS: dict[str, str] = {
+    "local_only": "Solo este equipo",
+    "tailscale_only": "Solo red Tailscale",
+}
+
+
+def _remote_state_label(raw: object) -> str:
+    key = str(raw or "").strip().lower()
+    return _REMOTE_STATE_LABELS.get(key, key or "Desconocido")
+
+
+def _remote_mode_label(raw: object) -> str:
+    key = str(raw or "").strip().lower()
+    return _REMOTE_MODE_LABELS.get(key, key or "-")
+
+
+def _remote_failure_label(raw: object) -> str:
+    if raw is None:
+        return "Sin errores"
+    text = str(raw).strip()
+    if not text or text.lower() in {"none", "ninguno", "sin errores"}:
+        return "Sin errores"
+    # Mostrar solo la primera línea del error, sin prefijos técnicos internos
+    first_line = text.splitlines()[0]
+    if len(first_line) > 120:
+        first_line = first_line[:117] + "…"
+    return first_line
