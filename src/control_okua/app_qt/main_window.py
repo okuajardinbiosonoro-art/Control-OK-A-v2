@@ -790,7 +790,7 @@ class MainWindow(QMainWindow):
             default_node_id=1,
             parent=self,
         )
-        self.technical_tabs.addTab(self.control_plane_panel, "Control F3")
+        self.technical_tabs.addTab(self.control_plane_panel, "Comandos")
         layout.addWidget(self.technical_tabs, 1)
         return tab
 

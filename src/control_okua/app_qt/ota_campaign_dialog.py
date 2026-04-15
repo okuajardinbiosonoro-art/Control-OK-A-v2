@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -106,25 +107,27 @@ class OtaCampaignDialog(QDialog):
         root_layout = QVBoxLayout(self)
 
         intro = QLabel(
-            "Campaña OTA técnica con canary, health gate y olas manuales. "
-            "Publica el rollout una vez y permite continuar o abortar de forma explícita."
+            "Actualización por olas con validación previa. "
+            "Publica el firmware y avanza ola a ola, pausando o cancelando si es necesario."
         )
         intro.setWordWrap(True)
         root_layout.addWidget(intro)
 
         config_grid = QGridLayout()
+        config_grid.setColumnStretch(0, 1)
+        config_grid.setColumnStretch(1, 1)
         config_grid.addWidget(self._build_artifact_group(), 0, 0)
         config_grid.addWidget(self._build_campaign_nodes_group(), 0, 1)
         config_grid.addWidget(self._build_canary_group(), 1, 0)
         config_grid.addWidget(self._build_rollout_group(), 1, 1)
         root_layout.addLayout(config_grid)
 
-        self.wave_preview_label = QLabel("Sin campaña configurada todavía.", self)
+        self.wave_preview_label = QLabel("Configura los nodos para ver la distribución de olas.", self)
         self.wave_preview_label.setWordWrap(True)
         root_layout.addWidget(self.wave_preview_label)
 
         actions_layout = QHBoxLayout()
-        self.start_canary_button = QPushButton("Iniciar canary", self)
+        self.start_canary_button = QPushButton("Iniciar primera ola", self)
         self.start_canary_button.clicked.connect(self._on_start_canary_clicked)
         actions_layout.addWidget(self.start_canary_button)
 
@@ -143,12 +146,12 @@ class OtaCampaignDialog(QDialog):
         self.abort_button.setEnabled(False)
         actions_layout.addWidget(self.abort_button)
 
-        self.refresh_button = QPushButton("Refrescar campaña", self)
+        self.refresh_button = QPushButton("Actualizar estado", self)
         self.refresh_button.clicked.connect(self._on_refresh_clicked)
         self.refresh_button.setEnabled(False)
         actions_layout.addWidget(self.refresh_button)
 
-        self.open_rollout_button = QPushButton("Abrir carpeta rollout", self)
+        self.open_rollout_button = QPushButton("Abrir carpeta", self)
         self.open_rollout_button.clicked.connect(self._open_rollout_folder)
         self.open_rollout_button.setEnabled(False)
         actions_layout.addWidget(self.open_rollout_button)
@@ -162,7 +165,7 @@ class OtaCampaignDialog(QDialog):
         result_layout.addWidget(self.summary_label)
 
         self.continue_hint_label = QLabel(
-            "Configura una campaña OTA para iniciar el canary.",
+            "Configura la campaña y selecciona nodos para comenzar.",
             self,
         )
         self.continue_hint_label.setWordWrap(True)
@@ -175,8 +178,8 @@ class OtaCampaignDialog(QDialog):
                 "Ola",
                 "Fase OTA",
                 "Resultado",
-                "ACK",
-                "OTA runtime",
+                "Respuesta",
+                "Estado OTA",
                 "Mensaje",
                 "Observado UTC",
             ]
@@ -196,7 +199,7 @@ class OtaCampaignDialog(QDialog):
         self._update_action_state()
 
     def _build_artifact_group(self) -> QWidget:
-        group = QGroupBox("Artifact", self)
+        group = QGroupBox("Firmware", self)
         layout = QVBoxLayout(group)
 
         combo_row = QHBoxLayout()
@@ -209,7 +212,7 @@ class OtaCampaignDialog(QDialog):
         combo_row.addWidget(self.reload_artifacts_button)
         layout.addLayout(combo_row)
 
-        self.artifact_summary_label = QLabel("Sin artifact seleccionado.", self)
+        self.artifact_summary_label = QLabel("Sin firmware seleccionado.", self)
         self.artifact_summary_label.setWordWrap(True)
         layout.addWidget(self.artifact_summary_label)
         return group
@@ -236,61 +239,72 @@ class OtaCampaignDialog(QDialog):
         return group
 
     def _build_canary_group(self) -> QWidget:
-        group = QGroupBox("Canary y olas", self)
+        group = QGroupBox("Estrategia de olas", self)
         layout = QFormLayout(group)
+        layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
-        self.require_canary_checkbox = QPushButton("Canary obligatorio: Sí", self)
+        self.require_canary_checkbox = QPushButton("Validación previa: Activada", self)
         self.require_canary_checkbox.setCheckable(True)
         self.require_canary_checkbox.setChecked(True)
         self.require_canary_checkbox.toggled.connect(self._on_require_canary_toggled)
-        layout.addRow("Modo canary:", self.require_canary_checkbox)
+        layout.addRow("Validación previa:", self.require_canary_checkbox)
 
         self.canary_list = QListWidget(self)
         self.canary_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.canary_list.itemSelectionChanged.connect(self._update_wave_preview)
         self.canary_list.setMinimumHeight(180)
-        layout.addRow("Nodos canary:", self.canary_list)
+        layout.addRow("Nodos de prueba:", self.canary_list)
 
         self.wave_size_spin = QSpinBox(self)
         self.wave_size_spin.setRange(1, 64)
         self.wave_size_spin.setValue(1)
+        self.wave_size_spin.setMaximumWidth(80)
         self.wave_size_spin.valueChanged.connect(self._update_wave_preview)
-        layout.addRow("Tamaño de ola:", self.wave_size_spin)
+        layout.addRow("Nodos por ola:", self.wave_size_spin)
         return group
 
     def _build_rollout_group(self) -> QWidget:
-        group = QGroupBox("Parámetros OTA", self)
+        group = QGroupBox("Configuración de red", self)
         layout = QFormLayout(group)
+        layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
         self.advertise_host_edit = QLineEdit("127.0.0.1", self)
-        layout.addRow("Host visible al nodo:", self.advertise_host_edit)
+        self.advertise_host_edit.setMaximumWidth(240)
+        layout.addRow("IP accesible por el nodo:", self.advertise_host_edit)
 
         self.bind_host_edit = QLineEdit("0.0.0.0", self)
-        layout.addRow("Bind host local:", self.bind_host_edit)
+        self.bind_host_edit.setMaximumWidth(240)
+        layout.addRow("Dirección local:", self.bind_host_edit)
 
         self.port_spin = QSpinBox(self)
         self.port_spin.setRange(1, 65535)
         self.port_spin.setValue(8080)
+        self.port_spin.setMaximumWidth(110)
         layout.addRow("Puerto OTA:", self.port_spin)
 
         self.rollout_token_edit = QLineEdit(build_default_rollout_token(), self)
-        layout.addRow("Rollout token (hex):", self.rollout_token_edit)
+        self.rollout_token_edit.setMaximumWidth(320)
+        layout.addRow("Token de actualización:", self.rollout_token_edit)
 
         self.rollout_channel_combo = QComboBox(self)
-        for value in ("stable", "beta", "situational"):
-            self.rollout_channel_combo.addItem(value, value)
-        layout.addRow("Rollout channel:", self.rollout_channel_combo)
+        self.rollout_channel_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.rollout_channel_combo.addItem("Estable", "stable")
+        self.rollout_channel_combo.addItem("Beta", "beta")
+        self.rollout_channel_combo.addItem("Situacional", "situational")
+        layout.addRow("Canal:", self.rollout_channel_combo)
 
         self.ack_timeout_spin = QSpinBox(self)
         self.ack_timeout_spin.setRange(100, 10000)
         self.ack_timeout_spin.setValue(600)
         self.ack_timeout_spin.setSuffix(" ms")
-        layout.addRow("Timeout ACK:", self.ack_timeout_spin)
+        self.ack_timeout_spin.setMaximumWidth(110)
+        layout.addRow("Tiempo de respuesta:", self.ack_timeout_spin)
 
         self.max_retries_spin = QSpinBox(self)
         self.max_retries_spin.setRange(0, 3)
         self.max_retries_spin.setValue(0)
-        layout.addRow("Retries trigger:", self.max_retries_spin)
+        self.max_retries_spin.setMaximumWidth(80)
+        layout.addRow("Reintentos:", self.max_retries_spin)
         return group
 
     def reload_artifacts(self) -> None:
@@ -342,13 +356,13 @@ class OtaCampaignDialog(QDialog):
 
         if self._node_options:
             self.nodes_hint_label.setText(
-                f"Nodos visibles para campaña OTA: {len(self._node_options)}. "
-                "Selecciona el conjunto total y luego el subconjunto canary."
+                f"Nodos disponibles: {len(self._node_options)}. "
+                "Selecciona el conjunto total y luego los nodos de prueba."
             )
         else:
             self.nodes_hint_label.setText(
-                "No hay nodos visibles en runtime/control-plane. "
-                "Inicia sesión UDP antes de lanzar una campaña OTA."
+                "No hay nodos conectados. "
+                "Inicia una sesión UDP antes de continuar."
             )
         self._sync_canary_selection()
         self._update_wave_preview()
@@ -380,7 +394,7 @@ class OtaCampaignDialog(QDialog):
     def _on_artifact_changed(self) -> None:
         option = self._selected_artifact_option()
         if option is None:
-            self.artifact_summary_label.setText("Sin artifact seleccionado.")
+            self.artifact_summary_label.setText("Sin firmware seleccionado.")
             self._update_action_state()
             return
         self.artifact_summary_label.setText(option.summary)
@@ -388,7 +402,7 @@ class OtaCampaignDialog(QDialog):
 
     def _on_require_canary_toggled(self, checked: bool) -> None:
         self.require_canary_checkbox.setText(
-            "Canary obligatorio: Sí" if checked else "Canary obligatorio: No"
+            "Validación previa: Activada" if checked else "Validación previa: Desactivada"
         )
         self._update_wave_preview()
         self._update_action_state()
@@ -410,10 +424,10 @@ class OtaCampaignDialog(QDialog):
     def _build_plan_from_ui(self) -> OtaCampaignPlan:
         option = self._selected_artifact_option()
         if option is None:
-            raise OtaCampaignValidationError("Selecciona un artifact firmware.")
+            raise OtaCampaignValidationError("Selecciona un firmware para continuar.")
         if not option.is_eligible:
             raise OtaCampaignValidationError(
-                f"El artifact seleccionado no es elegible para OTA: {option.ineligibility_reason}"
+                f"El firmware seleccionado no está disponible para actualización: {option.ineligibility_reason}"
             )
         node_ids = self.selected_campaign_node_ids()
         canary_nodes = self.selected_canary_node_ids()
@@ -447,7 +461,7 @@ class OtaCampaignDialog(QDialog):
                 wave_size=int(self.wave_size_spin.value()),
             )
         except Exception as exc:
-            preview = f"Preview inválido: {exc}"
+            preview = f"Distribución inválida: {exc}"
         self.wave_preview_label.setText(preview)
         if hasattr(self, "start_canary_button"):
             self._update_action_state()
@@ -489,19 +503,19 @@ class OtaCampaignDialog(QDialog):
         try:
             plan = self._build_plan_from_ui()
         except OtaCampaignValidationError as exc:
-            QMessageBox.warning(self, "Plan OTA inválido", str(exc))
+            QMessageBox.warning(self, "Configuración inválida", str(exc))
             return
 
         try:
             result = self._campaign_service.start_campaign(plan)
         except (OtaCampaignServiceError, OtaCampaignValidationError) as exc:
-            QMessageBox.critical(self, "Campaña OTA fallida", str(exc))
+            QMessageBox.critical(self, "Error al iniciar campaña", str(exc))
             return
         except Exception as exc:  # pragma: no cover - defensive UI guard
             QMessageBox.critical(
                 self,
-                "Campaña OTA inesperada",
-                f"Ocurrió un error inesperado durante la campaña OTA: {exc}",
+                "Error inesperado",
+                f"Ocurrió un error inesperado al iniciar la campaña: {exc}",
             )
             return
 
@@ -510,8 +524,8 @@ class OtaCampaignDialog(QDialog):
         self._set_refresh_running_for(result)
         QMessageBox.information(
             self,
-            "Canary disparado",
-            "La campaña OTA publicó el rollout y disparó la ola canary.",
+            "Primera ola iniciada",
+            "La actualización fue publicada y la primera ola está en curso.",
         )
 
     def _on_continue_clicked(self) -> None:
@@ -537,8 +551,8 @@ class OtaCampaignDialog(QDialog):
             return
         answer = QMessageBox.question(
             self,
-            "Abortar campaña OTA",
-            "Esto bloqueará nuevas olas en la campaña actual. ¿Continuar?",
+            "Confirmar cancelación",
+            "Se cancelarán las actualizaciones pendientes. ¿Confirmar?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -556,8 +570,8 @@ class OtaCampaignDialog(QDialog):
         except Exception as exc:  # pragma: no cover - defensive UI guard
             QMessageBox.warning(
                 self,
-                "Refresco OTA fallido",
-                f"No se pudo refrescar el estado de la campaña OTA: {exc}",
+                "Error al actualizar estado",
+                f"No se pudo actualizar el estado de la campaña: {exc}",
             )
             self._refresh_timer.stop()
             return

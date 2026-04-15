@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QTableWidget,
     QTableWidgetItem,
@@ -103,29 +104,31 @@ class OtaDeployDialog(QDialog):
         root_layout = QVBoxLayout(self)
 
         intro = QLabel(
-            "Herramienta OTA técnica para publicar un rollout local y disparar "
-            "OTA_CHECK_NOW sobre nodos seleccionados explícitamente."
+            "Publica una actualización de firmware y notifica a los nodos seleccionados "
+            "para que la descarguen e instalen."
         )
         intro.setWordWrap(True)
         root_layout.addWidget(intro)
 
         config_grid = QGridLayout()
+        config_grid.setColumnStretch(0, 3)
+        config_grid.setColumnStretch(1, 1)
         config_grid.addWidget(self._build_artifact_group(), 0, 0)
         config_grid.addWidget(self._build_nodes_group(), 0, 1)
         config_grid.addWidget(self._build_rollout_group(), 1, 0, 1, 2)
         root_layout.addLayout(config_grid)
 
         actions_layout = QHBoxLayout()
-        self.deploy_button = QPushButton("Publicar y disparar OTA", self)
+        self.deploy_button = QPushButton("Publicar actualización", self)
         self.deploy_button.clicked.connect(self._on_deploy_clicked)
         actions_layout.addWidget(self.deploy_button)
 
-        self.refresh_status_button = QPushButton("Refrescar estados OTA", self)
+        self.refresh_status_button = QPushButton("Actualizar estados", self)
         self.refresh_status_button.clicked.connect(self._on_refresh_status_clicked)
         self.refresh_status_button.setEnabled(False)
         actions_layout.addWidget(self.refresh_status_button)
 
-        self.open_rollout_button = QPushButton("Abrir carpeta rollout", self)
+        self.open_rollout_button = QPushButton("Abrir carpeta", self)
         self.open_rollout_button.clicked.connect(self._open_rollout_folder)
         self.open_rollout_button.setEnabled(False)
         actions_layout.addWidget(self.open_rollout_button)
@@ -143,8 +146,8 @@ class OtaDeployDialog(QDialog):
             [
                 "Nodo",
                 "Fase",
-                "ACK",
-                "OTA runtime",
+                "Respuesta",
+                "Estado OTA",
                 "Mensaje",
                 "Observado UTC",
             ]
@@ -164,7 +167,7 @@ class OtaDeployDialog(QDialog):
         self._update_action_state()
 
     def _build_artifact_group(self) -> QWidget:
-        group = QGroupBox("Artifact", self)
+        group = QGroupBox("Firmware", self)
         layout = QVBoxLayout(group)
 
         combo_row = QHBoxLayout()
@@ -177,7 +180,7 @@ class OtaDeployDialog(QDialog):
         combo_row.addWidget(self.reload_artifacts_button)
         layout.addLayout(combo_row)
 
-        self.artifact_summary_label = QLabel("Sin artifact seleccionado.", self)
+        self.artifact_summary_label = QLabel("Sin firmware seleccionado.", self)
         self.artifact_summary_label.setWordWrap(True)
         layout.addWidget(self.artifact_summary_label)
         return group
@@ -204,47 +207,56 @@ class OtaDeployDialog(QDialog):
         return group
 
     def _build_rollout_group(self) -> QWidget:
-        group = QGroupBox("Parámetros rollout", self)
+        group = QGroupBox("Configuración de red", self)
         layout = QFormLayout(group)
+        layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
         self.advertise_host_edit = QLineEdit("127.0.0.1", self)
-        layout.addRow("Host visible al nodo:", self.advertise_host_edit)
+        self.advertise_host_edit.setMaximumWidth(240)
+        layout.addRow("IP accesible por el nodo:", self.advertise_host_edit)
 
         self.bind_host_edit = QLineEdit("0.0.0.0", self)
-        layout.addRow("Bind host local:", self.bind_host_edit)
+        self.bind_host_edit.setMaximumWidth(240)
+        layout.addRow("Dirección local:", self.bind_host_edit)
 
         self.port_spin = QSpinBox(self)
         self.port_spin.setRange(1, 65535)
         self.port_spin.setValue(8080)
+        self.port_spin.setMaximumWidth(110)
         layout.addRow("Puerto OTA:", self.port_spin)
 
         self.rollout_token_edit = QLineEdit(build_default_rollout_token(), self)
-        layout.addRow("Rollout token (hex):", self.rollout_token_edit)
+        self.rollout_token_edit.setMaximumWidth(320)
+        layout.addRow("Token de actualización:", self.rollout_token_edit)
 
         self.rollout_channel_combo = QComboBox(self)
-        for value in ("stable", "beta", "situational"):
-            self.rollout_channel_combo.addItem(value, value)
-        layout.addRow("Rollout channel:", self.rollout_channel_combo)
+        self.rollout_channel_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.rollout_channel_combo.addItem("Estable", "stable")
+        self.rollout_channel_combo.addItem("Beta", "beta")
+        self.rollout_channel_combo.addItem("Situacional", "situational")
+        layout.addRow("Canal:", self.rollout_channel_combo)
 
         self.ack_timeout_spin = QSpinBox(self)
         self.ack_timeout_spin.setRange(100, 10000)
         self.ack_timeout_spin.setValue(600)
         self.ack_timeout_spin.setSuffix(" ms")
-        layout.addRow("Timeout ACK:", self.ack_timeout_spin)
+        self.ack_timeout_spin.setMaximumWidth(110)
+        layout.addRow("Tiempo de respuesta:", self.ack_timeout_spin)
 
         self.max_retries_spin = QSpinBox(self)
         self.max_retries_spin.setRange(0, 3)
         self.max_retries_spin.setValue(0)
-        layout.addRow("Retries trigger:", self.max_retries_spin)
+        self.max_retries_spin.setMaximumWidth(80)
+        layout.addRow("Reintentos:", self.max_retries_spin)
 
         self.allow_downgrade_check = QCheckBox(
-            "Permitir downgrade / reinstalar versión no más nueva", self
+            "Permitir instalar una versión anterior o igual a la actual", self
         )
         self.allow_downgrade_check.setToolTip(
-            "Publica el rollout con una advertencia explícita para permitir "
-            "instalar una versión más vieja o no más nueva."
+            "Activa esta opción solo si necesitas reinstalar una versión anterior. "
+            "Instalar una versión más vieja puede reintroducir errores corregidos."
         )
-        layout.addRow("Downgrade:", self.allow_downgrade_check)
+        layout.addRow("Versión anterior:", self.allow_downgrade_check)
         return group
 
     def reload_artifacts(self) -> None:
@@ -288,13 +300,13 @@ class OtaDeployDialog(QDialog):
 
         if self._node_options:
             self.nodes_hint_label.setText(
-                f"Nodos visibles para OTA: {len(self._node_options)}. "
-                "Selecciona uno o más y revisa que el host OTA sea alcanzable."
+                f"Nodos disponibles: {len(self._node_options)}. "
+                "Selecciona los que recibirán la actualización."
             )
         else:
             self.nodes_hint_label.setText(
-                "No hay nodos visibles en runtime/control-plane. "
-                "Inicia sesión UDP antes de disparar OTA."
+                "No hay nodos conectados. "
+                "Inicia una sesión UDP antes de continuar."
             )
         self._update_action_state()
 
@@ -318,7 +330,7 @@ class OtaDeployDialog(QDialog):
     def _on_artifact_changed(self) -> None:
         option = self._selected_artifact_option()
         if option is None:
-            self.artifact_summary_label.setText("Sin artifact seleccionado.")
+            self.artifact_summary_label.setText("Sin firmware seleccionado.")
             self._update_action_state()
             return
 
@@ -349,21 +361,21 @@ class OtaDeployDialog(QDialog):
     def _on_deploy_clicked(self) -> None:
         option = self._selected_artifact_option()
         if option is None:
-            QMessageBox.warning(self, "OTA Deploy", "Selecciona un artifact firmware.")
+            QMessageBox.warning(self, "Actualización OTA", "Selecciona un firmware para continuar.")
             return
         if not option.is_eligible:
             QMessageBox.warning(
                 self,
-                "Artifact no elegible",
-                f"El artifact seleccionado no es elegible para OTA: {option.ineligibility_reason}",
+                "Firmware no disponible",
+                f"El firmware seleccionado no está disponible para actualización: {option.ineligibility_reason}",
             )
             return
         node_ids = self.selected_node_ids()
         if not node_ids:
             QMessageBox.warning(
                 self,
-                "Nodos no seleccionados",
-                "Selecciona al menos un nodo explícitamente antes de disparar OTA.",
+                "Sin nodos seleccionados",
+                "Selecciona al menos un nodo antes de publicar la actualización.",
             )
             return
 
@@ -381,16 +393,15 @@ class OtaDeployDialog(QDialog):
                 allow_downgrade=self.allow_downgrade_check.isChecked(),
             )
         except OtaDeployValidationError as exc:
-            QMessageBox.warning(self, "Request OTA inválido", str(exc))
+            QMessageBox.warning(self, "Configuración inválida", str(exc))
             return
 
         if request.allow_downgrade:
             answer = QMessageBox.warning(
                 self,
-                "Downgrade OTA permitido",
-                "Estás autorizando una OTA con versión no más nueva. "
-                "Esto puede reinstalar una versión antigua y es riesgoso si el "
-                "build tiene regresiones. ¿Quieres continuar?",
+                "Versión anterior a la actual",
+                "Estás autorizando una actualización con una versión anterior o igual a la instalada. "
+                "Esto puede reintroducir errores ya corregidos. ¿Quieres continuar?",
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No,
             )
@@ -400,13 +411,13 @@ class OtaDeployDialog(QDialog):
         try:
             result = self._orchestrator.deploy(request)
         except (OtaOrchestratorServiceError, OtaManifestValidationError, OtaDeployValidationError) as exc:
-            QMessageBox.critical(self, "Deploy OTA fallido", str(exc))
+            QMessageBox.critical(self, "Error al publicar actualización", str(exc))
             return
         except Exception as exc:  # pragma: no cover - defensive UI guard
             QMessageBox.critical(
                 self,
-                "Deploy OTA inesperado",
-                f"Ocurrió un error inesperado durante el deploy OTA: {exc}",
+                "Error inesperado",
+                f"Ocurrió un error inesperado al publicar la actualización: {exc}",
             )
             return
 
@@ -417,14 +428,14 @@ class OtaDeployDialog(QDialog):
         if result.success:
             QMessageBox.information(
                 self,
-                "Deploy OTA disparado",
-                "El rollout OTA fue publicado y se enviaron los triggers a los nodos seleccionados.",
+                "Actualización iniciada",
+                "La actualización fue publicada y se notificó a los nodos seleccionados.",
             )
         else:
             QMessageBox.warning(
                 self,
-                "Deploy OTA con fallos",
-                result.message or "El deploy OTA terminó con errores.",
+                "Actualización con errores",
+                result.message or "La actualización terminó con errores.",
             )
 
     def _on_refresh_status_clicked(self) -> None:
@@ -435,8 +446,8 @@ class OtaDeployDialog(QDialog):
         except Exception as exc:  # pragma: no cover - defensive UI guard
             QMessageBox.warning(
                 self,
-                "Refresco OTA fallido",
-                f"No se pudieron refrescar los estados OTA: {exc}",
+                "Error al actualizar estados",
+                f"No se pudo actualizar el estado de los nodos: {exc}",
             )
             self._refresh_timer.stop()
             return

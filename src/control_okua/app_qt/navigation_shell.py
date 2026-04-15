@@ -53,7 +53,7 @@ def build_primary_shell_items(*, include_remote: bool = True) -> tuple[ShellNavI
         ShellNavItem(
             key="technical",
             label="Técnico",
-            subtitle="Control F3 y utilidades avanzadas.",
+            subtitle="Comandos directos a nodos y utilidades avanzadas.",
         ),
     ]
     if include_remote:

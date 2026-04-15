@@ -97,17 +97,6 @@ class AboutDialog(QDialog):
             details_layout.addLayout(row)
 
         root.addLayout(details_layout)
-        root.addSpacing(20)
-
-        # — Nota de construcción —
-        build_note = QLabel(
-            "Desarrollado con atención al detalle para el equipo OKÚA.\n"
-            "Cada sección fue pensada para el técnico que opera en campo.",
-            self,
-        )
-        build_note.setObjectName("aboutBuildNoteLabel")
-        build_note.setWordWrap(True)
-        root.addWidget(build_note)
 
         root.addStretch(1)
 

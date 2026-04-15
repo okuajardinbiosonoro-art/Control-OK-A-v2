@@ -159,7 +159,7 @@ def test_control_plane_panel_is_separated_from_diagnostics() -> None:
             window.technical_tabs.tabText(i)
             for i in range(window.technical_tabs.count())
         ]
-        assert technical_tabs == ["Resumen", "Control F3"]
+        assert technical_tabs == ["Resumen", "Comandos"]
         assert window.technical_tabs.documentMode() is False
         assert window.control_plane_panel.details_tabs.documentMode() is False
         assert window.control_plane_panel.result_view.minimumHeight() >= 320

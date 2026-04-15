@@ -288,7 +288,7 @@ def test_section_warning_is_shown_only_once(monkeypatch) -> None:
         panel.on_section_activated()
         panel.on_section_activated()
         text = panel.result_view.toPlainText()
-        assert "Aviso: Control F3 envía comandos reales" in text
+        assert "Aviso: Este panel envía comandos reales" in text
         assert dialog_calls["count"] == 1
     finally:
         panel.close()
@@ -325,7 +325,7 @@ def test_section_warning_uses_notify_callback_when_available() -> None:
     try:
         panel.on_section_activated()
         assert notifications
-        assert notifications[-1]["title"] == "Control F3 — Comandos reales"
+        assert notifications[-1]["title"] == "Comandos de nodo — Atención"
         assert notifications[-1]["level"] == "warning"
     finally:
         panel.close()

@@ -134,7 +134,7 @@ class ControlPlanePanel(QWidget):
         root.setContentsMargins(10, 10, 10, 10)
         root.setSpacing(10)
 
-        self.group = QGroupBox("Control por nodo (F3)", self)
+        self.group = QGroupBox("Control por nodo", self)
         self.group.setProperty("sectionRole", "actions")
         group_layout = QVBoxLayout(self.group)
         group_layout.setSpacing(10)
@@ -288,7 +288,7 @@ class ControlPlanePanel(QWidget):
         self.result_view.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
         self.result_view.setMinimumHeight(320)
         self.result_view.setPlaceholderText(
-            "Eventos y resultados de transacciones F3."
+            "Eventos y resultados de operaciones."
         )
         log_layout.addWidget(self.result_view, 1)
         self.details_tabs.addTab(self.log_tab, "Bitácora")
@@ -374,15 +374,15 @@ class ControlPlanePanel(QWidget):
             return
         self._section_warning_shown = True
         self._append_log(
-            f"[{self._now_hms()}] Aviso: Control F3 envía comandos reales "
-            "(PING/STAT/THROTTLE/STAT_RATE/REBOOT). Reinicio suave puede cortar conectividad temporalmente."
+            f"[{self._now_hms()}] Aviso: Este panel envía comandos reales "
+            "(Ping, Solicitar STAT, Throttle, STAT rate, Reinicio suave). El reinicio puede interrumpir conectividad temporalmente."
         )
         if callable(self._on_notify):
             self._on_notify(
-                title="Control F3 — Comandos reales",
+                title="Comandos de nodo — Atención",
                 message=(
-                    "Este panel envía comandos reales a nodos del runtime. "
-                    "PING y STAT son diagnósticos; reboot puede interrumpir conectividad brevemente."
+                    "Este panel envía comandos reales a los nodos conectados. "
+                    "Ping y STAT son diagnósticos; el reinicio suave puede interrumpir conectividad brevemente."
                 ),
                 level="warning",
                 duration_ms=7000,
@@ -390,7 +390,7 @@ class ControlPlanePanel(QWidget):
             return
         QMessageBox.information(
             self,
-            "Control F3",
+            "Comandos de nodo",
             (
                 "Este panel envía comandos reales a nodos del runtime.\n\n"
                 "- PING y Solicitar STAT son diagnósticos.\n"
