@@ -10,8 +10,9 @@ Rama: `desarrollo-fase-2`
 | Ítem | Estado |
 | --- | --- |
 | `python -m compileall src main.py` | PASA |
-| `pytest` completo (467 tests) | PASA — 0 fallos |
-| Fallo preexistente `test_profile_mode_consistency` | RESUELTO — test actualizado para buscar `QAction` en vez de `QPushButton` (la acción "Cambiar perfil" vive en el menú, no como botón standalone) |
+| `pytest` completo (491 tests) | PASA — 491/491, 0 fallos (estado post-34.8) |
+| Fallo preexistente `test_profile_mode_consistency` | RESUELTO en 34.3 |
+| Fallos pre-existentes `test_artifact_agent_service` (9) | RESUELTO en 34.8 — `_extract_build_profile` y `_extract_default_target_kind` ya manejan defines indirectos (`ACTIVE_MODE OKUA_DEFAULT_ACTIVE_MODE`, `ACTIVE_SENSOR OKUA_DEFAULT_ACTIVE_SENSOR`) |
 
 ---
 

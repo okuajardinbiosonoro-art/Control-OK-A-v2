@@ -1073,32 +1073,70 @@ class ArtifactAgentService:
 
     @staticmethod
     def _extract_build_profile(source_text: str) -> str:
-        match = re.search(
+        _DIRECT = re.compile(
             r"^\s*#define\s+ACTIVE_MODE\s+(?P<value>MODE_TEST|MODE_FIELD)\s*$",
+            re.MULTILINE,
+        )
+        direct = _DIRECT.search(source_text)
+        if direct is not None:
+            return "field" if direct.group("value") == "MODE_FIELD" else "test"
+
+        # Indirect define: #define ACTIVE_MODE <SYMBOL> then #define <SYMBOL> MODE_TEST|MODE_FIELD
+        indirect = re.search(
+            r"^\s*#define\s+ACTIVE_MODE\s+(?P<symbol>[A-Za-z_][A-Za-z0-9_]*)\s*$",
             source_text,
             re.MULTILINE,
         )
-        if match is None:
-            raise ArtifactAgentValidationError(
-                "No se pudo resolver ACTIVE_MODE desde el firmware actual."
+        if indirect is not None:
+            symbol = re.escape(indirect.group("symbol"))
+            resolved = re.search(
+                rf"^\s*#define\s+{symbol}\s+(?P<value>MODE_TEST|MODE_FIELD)\s*$",
+                source_text,
+                re.MULTILINE,
             )
-        return "field" if match.group("value") == "MODE_FIELD" else "test"
+            if resolved is not None:
+                return "field" if resolved.group("value") == "MODE_FIELD" else "test"
+
+        raise ArtifactAgentValidationError(
+            "No se pudo resolver ACTIVE_MODE desde el firmware actual."
+        )
 
     @staticmethod
     def _extract_default_target_kind(source_text: str) -> FirmwareTargetKind:
-        match = re.search(
+        _DIRECT = re.compile(
             r"^\s*#define\s+ACTIVE_SENSOR\s+(?P<value>SENSOR_PLANT|SENSOR_FRUIT)\s*$",
+            re.MULTILINE,
+        )
+        direct = _DIRECT.search(source_text)
+        if direct is not None:
+            return (
+                FirmwareTargetKind.FRUIT
+                if direct.group("value") == "SENSOR_FRUIT"
+                else FirmwareTargetKind.PLANT
+            )
+
+        # Indirect define: #define ACTIVE_SENSOR <SYMBOL> then #define <SYMBOL> SENSOR_*
+        indirect = re.search(
+            r"^\s*#define\s+ACTIVE_SENSOR\s+(?P<symbol>[A-Za-z_][A-Za-z0-9_]*)\s*$",
             source_text,
             re.MULTILINE,
         )
-        if match is None:
-            raise ArtifactAgentValidationError(
-                "No se pudo resolver ACTIVE_SENSOR desde el firmware actual."
+        if indirect is not None:
+            symbol = re.escape(indirect.group("symbol"))
+            resolved = re.search(
+                rf"^\s*#define\s+{symbol}\s+(?P<value>SENSOR_PLANT|SENSOR_FRUIT)\s*$",
+                source_text,
+                re.MULTILINE,
             )
-        return (
-            FirmwareTargetKind.FRUIT
-            if match.group("value") == "SENSOR_FRUIT"
-            else FirmwareTargetKind.PLANT
+            if resolved is not None:
+                return (
+                    FirmwareTargetKind.FRUIT
+                    if resolved.group("value") == "SENSOR_FRUIT"
+                    else FirmwareTargetKind.PLANT
+                )
+
+        raise ArtifactAgentValidationError(
+            "No se pudo resolver ACTIVE_SENSOR desde el firmware actual."
         )
 
     @staticmethod
