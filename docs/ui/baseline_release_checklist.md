@@ -1,7 +1,7 @@
 # Checklist de cierre técnico de baseline — Control OKÚA CKv2
 
 Rama: `desarrollo-fase-2`  
-Última actualización: 2026-04-16 (Ticket 34.8 — freeze RC funcional + handoff)
+Última actualización: 2026-04-16 (Ticket 35.0-correctivo — paquete documental alineado)
 
 ---
 
@@ -22,7 +22,7 @@ Rama: `desarrollo-fase-2`
 | --- | --- |
 | Icono runtime (`app_icon_path()`) | CORRECTO — prioriza `assets/branding/okua_app_icon.ico` |
 | Spec principal (`ControlOkuaV2.spec`) | CORRECTO — nombre `"Control OKÚA CKv2"`, icono apunta a `assets/branding/` |
-| Spec debug (`ControlOkuaV2.debug.spec`) | LOCAL/GITIGNOREADO — existe en disco pero no está comprometido en git (`.gitignore: *.spec`); evaluar si comprometer o eliminar antes del release final |
+| Spec debug (`ControlOkuaV2.debug.spec`) | LOCAL/GITIGNOREADO — herramienta local de builds de depuración; no comprometer ni distribuir; decisión cerrada en 35.0-correctivo |
 | `Control OKUA v2.spec` | ELIMINADO en 34.8 — ya no existe en el repo |
 | `Control Okua Debug.spec` | GITIGNOREADO — no comprometido; apuntaba a `assets/icons/` inexistente; no usar |
 | `APP_DISPLAY_NAME` / `APP_ABOUT_NAME` en `design_system.py` | CORRECTO — `"Control OKÚA · CKv2"` / `"Control OKÚA CKv2"` |
@@ -88,7 +88,7 @@ Ver acta completa en `docs/ui/baseline_functional_qa_execution.md` (sección "Va
 
 ## Qué queda para tag de release final (no bloqueante para RC)
 
-- Decidir destino de `ControlOkuaV2.debug.spec` (gitignoreado — comprometer o eliminar)
+- ~~Decidir destino de `ControlOkuaV2.debug.spec`~~ — CERRADO en 35.0-correctivo: mantener gitignoreado como herramienta local de depuración
 - Decidir destino de 4 QActions huérfanos en menú (`view_diagnostics_action`, `toggle_preflight_action`, `firmware_manager_action`, `advanced_tools_action`)
 - Confirmación visual interactiva del mapa por José David (click en cajas, CTA "Ver nodos")
 - QA funcional de pantalla Firmware (catálogo, despliegue) end-to-end

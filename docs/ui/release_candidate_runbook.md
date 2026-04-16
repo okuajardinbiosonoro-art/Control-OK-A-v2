@@ -1,7 +1,7 @@
 # Runbook operativo — Control OKÚA CKv2 — RC Funcional
 
 Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-16 (Ticket 35.0)  
+Fecha: 2026-04-16 (Ticket 35.0 — actualizado en 35.0-correctivo)  
 Audiencia: José David — uso controlado en instalación OKÚA
 
 > Este documento es la guía de operación de campo. Para contexto de validación, deuda residual y decisión RC ver [`release_candidate_handoff.md`](release_candidate_handoff.md).
@@ -26,8 +26,14 @@ Ejecutar antes de cada sesión. Son 7 verificaciones; si alguna falla, ver §4 (
 
 ## 2 — Arranque
 
+### Artefacto principal de esta RC
+
+**Ruta principal recomendada: `python main.py` desde el repositorio en `desarrollo-fase-2`.**
+
+Esta RC fue validada íntegramente desde fuente. No se requiere el ejecutable empaquetado para uso controlado. El `.exe` generado por PyInstaller (`ControlOkuaV2.spec`) es una alternativa secundaria para distribución futura; no es la ruta operativa validada de esta RC.
+
 ```bash
-# Desde la raíz del repositorio
+# Desde la raíz del repositorio (rama desarrollo-fase-2)
 python main.py
 ```
 
@@ -138,7 +144,7 @@ python -m pytest tests/ -q
 python main.py
 ```
 
-> El último commit verificado de la RC es `0945466` (Ticket 34.8-correctivo). `491/491` tests pasan.
+> El último commit verificado de la RC es `75943c3` (Ticket 35.0 — runbook operativo). `491/491` tests pasan.
 
 ---
 

@@ -1,7 +1,7 @@
 # Paquete de entrega — Release Candidate Funcional — Control OKÚA CKv2
 
 Rama: `desarrollo-fase-2`  
-Fecha de freeze: 2026-04-16 (Ticket 34.8)  
+Fecha de freeze: 2026-04-16 (Ticket 34.8 — paquete documental cerrado en 35.0-correctivo)  
 Estado: **Release Candidate Funcional**
 
 ---
@@ -63,6 +63,11 @@ loopMIDI (o equivalente) con al menos un puerto MIDI virtual abierto
 config.json con perfil activo configurado (ver config.example.json)
 ```
 
+### Artefacto principal
+
+**Ruta principal: `python main.py` desde el repositorio en `desarrollo-fase-2`.**  
+El `.exe` empaquetado (`ControlOkuaV2.spec`) es alternativa secundaria para distribución futura. Esta RC fue validada desde fuente.
+
 ### Arranque
 
 ```bash
@@ -121,7 +126,7 @@ El perfil activo se configura en `config.json` bajo `"profile": {"active": "<id>
 |------|-------------|
 | QA funcional de pantalla Firmware | Catálogo, importación, despliegue OTA end-to-end |
 | Campaña OTA end-to-end | Requiere firmware compatible en nodos |
-| `ControlOkuaV2.debug.spec` | Está gitignoreado — revisar si debe comprometerse o eliminarse |
+| `ControlOkuaV2.debug.spec` | Gitignoreado — herramienta local de builds de depuración; no comprometer ni distribuir |
 
 ### Deuda de firmware (independiente de RC GUI)
 
