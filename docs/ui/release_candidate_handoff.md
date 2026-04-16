@@ -98,7 +98,7 @@ El perfil activo se configura en `config.json` bajo `"profile": {"active": "<id>
 ## Precauciones de uso controlado
 
 1. **No es un release de producción masivo.** Es la RC validada para uso interno/controlado de José David.
-2. **No usar los specs legacy** (`Control OKUA v2.spec`, `Control Okua Debug.spec`) — fueron eliminados del repo. El spec válido es `ControlOkuaV2.spec`.
+2. **No usar los specs legacy** — `Control OKUA v2.spec` fue eliminado del repo en 34.8; `Control Okua Debug.spec` siempre estuvo gitignoreado. El spec válido para builds es `ControlOkuaV2.spec`.
 3. **El perfil `lab_sim` es de laboratorio** — no esperar nodos reales con él.
 4. **La validación visual interactiva del mapa** (click en cajas, CTA "Ver nodos") quedó pendiente de confirmación por José David en sesión interactiva.
 5. **Cambios no comprometidos en el working tree** (`.vscode`, `firmware`, `ota_deploy_dialog`, `remote_auth_service`) son trabajo en curso de José David — no forman parte de esta RC.

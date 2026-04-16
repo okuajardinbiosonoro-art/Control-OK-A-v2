@@ -1,7 +1,7 @@
 # Checklist de cierre técnico de baseline — Control OKÚA CKv2
 
 Rama: `desarrollo-fase-2`  
-Última actualización: 2026-04-16 (Ticket 34.7 — validación operativa real + decisión RC)
+Última actualización: 2026-04-16 (Ticket 34.8 — freeze RC funcional + handoff)
 
 ---
 
@@ -22,8 +22,9 @@ Rama: `desarrollo-fase-2`
 | --- | --- |
 | Icono runtime (`app_icon_path()`) | CORRECTO — prioriza `assets/branding/okua_app_icon.ico` |
 | Spec principal (`ControlOkuaV2.spec`) | CORRECTO — nombre `"Control OKÚA CKv2"`, icono apunta a `assets/branding/` |
-| Spec debug (`ControlOkuaV2.debug.spec`) | CORRECTO — nombre `"Control OKÚA CKv2 (debug)"`, icono actualizado a `assets/branding/` |
-| Specs obsoletos (`Control OKUA v2.spec`, `Control Okua Debug.spec`) | LEGACY — apuntan a `assets/icons/` que ya no existe; no usar para builds; candidatos a borrar en release final |
+| Spec debug (`ControlOkuaV2.debug.spec`) | LOCAL/GITIGNOREADO — existe en disco pero no está comprometido en git (`.gitignore: *.spec`); evaluar si comprometer o eliminar antes del release final |
+| `Control OKUA v2.spec` | ELIMINADO en 34.8 — ya no existe en el repo |
+| `Control Okua Debug.spec` | GITIGNOREADO — no comprometido; apuntaba a `assets/icons/` inexistente; no usar |
 | `APP_DISPLAY_NAME` / `APP_ABOUT_NAME` en `design_system.py` | CORRECTO — `"Control OKÚA · CKv2"` / `"Control OKÚA CKv2"` |
 | Build de packaging (Ticket 34.3) | EXITOSO — `dist/Control OKÚA CKv2.exe` generado con PyInstaller 6.19.0 |
 
@@ -87,8 +88,9 @@ Ver acta completa en `docs/ui/baseline_functional_qa_execution.md` (sección "Va
 
 ## Qué queda para tag de release final (no bloqueante para RC)
 
-- Eliminar specs obsoletos (`Control OKUA v2.spec`, `Control Okua Debug.spec`) antes del tag de release
-- Decidir destino de 4 QActions huérfanos en menú (ver QA report)
+- Decidir destino de `ControlOkuaV2.debug.spec` (gitignoreado — comprometer o eliminar)
+- Decidir destino de 4 QActions huérfanos en menú (`view_diagnostics_action`, `toggle_preflight_action`, `firmware_manager_action`, `advanced_tools_action`)
+- Confirmación visual interactiva del mapa por José David (click en cajas, CTA "Ver nodos")
 - QA funcional de pantalla Firmware (catálogo, despliegue) end-to-end
 - Test de campaña OTA end-to-end con hardware real
 
