@@ -282,15 +282,6 @@ class MainWindow(QMainWindow):
 
         self.view_state_action = QAction("Estado de sesión", self)
         self.view_state_action.triggered.connect(self.show_session_details_dialog)
-        self.view_diagnostics_action = QAction("Diagnóstico", self)
-        self.view_diagnostics_action.triggered.connect(self.show_diagnostics_tab)
-        self.toggle_preflight_action = QAction("Chequeos previos", self)
-        self.toggle_preflight_action.setCheckable(True)
-        self.toggle_preflight_action.toggled.connect(self._on_preflight_toggle_action)
-        self.firmware_manager_action = QAction("Gestor de firmware", self)
-        self.firmware_manager_action.triggered.connect(self.open_firmware_manager)
-        self.advanced_tools_action = QAction("Herramientas avanzadas", self)
-        self.advanced_tools_action.triggered.connect(self.open_advanced_tools)
 
         help_menu = menu_bar.addMenu("Ayuda")
         self.about_action = QAction("Acerca de", self)
@@ -1035,8 +1026,6 @@ class MainWindow(QMainWindow):
         self.change_profile_button.setEnabled(session_action_state.can_edit_configuration)
         self.change_profile_action.setEnabled(session_action_state.can_edit_configuration)
         self.reload_action.setEnabled(session_action_state.can_edit_configuration)
-        self.firmware_manager_action.setEnabled(True)
-        self.advanced_tools_action.setEnabled(True)
 
         if self.warnings:
             self.warnings_view.setPlainText("\n".join(self.warnings))
@@ -1580,18 +1569,11 @@ class MainWindow(QMainWindow):
     def _on_preflight_toggle_button(self, checked: bool) -> None:
         self._set_preflight_panel_visible(checked)
 
-    def _on_preflight_toggle_action(self, checked: bool) -> None:
-        if checked:
-            self.show_diagnostics_tab()
-        self._set_preflight_panel_visible(checked)
-
     def _set_preflight_panel_visible(self, visible: bool) -> None:
         self._preflight_panel_visible = bool(visible)
         self.preflight_group.setVisible(self._preflight_panel_visible)
         if self.preflight_toggle_button.isChecked() != self._preflight_panel_visible:
             self.preflight_toggle_button.setChecked(self._preflight_panel_visible)
-        if self.toggle_preflight_action.isChecked() != self._preflight_panel_visible:
-            self.toggle_preflight_action.setChecked(self._preflight_panel_visible)
 
     def _update_preflight_toggle_caption(self, findings_count: int) -> None:
         if findings_count > 0:
@@ -1603,7 +1585,6 @@ class MainWindow(QMainWindow):
         else:
             button_text = f"Ver {base.lower()}"
         self.preflight_toggle_button.setText(button_text)
-        self.toggle_preflight_action.setText(base)
 
     def _is_runtime_view_visible(self) -> bool:
         current_widget = self.tabs.currentWidget()
