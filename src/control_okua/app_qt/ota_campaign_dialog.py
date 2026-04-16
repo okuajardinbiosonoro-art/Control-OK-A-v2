@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
+    QAbstractSpinBox,
     QAbstractItemView,
     QComboBox,
     QDialog,
-    QFormLayout,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -20,7 +20,9 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
+    QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
@@ -104,6 +106,8 @@ class OtaCampaignDialog(QDialog):
 
     def _build_ui(self) -> None:
         root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(12, 12, 12, 12)
+        root_layout.setSpacing(8)
 
         intro = QLabel(
             "Actualización por olas con validación previa. "
@@ -112,20 +116,56 @@ class OtaCampaignDialog(QDialog):
         intro.setWordWrap(True)
         root_layout.addWidget(intro)
 
+        self._main_splitter = QSplitter(Qt.Orientation.Vertical, self)
+        self._main_splitter.setObjectName("otaCampaignMainSplitter")
+        self._main_splitter.setChildrenCollapsible(False)
+
+        config_pane = QWidget(self)
+        config_pane.setObjectName("otaCampaignConfigPane")
+        config_pane_layout = QVBoxLayout(config_pane)
+        config_pane_layout.setContentsMargins(0, 0, 0, 0)
+        config_pane_layout.setSpacing(10)
+
         config_grid = QGridLayout()
+        config_grid.setHorizontalSpacing(14)
+        config_grid.setVerticalSpacing(14)
         config_grid.setColumnStretch(0, 1)
         config_grid.setColumnStretch(1, 1)
-        config_grid.addWidget(self._build_artifact_group(), 0, 0)
-        config_grid.addWidget(self._build_campaign_nodes_group(), 0, 1)
+        artifact_group = self._build_artifact_group()
+        nodes_group = self._build_campaign_nodes_group()
+        _TOP_ROW_MAX_HEIGHT = 220
+        artifact_group.setMaximumHeight(_TOP_ROW_MAX_HEIGHT)
+        nodes_group.setMaximumHeight(_TOP_ROW_MAX_HEIGHT)
+        config_grid.addWidget(artifact_group, 0, 0)
+        config_grid.addWidget(nodes_group, 0, 1)
         config_grid.addWidget(self._build_canary_group(), 1, 0)
         config_grid.addWidget(self._build_rollout_group(), 1, 1)
-        root_layout.addLayout(config_grid)
+        config_pane_layout.addLayout(config_grid)
 
-        self.wave_preview_label = QLabel("Configura los nodos para ver la distribución de olas.", self)
+        self.wave_preview_label = QLabel(
+            "Configura los nodos para ver la distribución de olas.",
+            self,
+        )
         self.wave_preview_label.setWordWrap(True)
-        root_layout.addWidget(self.wave_preview_label)
+        config_pane_layout.addWidget(self.wave_preview_label)
+        config_pane_layout.addWidget(self._build_actions_bar())
 
+        self._main_splitter.addWidget(config_pane)
+        self._main_splitter.addWidget(self._build_result_group())
+        self._main_splitter.setStretchFactor(0, 0)
+        self._main_splitter.setStretchFactor(1, 1)
+
+        root_layout.addWidget(self._main_splitter, 1)
+        self._update_action_state()
+
+    def _build_actions_bar(self) -> QWidget:
+        actions_host = QWidget(self)
+        actions_host.setObjectName("otaCampaignActionsBar")
         actions_layout = QHBoxLayout()
+        actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setSpacing(8)
+        actions_host.setLayout(actions_layout)
+
         self.start_canary_button = QPushButton("Iniciar primera ola", self)
         self.start_canary_button.clicked.connect(self._on_start_canary_clicked)
         actions_layout.addWidget(self.start_canary_button)
@@ -155,10 +195,14 @@ class OtaCampaignDialog(QDialog):
         self.open_rollout_button.setEnabled(False)
         actions_layout.addWidget(self.open_rollout_button)
         actions_layout.addStretch(1)
-        root_layout.addLayout(actions_layout)
+        return actions_host
 
+    def _build_result_group(self) -> QGroupBox:
         result_group = QGroupBox("Estado de campaña", self)
+        result_group.setObjectName("otaCampaignResultGroup")
         result_layout = QVBoxLayout(result_group)
+        result_layout.setSpacing(8)
+
         self.summary_label = QLabel("Aún no hay campaña OTA en curso.", self)
         self.summary_label.setWordWrap(True)
         result_layout.addWidget(self.summary_label)
@@ -169,6 +213,10 @@ class OtaCampaignDialog(QDialog):
         )
         self.continue_hint_label.setWordWrap(True)
         result_layout.addWidget(self.continue_hint_label)
+
+        self._result_splitter = QSplitter(Qt.Orientation.Vertical, result_group)
+        self._result_splitter.setObjectName("otaCampaignResultSplitter")
+        self._result_splitter.setChildrenCollapsible(False)
 
         self.results_table = QTableWidget(0, 8, self)
         self.results_table.setHorizontalHeaderLabels(
@@ -187,15 +235,38 @@ class OtaCampaignDialog(QDialog):
         self.results_table.setSelectionMode(QAbstractItemView.NoSelection)
         self.results_table.setAlternatingRowColors(True)
         self.results_table.horizontalHeader().setStretchLastSection(True)
-        result_layout.addWidget(self.results_table, 1)
+        self.results_table.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
+        self._result_splitter.addWidget(self.results_table)
 
         self.details_edit = QTextEdit(self)
         self.details_edit.setReadOnly(True)
-        self.details_edit.setMinimumHeight(200)
-        result_layout.addWidget(self.details_edit)
-        root_layout.addWidget(result_group, 1)
+        self.details_edit.setObjectName("otaCampaignDetails")
+        self.details_edit.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Preferred,
+        )
+        self.details_edit.setVisible(False)
+        self._result_splitter.addWidget(self.details_edit)
+        self._result_splitter.setStretchFactor(0, 4)
+        self._result_splitter.setStretchFactor(1, 1)
+        result_layout.addWidget(self._result_splitter, 1)
+        return result_group
 
-        self._update_action_state()
+    @staticmethod
+    def _set_responsive_field(
+        widget: QWidget,
+        *,
+        min_width: int,
+        max_width: int | None = None,
+    ) -> None:
+        widget.setMinimumWidth(min_width)
+        if max_width is not None:
+            widget.setMaximumWidth(max_width)
+        widget.setMinimumHeight(max(widget.sizeHint().height(), 30))
+        widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
 
     def _build_artifact_group(self) -> QWidget:
         group = QGroupBox("Firmware", self)
@@ -218,91 +289,199 @@ class OtaCampaignDialog(QDialog):
 
     def _build_campaign_nodes_group(self) -> QWidget:
         group = QGroupBox("Nodos de campaña", self)
+        group.setObjectName("otaCampaignNodesGroup")
+        group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         layout = QVBoxLayout(group)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
 
         self.nodes_list = QListWidget(self)
+        self.nodes_list.setObjectName("otaCampaignNodesList")
         self.nodes_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.nodes_list.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        min_row_height = max(self.fontMetrics().lineSpacing() + 6, 20)
+        self.nodes_list.setMinimumHeight(min_row_height * 3)
+        self.nodes_list.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.nodes_list.itemSelectionChanged.connect(self._on_nodes_selection_changed)
         layout.addWidget(self.nodes_list, 1)
 
-        self.nodes_hint_label = QLabel("Selecciona los nodos que participarán en la campaña.", self)
-        self.nodes_hint_label.setWordWrap(True)
-        layout.addWidget(self.nodes_hint_label)
-
         actions = QHBoxLayout()
+        actions.setContentsMargins(0, 0, 0, 0)
+        actions.setSpacing(8)
         self.reload_nodes_button = QPushButton("Recargar nodos", self)
+        self.reload_nodes_button.setObjectName("otaCampaignReloadNodesButton")
         self.reload_nodes_button.clicked.connect(self.reload_nodes)
         actions.addWidget(self.reload_nodes_button)
         actions.addStretch(1)
         layout.addLayout(actions)
+
+        self.nodes_hint_label = QLabel(
+            "Selecciona los nodos que participarán en la campaña.",
+            self,
+        )
+        self.nodes_hint_label.setObjectName("otaCampaignNodesHint")
+        self.nodes_hint_label.setWordWrap(True)
+        self.nodes_hint_label.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+        )
+        layout.addWidget(self.nodes_hint_label)
         return group
 
     def _build_canary_group(self) -> QWidget:
         group = QGroupBox("Estrategia de olas", self)
-        layout = QFormLayout(group)
+        group.setObjectName("otaCampaignCanaryGroup")
+        group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
+        layout = QVBoxLayout(group)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
+
+        toggle_row = QHBoxLayout()
+        toggle_row.setContentsMargins(0, 0, 0, 0)
+        toggle_row.setSpacing(10)
+        toggle_label = QLabel("Validación previa:", group)
+        toggle_label.setMinimumWidth(
+            max(self.fontMetrics().horizontalAdvance("Validación previa:"), 120)
+        )
+        toggle_row.addWidget(toggle_label)
 
         self.require_canary_checkbox = QPushButton("Validación previa: Activada", self)
         self.require_canary_checkbox.setCheckable(True)
         self.require_canary_checkbox.setChecked(True)
-        self.require_canary_checkbox.setFixedWidth(200)
+        self.require_canary_checkbox.setMinimumWidth(220)
+        self.require_canary_checkbox.setMinimumHeight(
+            max(self.require_canary_checkbox.sizeHint().height(), 30)
+        )
+        self.require_canary_checkbox.setSizePolicy(
+            QSizePolicy.Policy.Preferred,
+            QSizePolicy.Policy.Fixed,
+        )
         self.require_canary_checkbox.toggled.connect(self._on_require_canary_toggled)
-        layout.addRow("Validación previa:", self.require_canary_checkbox)
+        toggle_row.addWidget(self.require_canary_checkbox)
+        toggle_row.addStretch(1)
+        layout.addLayout(toggle_row)
+
+        canary_label = QLabel("Nodos de prueba:", group)
+        canary_label.setObjectName("otaCampaignCanaryNodesLabel")
+        layout.addWidget(canary_label)
 
         self.canary_list = QListWidget(self)
+        self.canary_list.setObjectName("otaCampaignCanaryList")
         self.canary_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.canary_list.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
+        )
+        min_row_height = max(self.fontMetrics().lineSpacing() + 6, 20)
+        self.canary_list.setMinimumHeight(min_row_height * 4)
+        self.canary_list.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.canary_list.itemSelectionChanged.connect(self._update_wave_preview)
-        self.canary_list.setMinimumHeight(180)
-        layout.addRow("Nodos de prueba:", self.canary_list)
+        layout.addWidget(self.canary_list, 1)
+
+        wave_row = QHBoxLayout()
+        wave_row.setContentsMargins(0, 0, 0, 0)
+        wave_row.setSpacing(10)
+        wave_size_label = QLabel("Nodos por ola:", group)
+        wave_size_label.setMinimumWidth(
+            max(self.fontMetrics().horizontalAdvance("Nodos por ola:"), 120)
+        )
+        wave_row.addWidget(wave_size_label)
 
         self.wave_size_spin = QSpinBox(self)
         self.wave_size_spin.setRange(1, 64)
         self.wave_size_spin.setValue(1)
-        self.wave_size_spin.setFixedWidth(70)
+        self.wave_size_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self._set_responsive_field(self.wave_size_spin, min_width=120, max_width=180)
         self.wave_size_spin.valueChanged.connect(self._update_wave_preview)
-        layout.addRow("Nodos por ola:", self.wave_size_spin)
+        wave_row.addWidget(self.wave_size_spin)
+        wave_row.addStretch(1)
+        layout.addLayout(wave_row)
+
+        self.canary_list.setEnabled(self.require_canary_checkbox.isChecked())
         return group
 
     def _build_rollout_group(self) -> QWidget:
         group = QGroupBox("Configuración de red", self)
-        layout = QFormLayout(group)
+        group.setObjectName("otaCampaignRolloutGroup")
+        group.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.MinimumExpanding)
 
-        self.advertise_host_edit = QLineEdit("127.0.0.1", self)
-        self.advertise_host_edit.setFixedWidth(200)
-        layout.addRow("IP accesible por el nodo:", self.advertise_host_edit)
+        layout = QGridLayout(group)
+        layout.setHorizontalSpacing(14)
+        layout.setVerticalSpacing(8)
+        layout.setColumnStretch(0, 0)
+        layout.setColumnStretch(1, 1)
 
-        self.bind_host_edit = QLineEdit("0.0.0.0", self)
-        self.bind_host_edit.setFixedWidth(200)
-        layout.addRow("Dirección local:", self.bind_host_edit)
+        self.advertise_host_edit = QLineEdit("127.0.0.1", group)
+        self._set_responsive_field(self.advertise_host_edit, min_width=200)
 
-        self.port_spin = QSpinBox(self)
+        self.bind_host_edit = QLineEdit("0.0.0.0", group)
+        self._set_responsive_field(self.bind_host_edit, min_width=200)
+
+        self.port_spin = QSpinBox(group)
         self.port_spin.setRange(1, 65535)
         self.port_spin.setValue(8080)
-        self.port_spin.setFixedWidth(100)
-        layout.addRow("Puerto OTA:", self.port_spin)
+        self.port_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self._set_responsive_field(self.port_spin, min_width=200)
 
-        self.rollout_token_edit = QLineEdit(build_default_rollout_token(), self)
-        self.rollout_token_edit.setFixedWidth(300)
-        layout.addRow("Token de actualización:", self.rollout_token_edit)
+        self.rollout_token_edit = QLineEdit(build_default_rollout_token(), group)
+        self._set_responsive_field(self.rollout_token_edit, min_width=200)
 
-        self.rollout_channel_combo = QComboBox(self)
-        self.rollout_channel_combo.setFixedWidth(160)
+        self.rollout_channel_combo = QComboBox(group)
+        self._set_responsive_field(self.rollout_channel_combo, min_width=200)
         self.rollout_channel_combo.addItem("Estable", "stable")
         self.rollout_channel_combo.addItem("Beta", "beta")
         self.rollout_channel_combo.addItem("Situacional", "situational")
-        layout.addRow("Canal:", self.rollout_channel_combo)
 
-        self.ack_timeout_spin = QSpinBox(self)
+        self.ack_timeout_spin = QSpinBox(group)
         self.ack_timeout_spin.setRange(100, 10000)
         self.ack_timeout_spin.setValue(600)
         self.ack_timeout_spin.setSuffix(" ms")
-        self.ack_timeout_spin.setFixedWidth(100)
-        layout.addRow("Tiempo de respuesta:", self.ack_timeout_spin)
+        self.ack_timeout_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self._set_responsive_field(self.ack_timeout_spin, min_width=200)
 
-        self.max_retries_spin = QSpinBox(self)
+        self.max_retries_spin = QSpinBox(group)
         self.max_retries_spin.setRange(0, 3)
         self.max_retries_spin.setValue(0)
-        self.max_retries_spin.setFixedWidth(70)
-        layout.addRow("Reintentos:", self.max_retries_spin)
+        self.max_retries_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self._set_responsive_field(self.max_retries_spin, min_width=200)
+
+        row_specs = [
+            ("IP accesible por el nodo:", self.advertise_host_edit),
+            ("Dirección local:", self.bind_host_edit),
+            ("Puerto OTA:", self.port_spin),
+            ("Token de actualización:", self.rollout_token_edit),
+            ("Canal:", self.rollout_channel_combo),
+            ("Tiempo de respuesta:", self.ack_timeout_spin),
+            ("Reintentos:", self.max_retries_spin),
+        ]
+        label_width = (
+            max(self.fontMetrics().horizontalAdvance(text) for text, _ in row_specs) + 12
+        )
+        label_row_min = max(self.fontMetrics().height() + 4, 22)
+        row_min_heights: list[int] = []
+        for row_index, (text, field_widget) in enumerate(row_specs):
+            label = QLabel(text, group)
+            label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+            label.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            label.setMinimumWidth(label_width)
+            label.setMinimumHeight(label_row_min)
+            layout.addWidget(
+                label,
+                row_index,
+                0,
+                1,
+                1,
+                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+            )
+            layout.addWidget(field_widget, row_index, 1, 1, 1)
+            row_height = max(field_widget.minimumHeight(), label_row_min)
+            layout.setRowMinimumHeight(row_index, row_height)
+            row_min_heights.append(row_height)
+
+        num_rows = len(row_min_heights)
+        content_min_h = sum(row_min_heights) + (num_rows - 1) * layout.verticalSpacing()
+        _HEADER_V = 64
+        group.setMinimumHeight(content_min_h + _HEADER_V)
         return group
 
     def reload_artifacts(self) -> None:
@@ -402,6 +581,7 @@ class OtaCampaignDialog(QDialog):
         self.require_canary_checkbox.setText(
             "Validación previa: Activada" if checked else "Validación previa: Desactivada"
         )
+        self.canary_list.setEnabled(checked)
         self._update_wave_preview()
         self._update_action_state()
 
@@ -581,6 +761,15 @@ class OtaCampaignDialog(QDialog):
         self.summary_label.setText(build_ota_campaign_result_summary(result))
         self.continue_hint_label.setText(build_ota_campaign_continue_hint(result))
         self.details_edit.setPlainText(build_ota_campaign_result_details(result))
+
+        if not self.details_edit.isVisible():
+            self.details_edit.setVisible(True)
+            total = self._result_splitter.height()
+            if total > 0:
+                table_h = max(80, int(total * 0.75))
+                details_h = max(60, total - table_h)
+                self._result_splitter.setSizes([table_h, details_h])
+
         self.results_table.setRowCount(len(rows))
         for row_index, row in enumerate(rows):
             values = (
