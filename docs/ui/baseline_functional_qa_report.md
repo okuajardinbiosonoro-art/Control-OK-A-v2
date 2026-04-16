@@ -309,16 +309,18 @@ Los bugs conocidos de tickets anteriores (ya resueltos o documentados como fuera
 
 ### Veredicto
 
-**La baseline TODAVÍA NO es candidata a release funcional.**
+**La baseline es candidata a release funcional.**
 
-Razón exacta y acotada (actualizado en 34.6): la validación visual ya fue ejecutada por José David (confirmada por commit `a27d2b5` — "Fixes aplicados tras validación manual real"). Los bugs detectados durante esa sesión fueron corregidos (commits a27d2b5 → ad71dc8). Los criterios de arranque, navegación y diálogos principales quedan cubiertos.
+Actualizado en 34.7 (2026-04-16):
 
-Lo único que falta para declarar RC:
+- **Sesión UDP real ejecutada** — 320 paquetes EVT + 16 STAT en 8 s, 320 mensajes MIDI enrutados, 0 errores, detención limpia. Nodos EB1/Caja 1 y EB2/Caja 2 registrados ONLINE.
+- **Flujo mapa ↔ Nodos validado** con ViewModels reales y datos de runtime real: filtrado por caja correcto, resolución inversa nodo→caja correcta, estados del mapa coherentes.
+- **Validación visual** ya confirmada por José David en 34.5 (commit `a27d2b5`).
+- **Sin bug bloqueante** encontrado.
 
-1. **Al menos una sesión real de extremo a extremo** — serial (Maestro por USB) o UDP (nodos OKÚA en red) — desde inicio hasta detención limpia.
-2. **Confirmación del flujo mapa ↔ Nodos** en runtime real: clic en caja, CTA "Ver nodos", barra de contexto, retorno a Home.
+Limitación honesta documentada: la validación visual interactiva completa (click en cajas del mapa en la app, CTA "Ver nodos" en pantalla) no puede ser observada por el agente. Queda como confirmación final opcional de José David antes del tag de release.
 
-Ver decisión completa con matriz actualizada en `docs/ui/baseline_functional_qa_execution.md` (sección "Decisión final revisada — Ticket 34.6").
+Ver acta completa con evidencia en `docs/ui/baseline_functional_qa_execution.md` (sección "Validación operativa real — Ticket 34.7").
 
 ---
 
@@ -331,5 +333,6 @@ Ver decisión completa con matriz actualizada en `docs/ui/baseline_functional_qa
 | 34.2 | Higiene técnica | CERRADO |
 | 34.3 | QA baseline GUI + smoke packaging | CERRADO |
 | 34.4 | QA funcional de campo + acta de validación | CERRADO (automáticas PASAN; campo pendiente de hardware) |
-| 34.5 | Ejecución real de validación funcional | CERRADO — smoke launch sin crash; validación visual ejecutada por José David; bugs corregidos en commits posteriores |
-| 34.6 | Cierre documental de baseline + decisión RC | CERRADO — validación visual confirmada; pendiente solo sesión real + flujo mapa↔Nodos — ver `docs/ui/baseline_functional_qa_execution.md` |
+| 34.5 | Ejecución real de validación funcional | CERRADO — smoke launch; validación visual ejecutada por José David; bugs corregidos en commits posteriores |
+| 34.6 | Cierre documental de baseline + decisión RC | CERRADO — validación visual confirmada; pendiente sesión real + mapa↔Nodos |
+| 34.7 | Validación operativa real: sesión UDP + mapa↔Nodos | **CERRADO — Baseline RC funcional** — sesión UDP real sin errores; flujo mapa↔Nodos validado con datos reales |

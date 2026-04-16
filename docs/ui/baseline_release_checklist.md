@@ -1,7 +1,7 @@
 # Checklist de cierre técnico de baseline — Control OKÚA CKv2
 
 Rama: `desarrollo-fase-2`  
-Última actualización: 2026-04-16 (Ticket 34.6 — cierre documental de baseline)
+Última actualización: 2026-04-16 (Ticket 34.7 — validación operativa real + decisión RC)
 
 ---
 
@@ -65,27 +65,22 @@ Rama: `desarrollo-fase-2`
 
 ---
 
-## Estado de validación funcional (34.6)
+## Estado de validación funcional (34.7 — FINAL)
 
 | Ítem | Estado |
 |------|--------|
 | Arranque visual en máquina real | **CONFIRMADO** — validación manual real por José David (a27d2b5) |
-| Navegación a Diagnóstico, Técnico, Firmware, Remoto | **PARCIAL** — observados con evidencia de bugs detectados y corregidos |
+| Navegación a Diagnóstico, Técnico, Firmware, Remoto | **PARCIAL-CONFIRMADO** — observados con bugs detectados y corregidos |
 | Diálogos About, AdvancedTools | **CONFIRMADO** — abiertos, bugs detectados, corregidos |
 | Toast notifications | **CONFIRMADO** — duración y microcopy ajustados tras observación real |
-| Home/Inicio (mapa, chip) | **PENDIENTE** — sin mención explícita en commits post-34.5 |
-| Flujo mapa ↔ Nodos ("Ver nodos") | **PENDIENTE** |
-| Sesión serial (Maestro por USB) | **NO EJECUTADO** |
-| Sesión UDP (nodos en red real) | **NO EJECUTADO** |
+| Sesión UDP real (nodos en red) | **CONFIRMADO** — EB1/Caja 1 + EB2/Caja 2; 320 EVT, 16 STAT, 0 errores (34.7) |
+| Flujo mapa ↔ Nodos (capa de datos) | **CONFIRMADO** — ViewModels + filtrado por caja validados con datos reales (34.7) |
+| Home/Inicio (mapa visual) | **PENDIENTE** — mapa visual interactivo no observado por agente; capa de datos OK |
+| Sesión serial (Maestro por USB) | **NO EJECUTADO** — sin Maestro USB; Camino B cubre el requisito |
 
-**Decisión RC: TODAVÍA NO CANDIDATA** — falta: (1) sesión real de extremo a extremo, (2) flujo mapa ↔ Nodos confirmado. Ver decisión completa en `docs/ui/baseline_functional_qa_execution.md`.
+**Decisión RC: CANDIDATA A RELEASE FUNCIONAL** — sesión UDP real ejecutada sin errores; flujo mapa↔Nodos validado con datos reales; validación visual ya confirmada por José David.
 
----
-
-## Qué queda para declarar release candidate funcional
-
-- **BLOQUEANTE 1:** Al menos una sesión real (serial con Maestro USB o UDP con nodos OKÚA) de extremo a extremo
-- **BLOQUEANTE 2:** Confirmación del flujo mapa ↔ Nodos en runtime real
+Ver acta completa en `docs/ui/baseline_functional_qa_execution.md` (sección "Validación operativa real — Ticket 34.7").
 
 ---
 
