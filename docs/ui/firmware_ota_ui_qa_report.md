@@ -15,7 +15,7 @@ Tipo: QA funcional de UI/flujo — sin hardware OTA real
 | OTA Campaign | `src/control_okua/app_qt/ota_campaign_dialog.py` |
 | ViewModels Firmware | `src/control_okua/app_qt/viewmodels/firmware_manager_vm.py` |
 | ViewModels OTA | `src/control_okua/app_qt/viewmodels/ota_deploy_vm.py`, `ota_campaign_vm.py` |
-| Tests | `tests/test_ota_dialog_layout.py`, `test_ota_campaign_dialog_layout.py`, `test_firmware_manager_vm.py`, `test_ota_deploy_vm.py`, `test_ota_campaign_vm.py` |
+| Tests | `tests/test_firmware_manager_dialog_ui.py`, `tests/test_ota_dialog_layout.py`, `test_ota_campaign_dialog_layout.py`, `test_firmware_manager_vm.py`, `test_ota_deploy_vm.py`, `test_ota_campaign_vm.py` |
 
 ---
 
@@ -35,6 +35,8 @@ Tipo: QA funcional de UI/flujo — sin hardware OTA real
 | FM-10 | Texto de confirmación al borrar | PASA — muestra nombre, artifact_id, ruta y advertencia de disco |
 | FM-11 | "Abrir carpeta del firmware" | PASA — `_open_managed_store_folder` crea el directorio si no existe y abre el explorador |
 | FM-12 | Notify sin `_on_notify` externo | PASA — fallback a `QMessageBox.warning` / `.information` según nivel |
+| FM-13 | Apertura desde el shell principal | PASA — `open_firmware_manager()` mantiene la instancia modeless, refresca catálogo y reusa la misma ventana |
+| FM-14 | Handoff a OTA Deploy / Campaign | PASA — `preselected_artifact_id` viaja intacto a ambos diálogos al partir desde una selección de firmware |
 
 ---
 
@@ -116,18 +118,21 @@ Ninguno. El único bug detectado fue BUG-1, ya corregido en working tree.
 ## Pruebas automáticas ejecutadas
 
 ```
-PYTHONPATH=src python -m pytest tests/test_ota_dialog_layout.py tests/test_ota_campaign_dialog_layout.py tests/test_ota_campaign_vm.py tests/test_ota_deploy_vm.py tests/test_firmware_manager_vm.py -v
+PYTHONPATH=src python -m pytest tests/test_firmware_manager_dialog_ui.py tests/test_ota_dialog_layout.py tests/test_ota_campaign_dialog_layout.py tests/test_ota_campaign_vm.py tests/test_ota_deploy_vm.py tests/test_firmware_manager_vm.py -v
 ```
 
-**Resultado: 35/35 PASAN**
+**Resultado: 39/39 PASAN**
 
 | Módulo | Tests | Resultado |
 |--------|-------|---------|
+| `test_firmware_manager_dialog_ui.py` | 3 | PASAN |
 | `test_ota_dialog_layout.py` | 15 | PASAN |
 | `test_ota_campaign_dialog_layout.py` | 10 | PASAN |
 | `test_ota_campaign_vm.py` | 2 | PASAN |
 | `test_ota_deploy_vm.py` | 4 | PASAN |
 | `test_firmware_manager_vm.py` | 5 | PASAN |
+
+Validación adicional de regresión: `tests/test_main_window_nodes_layout.py` también pasó en esta ejecución para confirmar que el shell principal no se degradó al abrir Firmware Manager.
 
 `python -m compileall src main.py` — **PASA**
 
@@ -135,4 +140,4 @@ PYTHONPATH=src python -m pytest tests/test_ota_dialog_layout.py tests/test_ota_c
 
 ## Estado documental
 
-- `baseline_release_checklist.md` → ítem "QA funcional de pantalla Firmware" marcado como EJECUTADO en 35.2
+- `baseline_release_checklist.md` → ítem "QA funcional de Firmware Manager / OTA UI" marcado como EJECUTADO en 35.2

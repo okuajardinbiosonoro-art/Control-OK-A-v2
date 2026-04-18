@@ -1,7 +1,7 @@
 # Checklist de cierre técnico de baseline — Control OKÚA CKv2
 
 Rama: `desarrollo-fase-2`  
-Última actualización: 2026-04-16 (Ticket 35.0-correctivo — paquete documental alineado)
+Última actualización: 2026-04-17 (Ticket 35.2 — QA Firmware/OTA UI alineado)
 
 ---
 
@@ -91,7 +91,7 @@ Ver acta completa en `docs/ui/baseline_functional_qa_execution.md` (sección "Va
 - ~~Decidir destino de `ControlOkuaV2.debug.spec`~~ — CERRADO en 35.0-correctivo: mantener gitignoreado como herramienta local de depuración
 - ~~4 QActions huérfanos en menú~~ — ELIMINADOS en 35.1: `view_diagnostics_action`, `toggle_preflight_action`, `firmware_manager_action`, `advanced_tools_action` eliminados de `main_window.py`; referencias residuales limpiadas
 - Confirmación visual interactiva del mapa por José David (click en cajas, CTA "Ver nodos")
-- ~~QA funcional de pantalla Firmware (catálogo, despliegue)~~ — UI/flujo EJECUTADO en 35.2; end-to-end OTA real pendiente de hardware compatible
+- ~~QA funcional de Firmware Manager / OTA UI (catálogo, campaña, despliegue)~~ — UI/flujo EJECUTADO en 35.2; end-to-end OTA real pendiente de hardware compatible
 - Test de campaña OTA end-to-end con hardware real — pendiente de hardware
 
 ---
