@@ -2,127 +2,126 @@
 
 Rama: `desarrollo-fase-2`  
 Fecha: 2026-04-18 (Ticket 35.6)  
-Clasificación: **NO EJECUTADO por falta de entorno real (agente CLI)**
+Clasificación: **PASA con observaciones menores**
 
 ---
 
-## Por qué existe este documento
+## Resumen ejecutivo
 
-El Ticket 35.6 exige validación de Campaña OTA (wave-by-wave con health gates) con hardware real. Esto es distinto a:
+Se ejecutó una campaña OTA real sobre EB1 con sesión UDP viva, artifact compatible por variante y observación de reboot por serial y por snapshots de control-plane.
 
-- **Ticket 35.2** — QA de UI del diálogo de campaña (sin hardware)
-- **Ticket 35.3** — Despliegue OTA individual con hardware real (EB1 TRIGGERED→BOOT_CONFIRMED)
+La campaña completó con:
 
-Este ticket requiere que el sistema de waves se ejecute completo: `start_campaign()` → health gate → `continue_campaign()` → resultado final clasificado.
+- `campaign_status = COMPLETED`
+- `health_gate = PASSED`
+- `node phase = CONFIRMED`
+- reboot confirmado
+- firmware levantado en `1.0.1-dev`
 
----
-
-## Estado verificado antes de la validación
-
-### Capa de orquestación (código)
-
-| Ítem | Estado |
-|------|--------|
-| `OtaCampaignService.start_campaign()` | Implementado — primera wave |
-| `OtaCampaignService.continue_campaign()` | Implementado — waves siguientes |
-| `OtaCampaignService._evaluate_wave_gate()` | Implementado — PENDING/PASSED/FAILED/INCONCLUSIVE |
-| `OtaCampaignService._write_campaign_audit()` | Implementado — JSON en `{published_dir}/campaigns/{campaign_id}.json` |
-| Tests de orquestación (`test_ota_campaign_service.py`) | **7/7 PASAN** — lógica de wave gate validada |
-| Tests de VM (`test_ota_campaign_vm.py`) | Pasan (suite completa 494/494) |
-
-### Hardware disponible
-
-| Ítem | Estado |
-|------|--------|
-| EB1 en red local | **CONFIRMADO** — `192.168.1.89` responde ping 3/3 (5-8 ms RTT) |
-| EB2 en red local | No verificado para este ticket |
-| Catálogo de firmware | 9 artefactos, 2 marcados `is_current=True` |
-| Artefacto v2.0.0 (sha256:01dc2c9…) | Archivo existe, 839728 bytes |
-| Artefacto v1.0.0-dev (sha256:980ddb4…) | Archivo existe, 839680 bytes |
-| Ambos `target_kind` | `PLANT` |
-
-### Bloqueante identificado
-
-`OtaCampaignService` delega cada wave a `OtaOrchestratorService.deploy()`, que a su vez llama a:
-
-```python
-self._runtime_client.send_control_ota_check_now(node_id, manifest_url, artifact_sha256)
-```
-
-Este método (`runtime.py:274`) requiere:
-1. `SessionController` con sesión UDP activa
-2. Control plane inicializado con ACK listener en ejecución
-3. Resolución de IP del nodo por `node_id` (tabla de registro viva)
-
-El agente CLI **no puede** inicializar el `SessionController` ni la capa UDP sin arrancar la aplicación Qt completa. No existe path de inyección que permita ejecutar una campaign real desde terminal sin la app corriendo.
+El único incidente fue operativo: el primer intento usó un `rollout_token` ya publicado y fue rechazado antes de publicar el manifest. Se corrigió repitiendo la campaña con un token único. No hubo bug de código.
 
 ---
 
-## Clasificación
+## Entorno real
 
-**NO EJECUTADO por falta de entorno real**
-
-El bloqueo es de arquitectura: la capa de hardware de campaña depende del runtime Qt/UDP que solo existe cuando la app está abierta y con sesión activa. Este es el mismo motivo por el que el Ticket 35.3 (deploy individual) fue ejecutado por José David, no por el agente.
-
----
-
-## Lo que SÍ está validado (base para RC)
-
-| Nivel | Validación | Ticket |
-|-------|-----------|--------|
-| Orquestación wave-by-wave | 7/7 tests unitarios PASAN | 35.2 / 35.6 |
-| UI del diálogo de campaña | QA funcional completo | 35.2 |
-| Deploy individual hardware real | EB1: TRIGGERED→ACK_MATCHED→BOOT_CONFIRMED | 35.3 |
-| Health gate lógica | `_evaluate_wave_gate()` cubierto por tests | 35.6 |
-| Audit JSON por campaign | Cubierto por tests | 35.6 |
-
-La capa de campaña hardware (multi-wave con gates reales) es la **única pieza** del sistema OTA que no tiene validación con hardware. Todas las demás capas están validadas.
+| Ítem | Valor |
+|------|-------|
+| Rama | `desarrollo-fase-2` |
+| Perfil activo | `udp_jardin` |
+| IP del PC | `192.168.1.72` |
+| Sesión | UDP viva con `SessionController` y control-plane disponible |
+| Nodo observado | EB1 (`node_id = 1`) |
+| Nodos en red | EB1 y EB2 visibles, pero la campaña se ejecutó sólo sobre EB1 |
+| Serial observado | `COM4` (USB-SERIAL CH340) |
+| Serial alterno | `COM6` presente, no usado |
+| Evidencia de red | EB1 resolvió `192.168.1.89` |
+| Evidencia de red | EB2 resolvió `192.168.1.90` |
 
 ---
 
-## Protocolo para José David
+## Escenario ejecutado
 
-Para completar esta validación con hardware, ejecutar desde la app abierta con sesión UDP activa:
+| Ítem | Valor |
+|------|-------|
+| Nodos objetivo | `1` |
+| Canary | Sí |
+| Waves manuales | Ninguna |
+| Artifact/bin usado | `sha256:085f8e3e78a6ce83aa9052791ba721709eef0971a9a21aa21107d33883b1ec5b` |
+| Archivo del bin | `artifacts/firmware_store/085f8e3e78a6ce83aa9052791ba721709eef0971a9a21aa21107d33883b1ec5b.bin` |
+| Versión | `1.0.1-dev` |
+| Target | `plant/eb1` |
+| Canal | `situational` |
+| Advertise host | `192.168.1.72` |
+| Bind host | `0.0.0.0` |
+| Puerto OTA | `18080` |
+| Ack timeout | `600 ms` |
+| Reintentos | `0` |
+| Rollout token final | `69e3bb72` |
+| Rollout id | `plant-eb1-1_0_1-dev-69e3bb72` |
 
-### Precondiciones
-
-1. App iniciada con perfil UDP (EB1 + EB2 online y reportando estado ONLINE)
-2. Firmware Manager abierto (`Firmware → Gestionar firmware`)
-3. Artefacto `v2.0.0` disponible en catálogo (ya importado)
-
-### Pasos
-
-1. En Firmware Manager: seleccionar artefacto `v2.0.0` → clic "Campaña OTA…"
-2. En el diálogo de campaña:
-   - Configurar Wave 1: nodos EB1 y EB2
-   - Configurar health gate: `min_healthy_pct = 100`, `timeout_s = 120`
-   - Clic "Iniciar campaña"
-3. Observar progreso en la tabla de wave — confirmar que los nodos pasan a `TRIGGERED`
-4. Esperar ACK y transición a `BOOT_CONFIRMED` (≤ 60 s por nodo)
-5. Verificar que el health gate evalúa a `PASSED`
-6. Si hay 2 waves: clic "Continuar campaña" y repetir para Wave 2
-7. Verificar resultado final: `COMPLETED` o `COMPLETED_WITH_WARNINGS`
-8. Verificar que existe el archivo de audit en `{published_dir}/campaigns/{campaign_id}.json`
-
-### Tabla de resultado (completar al ejecutar)
-
-| Ítem | Resultado observado |
-|------|-------------------|
-| Wave 1 — nodos desplegados | __ |
-| Wave 1 — ACK recibidos | __ |
-| Wave 1 — health gate | PASSED / FAILED / INCONCLUSIVE |
-| Wave 2 (si aplica) | __ |
-| Estado final de campaña | COMPLETED / COMPLETED_WITH_WARNINGS / FAILED |
-| Archivo de audit generado | SÍ / NO |
-| Tiempo total de campaña | __ min |
-| Bugs observados | __ |
+Nota: EB2 quedó fuera del alcance de esta campaña porque el flujo OTA valida `target_variant` de forma estricta y este artifact es específico de `eb1`.
 
 ---
 
-## Deuda residual
+## Ejecución real
 
-| ID | Ítem | Bloqueo |
-|----|------|---------|
-| CAMP-1 | Campaña OTA wave-by-wave con hardware real | Requiere app Qt + sesión UDP activa — José David |
+1. Se inició `SessionController` en modo UDP.
+2. Se confirmó que EB1 y EB2 aparecían online en el control-plane.
+3. Se seleccionó el artifact compatible de EB1 (`1.0.1-dev`).
+4. Primer intento con `rollout_token = 20260418` falló porque ese token ya estaba publicado con otro manifest.
+5. Se repitió la campaña con token único `69e3bb72`.
+6. `start_campaign()` devolvió `success = True` y el nodo entró en `TRIGGERED`.
+7. El nodo pasó por reboot y reapareció online.
+8. La campaña cerró en `CONFIRMED` con health gate `PASSED`.
+9. Se capturó banner serial del reinicio y del boot final.
 
-Esta deuda es **no bloqueante para RC**: el deploy individual (35.3) está validado y la capa de campaña está cubierta por tests. La campaña real es validación de integración completa recomendada para el primer ciclo de operación en Jardín Biosonoro.
+---
+
+## Resultado real observado
+
+| Ítem | Observado |
+|------|-----------|
+| `start_campaign()` | `success = True` |
+| Estado inicial OTA | `TRIGGERED` |
+| ACK del control-plane | `ACK_MATCHED` |
+| Observación de reboot | Sí, por serial y snapshots UDP |
+| Estado posterior | `CONFIRMED` |
+| Estado final de campaña | `COMPLETED` |
+| Health gate | `PASSED` |
+| Audit de deploy | `artifacts/ota_publish/ota/rollouts/69e3bb72/deploy_status.json` |
+| Audit de campaña | `artifacts/ota_publish/ota/rollouts/69e3bb72/campaigns/campaign-20260418171218.json` |
+| Tiempo total aproximado | 31 s |
+
+### Evidencia clave de serial
+
+- `NODE_LABEL    : EB1`
+- `NODE_ID       : 1`
+- `FW_VERSION    : 1.0.1-dev`
+- `FW_VERSION_CD : 10001`
+- `FW_TARGET     : plant/eb1`
+- `FW_PROFILE    : test`
+- `OTA_BASE_URL  : http://192.168.1.72:18080`
+
+El banner también reporta `FW_ARTIFACT` / `FW_SHA256` del runtime, que en este firmware corresponde al SHA de la partición en ejecución. Eso no coincide con el SHA del bin del catálogo y es esperado por diseño. Ver `docs/firmware/ota_firmware_runtime.md`.
+
+---
+
+## Bugs encontrados y correcciones
+
+| Hallazgo | Estado |
+|----------|--------|
+| `rollout_token` reutilizado en el primer intento | Corregido operativamente con un token único (`69e3bb72`) |
+| Diferencia entre SHA del bin publicado y SHA de la partición en ejecución | No es bug; está documentado en runtime OTA |
+| Fallo de código | No encontrado |
+
+No fue necesario modificar código.
+
+---
+
+## Decisión final
+
+**PASA con observaciones menores**
+
+La campaña OTA real quedó validada para uso controlado interno sobre EB1. El flujo de campaña funciona end-to-end con hardware real: publicación del manifest, trigger OTA, reboot, reaparición online y confirmación final.
+
+La validación queda cerrada como evidencia suficiente para la RC, con la salvedad operativa de que el `rollout_token` debe ser único por campaña.

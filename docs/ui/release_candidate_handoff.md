@@ -27,6 +27,8 @@ Esta RC congela la baseline funcional validada operativamente. No es un release 
 | Estado del mapa por caja (ONLINE/DEGRADED/OFFLINE) | 5 cajas renderizadas con datos reales | 34.7 |
 | Suite completa de tests | 491/491 PASAN — 0 fallos | 34.8 |
 | Compilación limpia | `compileall` sin errores | 34.8 |
+| QA funcional Firmware Manager / OTA UI | Catálogo, despliegue y campaña validados en UI y VM | 35.2 |
+| Campaña OTA end-to-end con hardware real (EB1 canary) | `COMPLETED`, health gate `PASSED`, reboot confirmado por UDP y serial | 35.6 |
 
 ### Validado visualmente por José David
 
@@ -47,8 +49,6 @@ Esta RC congela la baseline funcional validada operativamente. No es un release 
 | Click en cajas del mapa en la app viva | El agente no puede observar la pantalla; capa de datos OK | Mínimo — confirmar interactivamente antes del release final |
 | CTA "Ver nodos" y panel Nodos con barra de contexto en UI viva | Ídem | Mínimo |
 | Sesión serial con Maestro USB | Sin Maestro USB conectado durante la validación | No bloqueante — Camino B (UDP) cubre el requisito RC |
-| Campaña OTA end-to-end | Requiere firmware compatible en nodos | Pendiente para próximo ciclo |
-| QA funcional de pantalla Firmware (catálogo, despliegue) | Alcance post-RC | Pendiente |
 
 ---
 
@@ -124,8 +124,6 @@ El perfil activo se configura en `config.json` bajo `"profile": {"active": "<id>
 
 | Ítem | Descripción |
 |------|-------------|
-| QA funcional de pantalla Firmware | Catálogo, importación, despliegue OTA end-to-end |
-| Campaña OTA end-to-end | Requiere firmware compatible en nodos |
 | `ControlOkuaV2.debug.spec` | Gitignoreado — herramienta local de builds de depuración; no comprometer ni distribuir |
 
 ### Deuda de firmware (independiente de RC GUI)

@@ -158,6 +158,8 @@ python main.py
 | MIDI enrutado via loopMIDI Port 1 + Port 2 | VALIDADO — 320 mensajes sin error (34.7) |
 | Mapa Home — capa de datos (estado por caja) | VALIDADO — 5 cajas con estados coherentes (34.7) |
 | Flujo mapa ↔ Nodos — capa de datos | VALIDADO — filtrado y resolución inversa correctos (34.7) |
+| QA pantalla Firmware / OTA UI | VALIDADO — catálogo, despliegue y campaign dialog (35.2) |
+| Campaña OTA end-to-end con hardware real | VALIDADO — EB1 canary COMPLETED, health gate PASSED (35.6) |
 | Suite completa de tests (491/491) | PASA |
 | Arranque visual y navegación básica | CONFIRMADO por José David (34.5, commit a27d2b5) |
 
@@ -167,15 +169,12 @@ python main.py
 |------|-------------------|--------------|
 | Validación visual interactiva del mapa (click cajas, CTA "Ver nodos") | No | José David — sesión interactiva |
 | Sesión serial con Maestro USB | No | Cuando haya Maestro disponible |
-| QA pantalla Firmware (catálogo, despliegue OTA) | No | Próximo ciclo |
-| Campaña OTA end-to-end | No | Próximo ciclo (requiere firmware compatible) |
 | Tag de release en `main` | No | Después de confirmación visual del mapa |
 
 ### Qué NO cubre esta RC (fuera de alcance)
 
 - Uso multiusuario o en máquinas distintas a la de José David.
 - Deploy o distribución del `.exe` a terceros.
-- Campaña OTA end-to-end en nodos en producción.
 - Operación con más de 2 nodos activos simultáneos (validado con EB1 + EB2 únicamente).
 - Perfil `lab_sim` en entorno productivo (es perfil de laboratorio).
 

@@ -107,11 +107,10 @@ Ninguno. El único bug detectado fue BUG-1, ya corregido en working tree.
 | Ítem | Razón | Cuándo |
 |------|-------|--------|
 | Despliegue OTA real con nodo ESP32 | Sin firmware OTA-compatible en nodos durante esta QA | Próximo ciclo |
-| Campaña OTA ola a ola con nodos reales | Ídem — requiere firmware y protocolo HTTP OTA activo | Próximo ciclo |
 | Servidor OTA activo (`OtaServerService`) | No levantado durante esta QA de UI | Con hardware |
 | Confirmación de `ack` del nodo | Requiere nodo con firmware compatible | Con hardware |
 
-**La UI, el flujo, los estados visuales, validaciones y mensajes del módulo Firmware/OTA quedaron validados. El end-to-end OTA real permanece pendiente de hardware compatible.**
+**La UI, el flujo, los estados visuales, validaciones y mensajes del módulo Firmware/OTA quedaron validados. El end-to-end OTA real quedó validado en 35.6 con hardware real; ver la validación de campaña.**
 
 ---
 
@@ -141,4 +140,4 @@ Validación adicional de regresión: `tests/test_main_window_nodes_layout.py` ta
 ## Estado documental
 
 - `baseline_release_checklist.md` → ítem "QA funcional de Firmware Manager / OTA UI" marcado como EJECUTADO en 35.2
-- `firmware_ota_campaign_hardware_validation.md` (35.6) → clasificación de Campaña OTA con hardware: NO EJECUTADO por falta de entorno real; deuda CAMP-1 no bloqueante para RC
+- `firmware_ota_campaign_hardware_validation.md` (35.6) → campaña OTA real con EB1 validada: PASA con observaciones menores; cierre de la deuda CAMP-1 para la RC

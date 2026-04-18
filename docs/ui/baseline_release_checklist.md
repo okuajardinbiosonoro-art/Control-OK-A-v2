@@ -1,7 +1,7 @@
 # Checklist de cierre técnico de baseline — Control OKÚA CKv2
 
 Rama: `desarrollo-fase-2`  
-Última actualización: 2026-04-18 (Ticket 35.6 — Campaña OTA: orquestación 7/7 tests, hardware pendiente de José David)
+Última actualización: 2026-04-18 (Ticket 35.6 — Campaña OTA real validada con EB1 canary)
 
 ---
 
@@ -91,11 +91,11 @@ Ver acta completa en `docs/ui/baseline_functional_qa_execution.md` (sección "Va
 - ~~Decidir destino de `ControlOkuaV2.debug.spec`~~ — CERRADO en 35.0-correctivo: mantener gitignoreado como herramienta local de depuración
 - ~~4 QActions huérfanos en menú~~ — ELIMINADOS en 35.1: `view_diagnostics_action`, `toggle_preflight_action`, `firmware_manager_action`, `advanced_tools_action` eliminados de `main_window.py`; referencias residuales limpiadas
 - Confirmación visual interactiva del mapa por José David (click en cajas, CTA "Ver nodos")
-- ~~QA funcional de Firmware Manager / OTA UI (catálogo, campaña, despliegue)~~ — UI/flujo EJECUTADO en 35.2; end-to-end OTA real pendiente de hardware compatible
+- ~~QA funcional de Firmware Manager / OTA UI (catálogo, campaña, despliegue)~~ — UI/flujo EJECUTADO en 35.2; end-to-end OTA real VALIDADO en 35.6 con hardware real
 - ~~Test de OTA Deploy end-to-end con hardware real~~ — EJECUTADO en 35.3: EB1 flasheada, despliegue OTA real confirmado (ACK_MATCHED, BOOT_CONFIRMED)
 - ~~QA funcional del módulo Remoto (código + suite)~~ — EJECUTADO en 35.4: 33/33 tests, BUG-1 corregido, toast level
 - ~~Validación del portal web `/remote/` con navegador y Tailscale~~ — EJECUTADO en 35.5: 29/29 escenarios PASS, portal validado, `tailscale_only` confirmado — ver [`remote_portal_validation.md`](remote_portal_validation.md)
-- ~~Test de campaña OTA end-to-end con hardware real~~ — CLASIFICADO en 35.6: orquestación 7/7 tests PASAN; hardware bloqueado por necesidad de app Qt + sesión UDP activa; NO EJECUTADO por falta de entorno real — ver [`firmware_ota_campaign_hardware_validation.md`](firmware_ota_campaign_hardware_validation.md); deuda CAMP-1 no bloqueante para RC
+- ~~Test de campaña OTA end-to-end con hardware real~~ — EJECUTADO en 35.6: EB1 canary COMPLETED, health gate PASSED, reboot confirmado por UDP y serial — ver [`firmware_ota_campaign_hardware_validation.md`](firmware_ota_campaign_hardware_validation.md); deuda CAMP-1 cerrada para la RC
 
 ---
 
