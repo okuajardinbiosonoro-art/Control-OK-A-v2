@@ -10,7 +10,7 @@ Rama: `desarrollo-fase-2`
 | Ítem | Estado |
 | --- | --- |
 | `python -m compileall src main.py` | PASA |
-| `pytest` completo (491 tests) | PASA — 491/491, 0 fallos (estado post-34.8) |
+| `pytest` completo (494 tests) | PASA — 494/494, 0 fallos (estado post-35.2) |
 | Fallo preexistente `test_profile_mode_consistency` | RESUELTO en 34.3 |
 | Fallos pre-existentes `test_artifact_agent_service` (9) | RESUELTO en 34.8 — `_extract_build_profile` y `_extract_default_target_kind` ya manejan defines indirectos (`ACTIVE_MODE OKUA_DEFAULT_ACTIVE_MODE`, `ACTIVE_SENSOR OKUA_DEFAULT_ACTIVE_SENSOR`) |
 
