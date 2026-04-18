@@ -28,6 +28,9 @@ from control_okua.services.control_transaction_service import (  # noqa: E402
 from control_okua.services.ota_orchestrator_service import (  # noqa: E402
     OtaOrchestratorService,
 )
+from control_okua.services.ota_server_service import (  # noqa: E402
+    OtaServerServiceError,
+)
 
 
 class _FakeOtaServerService:
@@ -411,3 +414,171 @@ def test_orchestrator_passes_allow_downgrade_to_manifest_publish(tmp_path: Path)
     assert result.success is True
     manifest_payload = Path(result.manifest_path).read_text(encoding="utf-8")
     assert '"allow_downgrade": true' in manifest_payload
+
+
+def test_orchestrator_falls_back_to_advertise_host_when_wildcard_bind_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    artifact, manifest_service = _import_artifact(tmp_path)
+    runtime_client = _FakeRuntimeClient(
+        snapshots=[_snapshot(1, resolved_ip="192.168.88.101")],
+        control_results={
+            1: _control_result(
+                node_id=1,
+                node_ip="192.168.88.101",
+                final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+            ),
+        },
+    )
+    started_hosts: list[str] = []
+
+    class _FlakyOtaServerService:
+        def __init__(self, *, root_dir: Path, bind_host: str, port: int) -> None:
+            self._root_dir = root_dir
+            self._bind_host = bind_host
+            self._port = port
+            self._is_running = False
+            started_hosts.append(bind_host)
+
+        @property
+        def root_dir(self) -> Path:
+            return self._root_dir
+
+        @property
+        def bind_host(self) -> str:
+            return self._bind_host
+
+        @property
+        def port(self) -> int:
+            return self._port
+
+        @property
+        def is_running(self) -> bool:
+            return self._is_running
+
+        def start(self) -> None:
+            if self._bind_host == "0.0.0.0":
+                raise OtaServerServiceError("bind bloqueado por la plataforma")
+            self._is_running = True
+
+        def stop(self) -> None:
+            self._is_running = False
+
+    monkeypatch.setattr(
+        "control_okua.services.ota_orchestrator_service.OtaServerService",
+        _FlakyOtaServerService,
+    )
+
+    orchestrator = OtaOrchestratorService(
+        runtime_client=runtime_client,
+        manifest_service=manifest_service,
+    )
+
+    result = orchestrator.deploy(
+        OtaDeployRequest(
+            artifact_id=artifact.artifact_id,
+            node_ids=[1],
+            advertise_host="192.168.88.254",
+            bind_host="0.0.0.0",
+            port=18083,
+            rollout_token="20260401",
+        )
+    )
+
+    assert result.success is True
+    assert started_hosts == ["0.0.0.0", "192.168.88.254"]
+    assert orchestrator.ota_server_service is not None
+    assert orchestrator.ota_server_service.bind_host == "192.168.88.254"
+    assert any("192.168.88.254:18083" in warning for warning in result.warnings)
+
+
+def test_orchestrator_probes_port_before_publish_and_uses_fallback_when_blocked(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Cuando el puerto preferido está bloqueado (WinError 10013), _find_available_port
+    debe elegir un puerto alternativo ANTES de publicar el manifest, de forma que la
+    URL del manifest y el servidor coincidan en el puerto real disponible."""
+    import socket as _socket
+
+    artifact, manifest_service = _import_artifact(tmp_path)
+    runtime_client = _FakeRuntimeClient(
+        snapshots=[_snapshot(1, resolved_ip="192.168.88.101")],
+        control_results={
+            1: _control_result(
+                node_id=1,
+                node_ip="192.168.88.101",
+                final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+            )
+        },
+    )
+
+    # Puerto elegido que "funcionará" — primer fallback en _FALLBACK_OTA_PORTS
+    BLOCKED_PORT = 8080
+    AVAILABLE_PORT = 18080
+
+    original_socket_class = _socket.socket
+
+    class _ProbingSocket:
+        """Socket falso: falla al bind en BLOCKED_PORT, acepta en AVAILABLE_PORT."""
+
+        def __init__(self, *args, **kwargs):
+            self._inner = original_socket_class(*args, **kwargs)
+
+        def setsockopt(self, *a, **k):
+            return self._inner.setsockopt(*a, **k)
+
+        def bind(self, addr):
+            host, port = addr
+            if port == BLOCKED_PORT:
+                err = OSError(10013, "Acceso denegado")
+                err.winerror = 10013  # type: ignore[attr-defined]
+                raise err
+            return self._inner.bind(addr)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            self._inner.close()
+
+        def close(self):
+            self._inner.close()
+
+    monkeypatch.setattr(
+        "control_okua.services.ota_orchestrator_service.socket.socket",
+        _ProbingSocket,
+    )
+
+    fake_server = _FakeOtaServerService(
+        root_dir=manifest_service.publish_root_dir,
+        bind_host="0.0.0.0",
+        port=AVAILABLE_PORT,
+    )
+    orchestrator = OtaOrchestratorService(
+        runtime_client=runtime_client,
+        manifest_service=manifest_service,
+        ota_server_service=fake_server,
+    )
+
+    result = orchestrator.deploy(
+        OtaDeployRequest(
+            artifact_id=artifact.artifact_id,
+            node_ids=[1],
+            advertise_host="192.168.88.254",
+            bind_host="0.0.0.0",
+            port=BLOCKED_PORT,
+            rollout_token="20260418",
+        )
+    )
+
+    assert result.success is True, f"deploy falló: {result.errors}"
+    # El manifest debe haberse publicado con el puerto de respaldo
+    assert f":{AVAILABLE_PORT}/" in result.manifest_url, (
+        f"manifest_url debería tener :{AVAILABLE_PORT}/ pero es {result.manifest_url!r}"
+    )
+    assert f":{BLOCKED_PORT}/" not in result.manifest_url
+    # Debe haber un aviso que mencione el cambio de puerto
+    assert any(str(BLOCKED_PORT) in w and str(AVAILABLE_PORT) in w for w in result.warnings), (
+        f"Se esperaba advertencia sobre cambio de puerto en warnings={result.warnings!r}"
+    )

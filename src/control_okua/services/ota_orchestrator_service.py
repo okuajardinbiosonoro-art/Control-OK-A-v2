@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 from pathlib import Path
+import socket
 import tempfile
 from typing import Protocol
 
@@ -22,7 +24,15 @@ from control_okua.services.control_transaction_service import (
     ControlTransactionFinalStatus,
     ControlTransactionResult,
 )
-from control_okua.services.ota_server_service import OtaServerService
+from control_okua.services.ota_server_service import (
+    OtaServerService,
+    OtaServerServiceError,
+)
+
+
+# Puertos candidatos alternativos cuando el puerto configurado está bloqueado en Windows.
+# Se prueban en orden; el primero que admita bind se usa para el manifest y el servidor.
+_FALLBACK_OTA_PORTS: tuple[int, ...] = (18080, 8081, 9080, 9090, 8888)
 
 
 class OtaOrchestratorServiceError(RuntimeError):
@@ -93,6 +103,27 @@ class OtaOrchestratorService:
                 ),
             )
 
+        # Probar qué puerto está realmente disponible ANTES de publicar el manifest,
+        # porque la URL del manifest lleva el puerto y no puede corregirse después.
+        bind_hosts = self._candidate_bind_hosts(
+            bind_host=resolved_request.bind_host,
+            advertise_host=resolved_request.advertise_host,
+        )
+        effective_port = self._find_available_port(bind_hosts, resolved_request.port)
+        port_warning: str | None = None
+        if effective_port != resolved_request.port:
+            port_warning = (
+                f"Puerto {resolved_request.port} no disponible en este sistema "
+                f"(reservado o bloqueado por Windows); usando puerto {effective_port} "
+                f"para el servidor OTA y el manifest."
+            )
+            self._logger.warning(
+                "Puerto OTA %s no disponible; usando %s como respaldo.",
+                resolved_request.port,
+                effective_port,
+            )
+            resolved_request = dataclasses.replace(resolved_request, port=effective_port)
+
         try:
             publish_result = self._manifest_service.publish_rollout(
                 OtaRolloutPublishRequest(
@@ -113,8 +144,9 @@ class OtaOrchestratorService:
             )
 
         try:
-            server_started, server_reused = self._ensure_server(
+            server_started, server_reused, effective_bind_host = self._ensure_server(
                 bind_host=resolved_request.bind_host,
+                advertise_host=resolved_request.advertise_host,
                 port=resolved_request.port,
             )
         except Exception as exc:
@@ -131,6 +163,17 @@ class OtaOrchestratorService:
 
         node_statuses: list[OtaNodeDeployStatus] = []
         warnings = list(publish_result.warnings)
+        if port_warning:
+            warnings.insert(0, port_warning)
+        if (
+            effective_bind_host
+            and effective_bind_host != resolved_request.bind_host
+        ):
+            warnings.append(
+                "El servidor OTA se inició en "
+                f"{effective_bind_host}:{resolved_request.port} "
+                "porque la dirección de escucha solicitada no estuvo disponible."
+            )
         errors: list[str] = []
         for node_id in resolved_request.node_ids:
             node_status = self._dispatch_to_node(
@@ -222,33 +265,97 @@ class OtaOrchestratorService:
                 )
         return None
 
-    def _ensure_server(self, *, bind_host: str, port: int) -> tuple[bool, bool]:
+    def _ensure_server(
+        self,
+        *,
+        bind_host: str,
+        advertise_host: str,
+        port: int,
+    ) -> tuple[bool, bool, str]:
         expected_root = self._manifest_service.publish_root_dir
+        bind_hosts = self._candidate_bind_hosts(
+            bind_host=bind_host,
+            advertise_host=advertise_host,
+        )
         current = self._ota_server_service
         if current is not None and current.is_running:
             if (
                 current.root_dir.resolve() == expected_root.resolve()
-                and current.bind_host == bind_host
                 and current.port == port
+                and current.bind_host in bind_hosts
             ):
-                return False, True
+                return False, True, current.bind_host
             current.stop()
 
+        server = current
         if (
-            current is None
-            or current.root_dir.resolve() != expected_root.resolve()
-            or current.bind_host != bind_host
-            or current.port != port
+            server is None
+            or server.root_dir.resolve() != expected_root.resolve()
+            or server.port != port
+            or server.bind_host not in bind_hosts
         ):
-            self._ota_server_service = OtaServerService(
-                root_dir=expected_root,
-                bind_host=bind_host,
-                port=port,
-            )
+            server = None
 
-        assert self._ota_server_service is not None
-        self._ota_server_service.start()
-        return True, False
+        last_error: Exception | None = None
+        candidates_text = ", ".join(f"{candidate}:{port}" for candidate in bind_hosts)
+        for candidate in bind_hosts:
+            if server is None or server.bind_host != candidate:
+                server = OtaServerService(
+                    root_dir=expected_root,
+                    bind_host=candidate,
+                    port=port,
+                )
+            try:
+                server.start()
+            except (OtaServerServiceError, OSError) as exc:
+                last_error = exc
+                self._logger.warning(
+                    "No se pudo iniciar servidor OTA en %s:%s: %s",
+                    candidate,
+                    port,
+                    exc,
+                )
+                continue
+
+            self._ota_server_service = server
+            return True, False, candidate
+
+        if last_error is None:
+            last_error = OtaServerServiceError("No se pudo iniciar servidor OTA local.")
+        raise OtaServerServiceError(
+            f"No se pudo iniciar servidor OTA local en ninguna de las direcciones candidatas "
+            f"({candidates_text}): {last_error}"
+        ) from last_error
+
+    @staticmethod
+    def _find_available_port(bind_hosts: tuple[str, ...], preferred_port: int) -> int:
+        """Retorna el primer puerto (preferred o fallback) que admite bind en al menos un host.
+
+        Si ningún candidato acepta bind, retorna preferred_port y deja que la apertura
+        real del servidor falle con el mensaje de error habitual.
+        """
+        ports = (preferred_port,) + tuple(
+            p for p in _FALLBACK_OTA_PORTS if p != preferred_port
+        )
+        for port in ports:
+            for host in bind_hosts:
+                try:
+                    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+                        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                        probe.bind((host, port))
+                    return port
+                except OSError:
+                    continue
+        return preferred_port
+
+    @staticmethod
+    def _candidate_bind_hosts(*, bind_host: str, advertise_host: str) -> tuple[str, ...]:
+        candidates: list[str] = []
+        for candidate in (bind_host, advertise_host):
+            normalized = _safe_text(candidate)
+            if normalized and normalized not in candidates:
+                candidates.append(normalized)
+        return tuple(candidates)
 
     def _dispatch_to_node(
         self,
