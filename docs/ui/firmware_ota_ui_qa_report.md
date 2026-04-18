@@ -141,3 +141,4 @@ Validación adicional de regresión: `tests/test_main_window_nodes_layout.py` ta
 ## Estado documental
 
 - `baseline_release_checklist.md` → ítem "QA funcional de Firmware Manager / OTA UI" marcado como EJECUTADO en 35.2
+- `firmware_ota_campaign_hardware_validation.md` (35.6) → clasificación de Campaña OTA con hardware: NO EJECUTADO por falta de entorno real; deuda CAMP-1 no bloqueante para RC
