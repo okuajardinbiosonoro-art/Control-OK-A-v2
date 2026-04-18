@@ -58,13 +58,15 @@ Esta RC congela la baseline funcional validada operativamente. No es un release 
 Python 3.11+
 pip install -r requirements.txt
 loopMIDI (o equivalente) con al menos un puerto MIDI virtual abierto
-config.json con perfil activo configurado (ver config.example.json)
+config.json con perfil activo configurado o primer arranque resuelto con selector guiado / `CKV2_AUTOPROFILE=udp_jardin`
 ```
 
 ### Artefacto principal
 
 **Ruta principal: `python main.py` desde el repositorio en `desarrollo-fase-2`.**  
 El `.exe` empaquetado (`ControlOkuaV2.spec`) es alternativa secundaria para distribución futura. Esta RC fue validada desde fuente.
+
+Si `config.json` no existe en el primer arranque, la app lo crea y puede pedir perfil. En un entorno limpio, la ruta no interactiva validada fue `CKV2_AUTOPROFILE=udp_jardin` antes de `python main.py`.
 
 ### Arranque
 
@@ -81,6 +83,7 @@ python main.py
 | `lab_sim` | LAB / simulación | UDP | Pruebas reproducibles sin nodos físicos |
 
 El perfil activo se configura en `config.json` bajo `"profile": {"active": "<id>"}`.
+Si el archivo parte vacío o inexistente, el primer arranque guiado también es válido siempre que se explicite el perfil antes de seguir.
 
 ### Puertos UDP esperados (perfil `udp_jardin`)
 
@@ -147,5 +150,27 @@ Todas las pendientes no bloqueantes quedaron resueltas:
 2. **Comprometer cambios de firmware** en rama dedicada cuando el ciclo de firmware esté listo.
 3. **Tag de release en `main`** cuando se decida promover a release oficial.
 4. **Campaña OTA multi-wave** (más de 1 wave con gate intermedio) en el próximo ciclo operativo.
+
+## Ensayo 36.1 — reproducibilidad operativa
+
+Ensayo ejecutado sobre una copia limpia del repositorio en `C:\Users\JOSE DAVID\AppData\Local\Temp\okua_rehearsal_clean` con un venv nuevo.
+
+### Qué funcionó
+
+- `python main.py` arrancó desde una base limpia.
+- La primera ejecución creó `config.json` automáticamente.
+- El selector de perfil quedó resuelto con `CKV2_AUTOPROFILE=udp_jardin` para un arranque no interactivo.
+- Home, Nodos, Diagnóstico y Técnico fueron navegados con la ventana abierta.
+- La sesión UDP subió a `running` y volvió a `idle` con cierre limpio.
+
+### Qué hubo que ajustar
+
+- Instalar `pytest` aparte para la validación automática.
+- Aceptar que `loopMIDI Port 3` no estaba presente en esta máquina; la app lo trató como aviso no bloqueante y siguió con los buses disponibles.
+- Documentar explícitamente el primer arranque limpio para que no dependa de contexto oral.
+
+### Decisión
+
+La entrega interna es reproducible en una copia limpia, siempre que el primer arranque deje claro el perfil operativo. En esta máquina, la ruta validada fue `CKV2_AUTOPROFILE=udp_jardin` + `python main.py`.
 
 Para operación inmediata: ver `release_candidate_runbook.md`.

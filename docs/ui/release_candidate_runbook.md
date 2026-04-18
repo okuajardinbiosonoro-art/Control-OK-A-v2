@@ -37,6 +37,14 @@ Esta RC fue validada íntegramente desde fuente. No se requiere el ejecutable em
 python main.py
 ```
 
+### 2.1 — Primer arranque en entorno limpio
+
+En una copia limpia, si `config.json` no existe, la app lo crea con defaults v2 y abre el selector guiado de perfil. Ese paso forma parte normal del arranque inicial.
+
+- Para un arranque no interactivo en un ensayo limpio, exporta `CKV2_AUTOPROFILE=udp_jardin` antes de ejecutar `python main.py`.
+- Si prefieres el flujo guiado, selecciona `UDP Jardín` en el selector y confirma.
+- La falta de `loopMIDI Port 3` no bloquea la apertura: la ruta operativa validada requiere `loopMIDI Port 1` y `loopMIDI Port 2`; si Port 3 no existe, la app lo reporta como aviso y sigue con los buses disponibles.
+
 ### Qué esperar al abrir
 
 | Elemento | Estado esperado |

@@ -27,6 +27,8 @@ Referencia operativa completa: [`release_candidate_runbook.md`](release_candidat
 | Red | Subred 192.168.1.x con nodos EB1 (`.89`) y EB2 (`.90`) activos (perfil `udp_jardin`) |
 | Configuración | `config.json` en raíz del repo (ver `config.example.json`) |
 
+> Nota de 36.1: en una copia limpia, el primer arranque puede crear `config.json` y abrir el selector de perfil. Para un ensayo no interactivo, usa `CKV2_AUTOPROFILE=udp_jardin`.
+
 ---
 
 ## Preflight antes de usar
@@ -35,8 +37,8 @@ Referencia operativa completa: [`release_candidate_runbook.md`](release_candidat
 |---|-------------|----------------|
 | P1 | Python disponible | `python --version` → `3.11.x` o superior |
 | P2 | Dependencias instaladas | `pip show PySide6 rtmidi` sin error |
-| P3 | `config.json` presente | Archivo existe en raíz del repo |
-| P4 | Perfil activo correcto | `config.json` → `"profile": {"active": "udp_jardin"}` |
+| P3 | `config.json` presente | Archivo existe en raíz del repo, o fue creado por el primer arranque |
+| P4 | Perfil activo correcto | `config.json` → `"profile": {"active": "udp_jardin"}`; si viene `null`, completar el selector guiado o usar `CKV2_AUTOPROFILE=udp_jardin` |
 | P5 | loopMIDI activo | Ícono en bandeja; Port 1 y Port 2 visibles |
 | P6 | Red local accesible | `ping 192.168.1.89` responde |
 | P7 | Sin proceso previo colgado | Administrador de tareas sin `python main.py` activo |

@@ -339,6 +339,7 @@ Notas de consistencia runtime:
 - Si `profile.active` existe y es valido, el runtime normaliza `mode` al valor derivado por perfil.
 - Si no hay perfil activo valido, la app mantiene compatibilidad con configs heredadas sin romper el arranque.
 - Si `midi.outputs` llega vacio o invalido, se restauran defaults (`0/1/2 -> loopMIDI Port 1/2/3`).
+- Si alguna salida MIDI configurada no existe en la maquina, el arranque sigue con los buses disponibles; en esta RC el bus `2` es opcional y solo genera un aviso si falta.
 
 ## Perfiles operativos
 
@@ -375,6 +376,7 @@ Compatibilidad:
    - `LAB / simulacion`
 3. Al confirmar, guarda `profile.active` y ajusta `mode` asociado.
 4. Si el perfil ya estaba persistido, no vuelve a preguntar automaticamente.
+5. Para un arranque no interactivo en una copia limpia, exporta `CKV2_AUTOPROFILE=udp_jardin` antes de `python main.py`.
 
 ## Cambiar perfil desde la app
 
