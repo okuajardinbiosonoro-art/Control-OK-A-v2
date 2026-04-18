@@ -1,8 +1,8 @@
 # Paquete de entrega — Release Candidate Funcional — Control OKÚA CKv2
 
 Rama: `desarrollo-fase-2`  
-Fecha de freeze: 2026-04-16 (Ticket 34.8 — paquete documental cerrado en 35.0-correctivo)  
-Estado: **Release Candidate Funcional**
+Fecha de freeze: 2026-04-18 (Ticket 36.0 — ciclo RC cerrado, release interna consolidada)  
+Estado: **Release Interna Controlada — ciclo RC cerrado**
 
 ---
 
@@ -46,8 +46,6 @@ Esta RC congela la baseline funcional validada operativamente. No es un release 
 
 | Ítem | Razón | Impacto |
 |------|-------|---------|
-| Click en cajas del mapa en la app viva | El agente no puede observar la pantalla; capa de datos OK | Mínimo — confirmar interactivamente antes del release final |
-| CTA "Ver nodos" y panel Nodos con barra de contexto en UI viva | Ídem | Mínimo |
 | Sesión serial con Maestro USB | Sin Maestro USB conectado durante la validación | No bloqueante — Camino B (UDP) cubre el requisito RC |
 
 ---
@@ -105,8 +103,7 @@ El perfil activo se configura en `config.json` bajo `"profile": {"active": "<id>
 1. **No es un release de producción masivo.** Es la RC validada para uso interno/controlado de José David.
 2. **No usar los specs legacy** — `Control OKUA v2.spec` fue eliminado del repo en 34.8; `Control Okua Debug.spec` siempre estuvo gitignoreado. El spec válido para builds es `ControlOkuaV2.spec`.
 3. **El perfil `lab_sim` es de laboratorio** — no esperar nodos reales con él.
-4. **La validación visual interactiva del mapa** (click en cajas, CTA "Ver nodos") quedó pendiente de confirmación por José David en sesión interactiva.
-5. **Cambios no comprometidos en el working tree** (`.vscode`, `firmware`, `ota_deploy_dialog`, `remote_auth_service`) son trabajo en curso de José David — no forman parte de esta RC.
+4. **Cambios no comprometidos en el working tree** (`.vscode`, `firmware`, `ota_deploy_dialog`, `remote_auth_service`) son trabajo en curso de José David — no forman parte de esta RC.
 
 ---
 
@@ -116,8 +113,6 @@ El perfil activo se configura en `config.json` bajo `"profile": {"active": "<id>
 
 | Ítem | Descripción | Cuándo resolver |
 |------|-------------|----------------|
-| 4 QActions huérfanos en menú | `view_diagnostics_action`, `toggle_preflight_action`, `firmware_manager_action`, `advanced_tools_action` — creados pero no añadidos a ningún menú visible | Próximo ciclo de UI |
-| Validación visual interactiva del mapa | Click en cajas, CTA "Ver nodos", barra de contexto — no observado por agente | Antes del release final, por José David |
 | Sesión serial con Maestro USB | No ejecutada — sin Maestro USB en el entorno de validación | Cuando haya Maestro disponible |
 
 ### Pendiente para release final (no bloqueante para RC)
@@ -135,10 +130,22 @@ El perfil activo se configura en `config.json` bajo `"profile": {"active": "<id>
 
 ---
 
-## Qué sigue después de esta RC
+## Decisión de cierre del ciclo RC
 
-1. **Confirmación visual interactiva** por José David: click en cajas del mapa, CTA "Ver nodos", navegación a Nodos con barra de contexto.
-2. **Sesión serial** con Maestro USB conectado, si se necesita para el flujo de operación.
-3. **QA de pantalla Firmware** — catálogo y despliegue OTA.
-4. **Comprometer cambios de firmware** en una rama de firmware dedicada.
-5. **Tag de release** en `main` cuando José David confirme los puntos anteriores.
+**El ciclo RC queda cerrado como Release Interna Controlada RC1 (Ticket 36.0, 2026-04-18).**
+
+Todas las pendientes no bloqueantes quedaron resueltas:
+
+- Mapa Home — confirmación visual interactiva: **CONFIRMADO por José David (2026-04-18)**
+- QA Firmware/OTA: **VALIDADO** (35.2 / 35.3 / 35.6)
+- Módulo Remoto y portal: **VALIDADO** (35.4 / 35.5)
+- Suite de tests 494/494: **PASAN**
+
+## Qué sigue después de esta release
+
+1. **Sesión serial** con Maestro USB conectado, si se necesita para el flujo de operación.
+2. **Comprometer cambios de firmware** en rama dedicada cuando el ciclo de firmware esté listo.
+3. **Tag de release en `main`** cuando se decida promover a release oficial.
+4. **Campaña OTA multi-wave** (más de 1 wave con gate intermedio) en el próximo ciclo operativo.
+
+Para operación inmediata: ver `release_candidate_runbook.md`.

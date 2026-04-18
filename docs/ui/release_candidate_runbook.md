@@ -77,7 +77,7 @@ Si la ventana abre y cumple lo anterior: **arranque correcto**. Continuar a §3.
 3. Clic "Ver nodos" → Nodos abre con barra de contexto de caja (`Caja: X — N nodos`).
 4. Clic **"Ver caja en inicio"** → retorno a Home con caja seleccionada.
 
-> Esta interacción visual queda como confirmación final por José David — es el único escenario no observado por el agente durante la RC.
+> Esta interacción fue confirmada por José David el 2026-04-18.
 
 ### 3.4 — Diagnóstico de runtime
 
@@ -144,7 +144,7 @@ python -m pytest tests/ -q
 python main.py
 ```
 
-> El último commit verificado de la RC es `75943c3` (Ticket 35.0 — runbook operativo). `491/491` tests pasan.
+> Commit de cierre del ciclo RC: `1e1f474` (mapa Home confirmado — Release Interna Controlada RC1). `494/494` tests pasan.
 
 ---
 
@@ -163,13 +163,13 @@ python main.py
 | Suite completa de tests (491/491) | PASA |
 | Arranque visual y navegación básica | CONFIRMADO por José David (34.5, commit a27d2b5) |
 
-### Qué queda pendiente antes del release final
+### Qué queda pendiente (post release interna RC1)
 
-| Ítem | Bloqueante para RC | Pendiente de |
-|------|-------------------|--------------|
-| Validación visual interactiva del mapa (click cajas, CTA "Ver nodos") | No | José David — sesión interactiva |
-| Sesión serial con Maestro USB | No | Cuando haya Maestro disponible |
-| Tag de release en `main` | No | Después de confirmación visual del mapa |
+| Ítem | Pendiente de |
+|------|-------------|
+| Sesión serial con Maestro USB | Cuando haya Maestro disponible |
+| Campaña OTA multi-wave (>1 wave con gate intermedio) en hardware | Próximo ciclo operativo |
+| Tag de release en `main` | Decisión de José David |
 
 ### Qué NO cubre esta RC (fuera de alcance)
 
