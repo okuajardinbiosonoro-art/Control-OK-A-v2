@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 from control_okua.core.firmware.catalog_models import normalize_text
 
 
-DEFAULT_OTA_HTTP_PORT = 8080
+DEFAULT_OTA_HTTP_PORT = 18080
 DEFAULT_OTA_PUBLISH_DIRNAME = "ota_publish"
 DEFAULT_OTA_FIRMWARE_FAMILY = "okua_node_udp_v1"
 DEFAULT_OTA_BUILD_PROFILE = "field"

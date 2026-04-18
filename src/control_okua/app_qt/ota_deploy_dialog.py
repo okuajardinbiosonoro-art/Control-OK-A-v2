@@ -41,6 +41,7 @@ from control_okua.app_qt.viewmodels.ota_deploy_vm import (
     build_ota_node_result_rows,
     build_recommended_rollout_channel,
 )
+from control_okua.app_qt.ota_defaults import DEFAULT_APP_OTA_HTTP_PORT
 from control_okua.core.firmware import (
     FirmwareCatalogStore,
     OtaDeployRequest,
@@ -334,9 +335,17 @@ class OtaDeployDialog(QDialog):
         self._set_responsive_field(self.bind_host_edit, min_width=200)
 
         self.port_spin = QSpinBox(group)
-        self.port_spin.setRange(1, 65535)
-        self.port_spin.setValue(8080)
+        self.port_spin.setRange(
+            DEFAULT_APP_OTA_HTTP_PORT,
+            DEFAULT_APP_OTA_HTTP_PORT,
+        )
+        self.port_spin.setValue(DEFAULT_APP_OTA_HTTP_PORT)
         self.port_spin.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.NoButtons)
+        self.port_spin.setReadOnly(True)
+        self.port_spin.setToolTip(
+            f"Puerto OTA fijo de la app. Debe coincidir con el firmware del nodo "
+            f"({DEFAULT_APP_OTA_HTTP_PORT})."
+        )
         self._set_responsive_field(self.port_spin, min_width=200)
 
         self.rollout_token_edit = QLineEdit(build_default_rollout_token(), group)
@@ -378,7 +387,7 @@ class OtaDeployDialog(QDialog):
         row_specs = [
             ("IP accesible por el nodo:", self.advertise_host_edit),
             ("Dirección local:", self.bind_host_edit),
-            ("Puerto OTA:", self.port_spin),
+            ("Puerto OTA fijo:", self.port_spin),
             ("Token de actualización:", self.rollout_token_edit),
             ("Canal:", self.rollout_channel_combo),
             ("Tiempo de respuesta:", self.ack_timeout_spin),

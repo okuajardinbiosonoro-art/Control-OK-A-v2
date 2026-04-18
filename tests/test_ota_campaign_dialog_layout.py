@@ -14,6 +14,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from control_okua.app_qt.ota_campaign_dialog import OtaCampaignDialog  # noqa: E402
+from control_okua.app_qt.ota_defaults import DEFAULT_APP_OTA_HTTP_PORT  # noqa: E402
 from control_okua.core.firmware import (  # noqa: E402
     FirmwareCatalogStore,
     OtaCampaignHealthGate,
@@ -151,6 +152,10 @@ def test_ota_campaign_rollout_controls_are_legible_at_base_size(tmp_path: Path) 
 
         assert dialog.rollout_channel_combo.width() >= 200
         assert dialog.port_spin.width() >= 200
+        assert dialog.port_spin.isReadOnly()
+        assert dialog.port_spin.minimum() == DEFAULT_APP_OTA_HTTP_PORT
+        assert dialog.port_spin.maximum() == DEFAULT_APP_OTA_HTTP_PORT
+        assert dialog.port_spin.value() == DEFAULT_APP_OTA_HTTP_PORT
         assert dialog.ack_timeout_spin.width() >= 200
         assert dialog.max_retries_spin.width() >= 200
     finally:

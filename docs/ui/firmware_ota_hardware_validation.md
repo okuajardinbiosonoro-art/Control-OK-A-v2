@@ -28,7 +28,7 @@ Este documento define el protocolo exacto, las precondiciones verificadas y las 
 | Ítem | Estado verificado |
 |------|-----------------|
 | `OtaOrchestratorService` | Implementado — `deploy()`, `_dispatch_to_node()`, `_ensure_server()` |
-| `OtaServerService` | Implementado — `ThreadingHTTPServer` en `0.0.0.0:8080`, daemon thread |
+| `OtaServerService` | Implementado — `ThreadingHTTPServer` en `0.0.0.0:18080`, daemon thread |
 | `OtaManifestService.publish_rollout()` | Implementado — escribe `manifest.json` + copia `.bin` en `publish_root_dir` |
 | `send_control_ota_check_now` | Implementado — despacha paquete UDP al nodo con `rollout_token` |
 | `_write_deploy_audit()` | Implementado — escribe `deploy_status.json` atómicamente |
@@ -39,7 +39,7 @@ Este documento define el protocolo exacto, las precondiciones verificadas y las 
 |------|-----------------|
 | `okua_ota.h` / `okua_ota.cpp` | Presentes en `firmware/okua_node_udp_v1/` |
 | Handler `OKUA_CMD_OTA_CHECK_NOW` | Líneas 983, 999, 1071, 1521 de `okua_node_udp_v1.ino` |
-| `OKUA_OTA_BASE_URL` | `http://<PC_IP>:8080` — definido desde `OKUA_STR(PC_IP_*)` en secrets |
+| `OKUA_OTA_BASE_URL` | `http://<PC_IP>:18080` — definido desde `OKUA_STR(PC_IP_*)` en secrets |
 | Estados OTA (firmware) | `IDLE → TRIGGERED → FETCHING_MANIFEST → VALIDATING_MANIFEST → DOWNLOADING → READY_REBOOT → BOOT_VALIDATING → BOOT_CONFIRMED` |
 | Telemetría OTA en STAT | `rsv[0]=state_code`, `rsv[1]=error_code`, `rsv[2]=flags` |
 
@@ -73,8 +73,8 @@ Verificar TODAS antes de iniciar:
 | PRE-1 | Nodo objetivo encendido y en red | `ping 192.168.1.89` responde |
 | PRE-2 | Nodo ejecuta firmware OTA-compatible | Consola serial: debe mostrar `OTA_BASE_URL  :` al arranque |
 | PRE-3 | `OKUA_OTA_BASE_URL` apunta al PC correcto | Consola serial: URL debe tener la IP del PC de control |
-| PRE-4 | Puerto 8080 libre en el PC | `netstat -an \| findstr 8080` → sin resultado |
-| PRE-5 | Firewall permite 8080 TCP entrante | Verificar en Windows Defender o añadir regla si necesario |
+| PRE-4 | Puerto 18080 libre en el PC | `netstat -an \| findstr 18080` → sin resultado |
+| PRE-5 | Firewall permite 18080 TCP entrante | Verificar en Windows Defender o añadir regla si necesario |
 | PRE-6 | Sesión UDP activa con el nodo | App abierta, perfil `udp_jardin`, chip de sesión activo |
 | PRE-7 | Al menos un artefacto en catálogo con `is_current: true` | Firmware Manager → tabla visible, uno marcado como current |
 
@@ -100,7 +100,7 @@ Verificar TODAS antes de iniciar:
 2. Clic **"Despliegue OTA…"** → abre `OtaDeployDialog`.
 3. Verificar configuración de red (grupo "Configuración de red"):
    - IP de bind correcta (la del PC en la red local)
-   - Puerto: 8080
+   - Puerto: 18080
    - Token: cualquier valor no-cero
    - Canal: `plant` (o el que corresponda)
    - Timeout y reintentos: valores razonables (ej. 30 s, 3 reintentos)
@@ -123,7 +123,7 @@ Mientras el deploy corre, observar la consola serial del nodo EB1 o el panel de 
 | Paso | `state_code` en STAT (`rsv[0]`) | Descripción |
 |------|--------------------------------|-------------|
 | 1 | `1` (TRIGGERED) | Nodo recibió `OTA_CHECK_NOW` |
-| 2 | `2` (FETCHING_MANIFEST) | Nodo hace GET a `http://<PC>:8080/manifest.json` |
+| 2 | `2` (FETCHING_MANIFEST) | Nodo hace GET a `http://<PC>:18080/manifest.json` |
 | 3 | `3` (VALIDATING_MANIFEST) | Nodo verifica `target_kind`, `version`, `sha256` |
 | 4 | `4` (DOWNLOADING) | Nodo descarga el `.bin` via HTTP GET |
 | 5 | `5` (READY_REBOOT) | Flash completo, esperando reboot |
@@ -202,7 +202,7 @@ Debe contener:
 
 - El firmware de los nodos en producción no acepta `OTA_CHECK_NOW` (versión incompatible)
 - `OKUA_OTA_BASE_URL` en el firmware del nodo no apunta al PC correcto
-- El puerto 8080 no es accesible desde los nodos
+- El puerto 18080 no es accesible desde los nodos
 
 ---
 

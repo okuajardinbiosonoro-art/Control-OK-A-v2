@@ -77,8 +77,8 @@ def _deploy_result(
         published_dir=str(published_dir),
         manifest_path=str(manifest_path),
         firmware_path=str(firmware_path),
-        manifest_url=f"http://192.168.88.254:8080/ota/rollouts/{rollout_token}/manifest.json",
-        download_url=f"http://192.168.88.254:8080/ota/rollouts/{rollout_token}/firmware.bin",
+        manifest_url=f"http://192.168.88.254:18080/ota/rollouts/{rollout_token}/manifest.json",
+        download_url=f"http://192.168.88.254:18080/ota/rollouts/{rollout_token}/firmware.bin",
         message="deploy fake",
     )
 
@@ -117,7 +117,7 @@ def _plan() -> OtaCampaignPlan:
         ),
         advertise_host="192.168.88.254",
         bind_host="0.0.0.0",
-        port=8080,
+        port=18080,
         rollout_token="20260328",
         rollout_channel="stable",
     )

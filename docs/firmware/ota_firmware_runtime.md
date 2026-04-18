@@ -83,7 +83,7 @@ Formato actual:
 Default actual:
 
 ```text
-http://<PC_IP>:8080
+http://<PC_IP>:18080
 ```
 
 donde `<PC_IP>` sale de los macros ya existentes del sketch.

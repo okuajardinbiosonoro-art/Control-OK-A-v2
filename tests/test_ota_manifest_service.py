@@ -74,7 +74,7 @@ def test_build_manifest_from_valid_artifact_produces_expected_fields(tmp_path: P
             rollout_id="plant-eb1-2026-03-28-r1",
             artifact_id=artifact.artifact_id,
             host="192.168.88.254",
-            port=8080,
+            port=18080,
             rollout_channel="stable",
         )
     )
@@ -87,7 +87,7 @@ def test_build_manifest_from_valid_artifact_produces_expected_fields(tmp_path: P
     assert manifest.artifact_id == artifact.artifact_id
     assert manifest.sha256 == artifact.sha256
     assert manifest.file_size == artifact.file_size
-    assert manifest.download_url == "http://192.168.88.254:8080/ota/rollouts/20260328/firmware.bin"
+    assert manifest.download_url == "http://192.168.88.254:18080/ota/rollouts/20260328/firmware.bin"
     assert manifest.firmware_family == "okua_node_udp_v1"
     assert manifest.build_profile == "field"
     assert manifest.protocol_version == "okua_v1"
@@ -125,7 +125,7 @@ def test_build_manifest_infers_build_profile_from_artifact_tags_when_request_omi
             rollout_token="0x20260331",
             artifact_id=artifact.artifact_id,
             host="192.168.1.70",
-            port=8080,
+            port=18080,
         )
     )
 
@@ -170,7 +170,7 @@ def test_publish_rollout_can_mark_manifest_as_allow_downgrade(tmp_path: Path) ->
             rollout_token="20260340",
             artifact_id=artifact.artifact_id,
             host="192.168.80.14",
-            port=8080,
+            port=18080,
             allow_downgrade=True,
         )
     )
@@ -211,7 +211,7 @@ def test_publish_rollout_rejects_unknown_target(tmp_path: Path) -> None:
                 rollout_token="20260330",
                 artifact_id=artifact.artifact_id,
                 host="127.0.0.1",
-                port=8080,
+                port=18080,
             )
         )
         assert False, "La publicación OTA debió rechazar target_kind=unknown"
@@ -249,7 +249,7 @@ def test_publish_rollout_rejects_missing_or_drifted_managed_bin(tmp_path: Path) 
                 rollout_token="20260331",
                 artifact_id=artifact.artifact_id,
                 host="127.0.0.1",
-                port=8080,
+                port=18080,
             )
         )
         assert False, "La publicación OTA debió rechazar bin drifted"
@@ -288,7 +288,7 @@ def test_publish_rollout_rejects_unparseable_version_for_version_code(tmp_path: 
                 rollout_token="20260401",
                 artifact_id=artifact.artifact_id,
                 host="127.0.0.1",
-                port=8080,
+                port=18080,
             )
         )
         assert False, "La generación OTA debió exigir semver para version_code"

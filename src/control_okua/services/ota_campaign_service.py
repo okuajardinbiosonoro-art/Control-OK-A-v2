@@ -19,6 +19,7 @@ from control_okua.core.firmware.ota_campaign_models import (
     OtaCampaignWave,
     OtaCampaignWaveResult,
 )
+from control_okua.core.firmware.ota_manifest_models import DEFAULT_OTA_HTTP_PORT
 from control_okua.core.firmware.ota_deploy_models import (
     OtaDeployResult,
     OtaNodeDeployPhase,
@@ -867,12 +868,12 @@ class OtaCampaignService:
     def _port_from_url(self, manifest_url: str) -> int:
         text = normalize_text(manifest_url)
         if "://" not in text:
-            return 8080
+            return DEFAULT_OTA_HTTP_PORT
         netloc = text.split("://", 1)[1].split("/", 1)[0]
         if ":" not in netloc:
-            return 8080
+            return DEFAULT_OTA_HTTP_PORT
         raw_port = netloc.rsplit(":", 1)[1].strip()
         try:
             return int(raw_port)
         except (TypeError, ValueError):
-            return 8080
+            return DEFAULT_OTA_HTTP_PORT

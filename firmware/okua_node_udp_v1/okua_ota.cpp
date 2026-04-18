@@ -13,6 +13,12 @@
 
 #include "okua_build_info.h"
 
+#if defined(__has_include)
+#if __has_include("okua_node_secrets.h")
+#include "okua_node_secrets.h"
+#endif
+#endif
+
 namespace {
 
 static const char* kOtaPrefsNs = "okua_ota";
@@ -23,7 +29,30 @@ static const char* kPrefVerCode = "vercode";
 static const char* kPrefTarget = "target";
 static const char* kPrefVariant = "variant";
 static const char* kPrefProfile = "profile";
-static const char* kDefaultBaseUrl = "http://192.168.88.254:8080";
+#ifndef PC_IP_A
+#define PC_IP_A 192
+#endif
+#ifndef PC_IP_B
+#define PC_IP_B 168
+#endif
+#ifndef PC_IP_C
+#define PC_IP_C 88
+#endif
+#ifndef PC_IP_D
+#define PC_IP_D 254
+#endif
+
+#define OKUA_STR_INNER(x) #x
+#define OKUA_STR(x) OKUA_STR_INNER(x)
+
+#ifndef OKUA_OTA_PORT
+#define OKUA_OTA_PORT 18080
+#endif
+#ifndef OKUA_OTA_BASE_URL
+#define OKUA_OTA_BASE_URL "http://" OKUA_STR(PC_IP_A) "." OKUA_STR(PC_IP_B) "." OKUA_STR(PC_IP_C) "." OKUA_STR(PC_IP_D) ":" OKUA_STR(OKUA_OTA_PORT)
+#endif
+
+static const char* kDefaultBaseUrl = OKUA_OTA_BASE_URL;
 static const uint32_t kDefaultHealthConfirmMs = 45000UL;
 static const uint32_t kDefaultBootWifiConnectTimeoutMs = 120000UL;
 static const uint32_t kDefaultHttpTimeoutMs = 8000UL;

@@ -155,6 +155,9 @@ def _snapshot(
     ota_state_key: str = "idle",
     ota_error_key: str = "none",
     resolved_ip: str = "192.168.88.10",
+    last_uptime_s: int | None = None,
+    reset_reason: int | None = None,
+    last_state_flags: int | None = None,
 ):
     return SimpleNamespace(
         node_id=node_id,
@@ -164,6 +167,9 @@ def _snapshot(
         ota_state_key=ota_state_key,
         ota_error_key=ota_error_key,
         resolved_ip=resolved_ip,
+        last_uptime_s=last_uptime_s,
+        reset_reason=reset_reason,
+        last_state_flags=last_state_flags,
     )
 
 
@@ -376,6 +382,141 @@ def test_orchestrator_refreshes_runtime_progress_and_timeout_visibility(tmp_path
     assert "boot_confirmed" in refreshed.node_statuses[0].last_message
 
 
+def test_orchestrator_confirms_ota_after_reboot_reset_and_healthy_runtime(
+    tmp_path: Path,
+) -> None:
+    artifact, manifest_service = _import_artifact(tmp_path)
+    runtime_client = _FakeRuntimeClient(
+        snapshots=[
+            _snapshot(
+                7,
+                last_uptime_s=106,
+                reset_reason=1,
+                last_state_flags=0x10,
+                resolved_ip="127.0.0.1",
+            )
+        ],
+        control_results={
+            7: _control_result(
+                node_id=7,
+                node_ip="127.0.0.1",
+                final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+            ),
+        },
+    )
+    fake_server = _FakeOtaServerService(
+        root_dir=manifest_service.publish_root_dir,
+        bind_host="127.0.0.1",
+        port=18081,
+    )
+    orchestrator = OtaOrchestratorService(
+        runtime_client=runtime_client,
+        manifest_service=manifest_service,
+        ota_server_service=fake_server,
+    )
+
+    initial = orchestrator.deploy(
+        OtaDeployRequest(
+            artifact_id=artifact.artifact_id,
+            node_ids=[7],
+            advertise_host="127.0.0.1",
+            bind_host="127.0.0.1",
+            port=18081,
+            rollout_token="20260331",
+        )
+    )
+    assert initial.success is True
+    assert initial.node_statuses[0].phase.value == "acknowledged"
+    assert initial.node_statuses[0].baseline_uptime_s == 106
+
+    runtime_client._snapshots[7] = _snapshot(
+        7,
+        status="online",
+        status_reason="healthy traffic",
+        ota_state_key="idle",
+        last_uptime_s=56,
+        reset_reason=1,
+        last_state_flags=0x10,
+        resolved_ip="127.0.0.1",
+    )
+    refreshed = orchestrator.refresh_deploy_statuses(initial)
+
+    assert refreshed.node_statuses[0].phase.value == "confirmed"
+    assert refreshed.node_statuses[0].last_message == (
+        "OTA confirmada: nodo volvió online tras el reboot."
+    )
+    assert "confirmados: 1" in refreshed.message
+
+
+def test_orchestrator_confirms_ota_when_reset_reason_or_boot_marker_changes(
+    tmp_path: Path,
+) -> None:
+    artifact, manifest_service = _import_artifact(tmp_path)
+    runtime_client = _FakeRuntimeClient(
+        snapshots=[
+            _snapshot(
+                7,
+                last_uptime_s=106,
+                reset_reason=1,
+                last_state_flags=0x10,
+                resolved_ip="127.0.0.1",
+            )
+        ],
+        control_results={
+            7: _control_result(
+                node_id=7,
+                node_ip="127.0.0.1",
+                final_status=ControlTransactionFinalStatus.ACK_MATCHED,
+            ),
+        },
+    )
+    fake_server = _FakeOtaServerService(
+        root_dir=manifest_service.publish_root_dir,
+        bind_host="127.0.0.1",
+        port=18081,
+    )
+    orchestrator = OtaOrchestratorService(
+        runtime_client=runtime_client,
+        manifest_service=manifest_service,
+        ota_server_service=fake_server,
+    )
+
+    initial = orchestrator.deploy(
+        OtaDeployRequest(
+            artifact_id=artifact.artifact_id,
+            node_ids=[7],
+            advertise_host="127.0.0.1",
+            bind_host="127.0.0.1",
+            port=18081,
+            rollout_token="20260332",
+        )
+    )
+    assert initial.success is True
+    assert initial.node_statuses[0].phase.value == "acknowledged"
+    assert initial.node_statuses[0].baseline_reset_reason == 1
+    assert initial.node_statuses[0].baseline_boot_marker == 1
+
+    runtime_client._snapshots[7] = _snapshot(
+        7,
+        status="online",
+        status_reason="healthy traffic",
+        ota_state_key="idle",
+        last_uptime_s=156,
+        reset_reason=2,
+        last_state_flags=0x20,
+        resolved_ip="127.0.0.1",
+    )
+    refreshed = orchestrator.refresh_deploy_statuses(initial)
+
+    assert refreshed.node_statuses[0].phase.value == "confirmed"
+    assert refreshed.node_statuses[0].last_message == (
+        "OTA confirmada: nodo volvió online tras el reboot."
+    )
+    assert refreshed.node_statuses[0].baseline_reset_reason == 1
+    assert refreshed.node_statuses[0].baseline_boot_marker == 1
+    assert "confirmados: 1" in refreshed.message
+
+
 def test_orchestrator_passes_allow_downgrade_to_manifest_publish(tmp_path: Path) -> None:
     artifact, manifest_service = _import_artifact(tmp_path)
     runtime_client = _FakeRuntimeClient(
@@ -514,7 +655,7 @@ def test_orchestrator_probes_port_before_publish_and_uses_fallback_when_blocked(
     )
 
     # Puerto elegido que "funcionará" — primer fallback en _FALLBACK_OTA_PORTS
-    BLOCKED_PORT = 8080
+    BLOCKED_PORT = 19080
     AVAILABLE_PORT = 18080
 
     original_socket_class = _socket.socket

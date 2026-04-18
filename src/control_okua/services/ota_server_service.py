@@ -80,9 +80,21 @@ class OtaServerService:
         try:
             self._server = ThreadingHTTPServer((self._bind_host, self._port), handler)
         except OSError as exc:
-            raise OtaServerServiceError(
+            message = (
                 f"No se pudo iniciar servidor OTA local en {self._bind_host}:{self._port}: {exc}"
-            ) from exc
+            )
+            if getattr(exc, "winerror", None) == 10013:
+                if self._bind_host == "0.0.0.0":
+                    message += (
+                        " En Windows, 0.0.0.0 a veces queda restringido o reservado; "
+                        "prueba con la IP LAN del PC, o cambia el puerto OTA."
+                    )
+                else:
+                    message += (
+                        " En Windows, esa dirección o ese puerto pueden estar restringidos "
+                        "o reservados; prueba otra IP local o cambia el puerto OTA."
+                    )
+            raise OtaServerServiceError(message) from exc
 
         self._server.daemon_threads = True
         self._thread = Thread(
@@ -105,4 +117,3 @@ class OtaServerService:
         server.server_close()
         if thread is not None:
             thread.join(timeout=2.0)
-

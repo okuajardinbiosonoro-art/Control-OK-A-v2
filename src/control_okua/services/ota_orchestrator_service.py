@@ -176,10 +176,12 @@ class OtaOrchestratorService:
             )
         errors: list[str] = []
         for node_id in resolved_request.node_ids:
+            baseline_snapshot = self._runtime_client.get_node_snapshot(node_id)
             node_status = self._dispatch_to_node(
                 node_id=node_id,
                 request=resolved_request,
                 artifact_id=publish_result.artifact_id,
+                baseline_snapshot=baseline_snapshot,
             )
             node_statuses.append(node_status)
             if node_status.phase in {OtaNodeDeployPhase.FAILED, OtaNodeDeployPhase.TIMEOUT}:
@@ -363,6 +365,7 @@ class OtaOrchestratorService:
         node_id: int,
         request: OtaDeployRequest,
         artifact_id: str,
+        baseline_snapshot: object | None,
     ) -> OtaNodeDeployStatus:
         try:
             control_result = self._runtime_client.send_control_ota_check_now(
@@ -383,12 +386,14 @@ class OtaOrchestratorService:
                 artifact_id=artifact_id,
                 rollout_token=request.rollout_token,
                 exc=exc,
+                baseline_snapshot=baseline_snapshot,
             )
 
         return self._status_from_control_result(
             control_result=control_result,
             artifact_id=artifact_id,
             rollout_token=request.rollout_token,
+            baseline_snapshot=baseline_snapshot,
         )
 
     def _status_from_exception(
@@ -398,9 +403,13 @@ class OtaOrchestratorService:
         artifact_id: str,
         rollout_token: str,
         exc: Exception,
+        baseline_snapshot: object | None,
     ) -> OtaNodeDeployStatus:
         identity = resolve_node_identity(node_id)
         snapshot = self._runtime_client.get_node_snapshot(node_id)
+        baseline_uptime_s, baseline_reset_reason, baseline_boot_marker = self._baseline_runtime_fields(
+            baseline_snapshot
+        )
         return self._merge_runtime_snapshot(
             OtaNodeDeployStatus(
                 node_id=node_id,
@@ -411,6 +420,9 @@ class OtaOrchestratorService:
                 rollout_token=rollout_token,
                 artifact_id=artifact_id,
                 last_message=str(exc),
+                baseline_uptime_s=baseline_uptime_s,
+                baseline_reset_reason=baseline_reset_reason,
+                baseline_boot_marker=baseline_boot_marker,
             ),
             snapshot,
         )
@@ -421,8 +433,12 @@ class OtaOrchestratorService:
         control_result: ControlTransactionResult,
         artifact_id: str,
         rollout_token: str,
+        baseline_snapshot: object | None,
     ) -> OtaNodeDeployStatus:
         snapshot = self._runtime_client.get_node_snapshot(control_result.node_id)
+        baseline_uptime_s, baseline_reset_reason, baseline_boot_marker = self._baseline_runtime_fields(
+            baseline_snapshot
+        )
         phase = _phase_from_control_result(control_result)
         base = OtaNodeDeployStatus(
             node_id=int(control_result.node_id),
@@ -440,6 +456,9 @@ class OtaOrchestratorService:
             rollout_token=rollout_token,
             artifact_id=artifact_id,
             last_message=self._control_result_message(control_result),
+            baseline_uptime_s=baseline_uptime_s,
+            baseline_reset_reason=baseline_reset_reason,
+            baseline_boot_marker=baseline_boot_marker,
         )
         return self._merge_runtime_snapshot(base, snapshot)
 
@@ -469,6 +488,9 @@ class OtaOrchestratorService:
             artifact_id=artifact_id,
             last_message=previous.last_message,
             observed_at_utc=previous.observed_at_utc,
+            baseline_uptime_s=previous.baseline_uptime_s,
+            baseline_reset_reason=previous.baseline_reset_reason,
+            baseline_boot_marker=previous.baseline_boot_marker,
         )
         return self._merge_runtime_snapshot(base, snapshot)
 
@@ -490,7 +512,14 @@ class OtaOrchestratorService:
             fallback="none",
         ).lower()
         phase = _phase_from_runtime(snapshot, fallback=base.phase)
+        if self._should_promote_to_confirmed(base, snapshot, phase):
+            phase = OtaNodeDeployPhase.CONFIRMED
         message = _runtime_message(snapshot, fallback=base.last_message)
+        if (
+            phase is OtaNodeDeployPhase.CONFIRMED
+            and ota_state_key == "idle"
+        ):
+            message = "OTA confirmada: nodo volvió online tras el reboot."
         node_ip = _snapshot_ip(snapshot) or base.node_ip
         return OtaNodeDeployStatus(
             node_id=base.node_id,
@@ -508,6 +537,9 @@ class OtaOrchestratorService:
             rollout_token=base.rollout_token,
             artifact_id=base.artifact_id,
             last_message=message,
+            baseline_uptime_s=base.baseline_uptime_s,
+            baseline_reset_reason=base.baseline_reset_reason,
+            baseline_boot_marker=base.baseline_boot_marker,
         )
 
     def _control_result_message(self, result: ControlTransactionResult) -> str:
@@ -627,6 +659,9 @@ class OtaOrchestratorService:
                     "rollout_token": status.rollout_token,
                     "artifact_id": status.artifact_id,
                     "last_message": status.last_message,
+                    "baseline_uptime_s": status.baseline_uptime_s,
+                    "baseline_reset_reason": status.baseline_reset_reason,
+                    "baseline_boot_marker": status.baseline_boot_marker,
                     "observed_at_utc": status.observed_at_utc,
                 }
                 for status in result.node_statuses
@@ -677,6 +712,71 @@ class OtaOrchestratorService:
             message=result.message,
             created_at_utc=result.created_at_utc,
         )
+
+    @staticmethod
+    def _baseline_runtime_fields(
+        snapshot: object | None,
+    ) -> tuple[int | None, int | None, int | None]:
+        if snapshot is None:
+            return None, None, None
+        return (
+            _snapshot_uptime(snapshot),
+            _snapshot_reset_reason(snapshot),
+            _snapshot_boot_marker(snapshot),
+        )
+
+    @staticmethod
+    def _should_promote_to_confirmed(
+        base: OtaNodeDeployStatus,
+        snapshot: object,
+        phase: OtaNodeDeployPhase,
+    ) -> bool:
+        if phase is OtaNodeDeployPhase.CONFIRMED:
+            return True
+        if phase in {OtaNodeDeployPhase.FAILED, OtaNodeDeployPhase.TIMEOUT}:
+            return False
+
+        runtime_status = _safe_text(getattr(snapshot, "status", None), fallback="").lower()
+        if runtime_status != "online":
+            return False
+
+        status_reason = _safe_text(getattr(snapshot, "status_reason", None), fallback="").lower()
+        if status_reason in {"calibrating", "reboot recent"}:
+            return False
+
+        ota_error_key = _safe_text(getattr(snapshot, "ota_error_key", None), fallback="none").lower()
+        if ota_error_key != "none":
+            return False
+
+        ota_state_key = _safe_text(getattr(snapshot, "ota_state_key", None), fallback="idle").lower()
+        if ota_state_key not in {"idle", "boot_confirmed"}:
+            return False
+
+        current_uptime_s = _snapshot_uptime(snapshot)
+        if (
+            base.baseline_uptime_s is not None
+            and current_uptime_s is not None
+            and current_uptime_s + 1 < int(base.baseline_uptime_s)
+        ):
+            return True
+
+        current_reset_reason = _snapshot_reset_reason(snapshot)
+        if (
+            base.baseline_reset_reason is not None
+            and current_reset_reason is not None
+            and current_reset_reason != int(base.baseline_reset_reason)
+        ):
+            return True
+
+        current_boot_marker = _snapshot_boot_marker(snapshot)
+        if (
+            base.baseline_boot_marker is not None
+            and current_boot_marker is not None
+            and current_boot_marker != int(base.baseline_boot_marker)
+        ):
+            return True
+
+        return False
 
 
 def _derive_success(node_statuses: list[OtaNodeDeployStatus] | tuple[OtaNodeDeployStatus, ...]) -> bool:
@@ -738,6 +838,53 @@ def _snapshot_ip(snapshot: object | None) -> str | None:
         if text:
             return text
     return None
+
+
+def _snapshot_uptime(snapshot: object | None) -> int | None:
+    if snapshot is None:
+        return None
+    raw = getattr(snapshot, "last_uptime_s", None)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    if value < 0:
+        return None
+    return value
+
+
+def _snapshot_reset_reason(snapshot: object | None) -> int | None:
+    if snapshot is None:
+        return None
+    raw = getattr(snapshot, "reset_reason", None)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    if value < 0:
+        return None
+    return value
+
+
+def _snapshot_boot_marker(snapshot: object | None) -> int | None:
+    if snapshot is None:
+        return None
+    raw = getattr(snapshot, "last_boot_marker", None)
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        value = None
+    if value is not None and 0 <= value <= 0x0F:
+        return value
+
+    raw_flags = getattr(snapshot, "last_state_flags", None)
+    try:
+        flags = int(raw_flags)
+    except (TypeError, ValueError):
+        return None
+    if flags < 0 or flags > 0xFF:
+        return None
+    return (flags >> 4) & 0x0F
 
 
 def _is_loopback_host(value: str) -> bool:

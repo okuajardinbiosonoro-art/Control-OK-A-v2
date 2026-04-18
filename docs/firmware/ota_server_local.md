@@ -56,7 +56,7 @@ Ejemplo:
 El firmware consulta:
 
 ```text
-http://<PC_IP>:8080/ota/rollouts/20260328/manifest.json
+http://<PC_IP>:<puerto_ota>/ota/rollouts/20260328/manifest.json
 ```
 
 pero dentro del manifest recibe además:
@@ -124,18 +124,18 @@ Si `artifact.version` no cumple semver básico, el rollout se rechaza.
 
 ## URLs publicadas
 
-Con `host=192.168.88.254`, `port=8080` y `rollout_token=0x20260328`:
+Con `host=192.168.88.254`, `port=18080` y `rollout_token=0x20260328`:
 
 - manifest:
 
 ```text
-http://192.168.88.254:8080/ota/rollouts/20260328/manifest.json
+http://192.168.88.254:<puerto_ota>/ota/rollouts/20260328/manifest.json
 ```
 
 - bin:
 
 ```text
-http://192.168.88.254:8080/ota/rollouts/20260328/firmware.bin
+http://192.168.88.254:<puerto_ota>/ota/rollouts/20260328/firmware.bin
 ```
 
 Estas URLs son exactamente compatibles con la resolución actual del firmware.
@@ -162,6 +162,12 @@ Si el `rollout_token` ya existe con otro contenido:
 
 ## Servidor OTA local
 
+Nota operativa de esta rama:
+
+- CKv2 fija `18080` como puerto OTA local para las campañas desde la app.
+- `OtaServerService` sigue siendo configurable si se usa de forma manual fuera de la app.
+- El firmware del nodo debe compilarse con el mismo puerto OTA (`OKUA_OTA_PORT` o `OKUA_OTA_BASE_URL`).
+
 `OtaServerService` usa un servidor HTTP mínimo basado en la librería estándar:
 
 - `ThreadingHTTPServer`
@@ -172,7 +178,6 @@ Características:
 - `root_dir` configurable,
 - `bind_host` configurable,
 - `port` configurable,
-- default operativo `8080`,
 - logs básicos por request,
 - sin UI web, sin framework web pesado y sin lógica de negocio mezclada.
 
@@ -206,4 +211,3 @@ Sobre esta base, el siguiente ticket OTA puede enfocarse ya en:
 - seguimiento de rollout,
 - confirmación observada post-reboot,
 - y superficie técnica mínima para lanzar/monitorear el despliegue.
-

@@ -423,6 +423,7 @@ class NodeRegistry:
             reset_reason=node.reset_reason,
             status_reason=node.status_reason,
             health_summary=node.health_summary,
+            last_boot_marker=node.last_boot_marker,
             ota_state_code=node.ota_state_code,
             ota_error_code=node.ota_error_code,
             ota_flags=node.ota_flags,

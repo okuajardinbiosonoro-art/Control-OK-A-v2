@@ -35,15 +35,15 @@
 //-------------------- Modo de operacion -----------------------------------------------------
 #define MODE_TEST   1
 #define MODE_FIELD  2
-#ifndef ACTIVE_MODE
-#define ACTIVE_MODE MODE_TEST
+#ifndef OKUA_DEFAULT_ACTIVE_MODE
+#define OKUA_DEFAULT_ACTIVE_MODE MODE_TEST
 #endif
 
 //-------------------- Tipo de nodo ----------------------------------------------------------
 #define SENSOR_PLANT 1
 #define SENSOR_FRUIT 2
-#ifndef ACTIVE_SENSOR
-#define ACTIVE_SENSOR SENSOR_PLANT
+#ifndef OKUA_DEFAULT_ACTIVE_SENSOR
+#define OKUA_DEFAULT_ACTIVE_SENSOR SENSOR_PLANT
 #endif
 
 //-------------------- LEDs ------------------------------------------------------------------
@@ -56,8 +56,8 @@
 //-------------------- Variante de fruta -----------------------------------------------------
 #define FRUIT_VARIANT_V1 1
 #define FRUIT_VARIANT_V2 2
-#ifndef ACTIVE_FRUIT_VARIANT
-#define ACTIVE_FRUIT_VARIANT FRUIT_VARIANT_V2
+#ifndef OKUA_DEFAULT_ACTIVE_FRUIT_VARIANT
+#define OKUA_DEFAULT_ACTIVE_FRUIT_VARIANT FRUIT_VARIANT_V2
 #endif
 
 
@@ -71,6 +71,18 @@
 #if __has_include("okua_node_secrets.h")
 #include "okua_node_secrets.h"
 #endif
+#endif
+
+#ifndef ACTIVE_MODE
+#define ACTIVE_MODE OKUA_DEFAULT_ACTIVE_MODE
+#endif
+
+#ifndef ACTIVE_SENSOR
+#define ACTIVE_SENSOR OKUA_DEFAULT_ACTIVE_SENSOR
+#endif
+
+#ifndef ACTIVE_FRUIT_VARIANT
+#define ACTIVE_FRUIT_VARIANT OKUA_DEFAULT_ACTIVE_FRUIT_VARIANT
 #endif
 
 #ifdef OKUA_BUILD_NODE_LABEL
@@ -212,8 +224,11 @@ IPAddress PC_IP(PC_IP_A, PC_IP_B, PC_IP_C, PC_IP_D);
 #ifndef OKUA_FW_VERSION_CODE
 #define OKUA_FW_VERSION_CODE ((uint32_t)(FW_MAJOR) * 10000UL + (uint32_t)(FW_MINOR) * 100UL + (uint32_t)(FW_PATCH))
 #endif
+#ifndef OKUA_OTA_PORT
+#define OKUA_OTA_PORT 18080
+#endif
 #ifndef OKUA_OTA_BASE_URL
-#define OKUA_OTA_BASE_URL "http://" OKUA_STR(PC_IP_A) "." OKUA_STR(PC_IP_B) "." OKUA_STR(PC_IP_C) "." OKUA_STR(PC_IP_D) ":8080"
+#define OKUA_OTA_BASE_URL "http://" OKUA_STR(PC_IP_A) "." OKUA_STR(PC_IP_B) "." OKUA_STR(PC_IP_C) "." OKUA_STR(PC_IP_D) ":" OKUA_STR(OKUA_OTA_PORT)
 #endif
 #ifndef OKUA_TEST_PROBE_ENABLED
 #define OKUA_TEST_PROBE_ENABLED 0
@@ -236,7 +251,17 @@ IPAddress PC_IP(PC_IP_A, PC_IP_B, PC_IP_C, PC_IP_D);
   ZONA 3 — HARDWARE
 ============================================================================================*/
 
+#ifndef PIN_SIGNAL
 #define PIN_SIGNAL 32
+#endif
+
+#ifndef FRUIT_ADC_SCAN_SERIAL
+#define FRUIT_ADC_SCAN_SERIAL 0
+#endif
+
+#ifndef FRUIT_ADC_SCAN_INTERVAL_MS
+#define FRUIT_ADC_SCAN_INTERVAL_MS 200UL
+#endif
 
 #if LED_PROFILE == LED_SIMPLE
   #include <Adafruit_NeoPixel.h>
@@ -271,15 +296,59 @@ struct MidiRoute {
   uint8_t note;
 };
 
-// EJEMPLO EB1:
-// activa canales 1, 3, 4 y 5
-// Si quieres EC1, deja solo el canal 2.
+// Presets de ruteo para fruta (sin editar el core del sketch).
+#define FRUIT_ROUTE_PRESET_EB_FANOUT 1
+#define FRUIT_ROUTE_PRESET_EC_FANOUT 2
+#define FRUIT_ROUTE_PRESET_CUSTOM    3
+
+#ifndef FRUIT_ROUTE_PRESET
+#define FRUIT_ROUTE_PRESET FRUIT_ROUTE_PRESET_EB_FANOUT
+#endif
+
+#ifndef FRUIT_ROUTE_NOTE
+#define FRUIT_ROUTE_NOTE 57
+#endif
+
+#if FRUIT_ROUTE_PRESET == FRUIT_ROUTE_PRESET_EB_FANOUT
+// EB1 -> activa EB1, ED1 y EF1
 static const MidiRoute FRUIT_ROUTES[] = {
-  {0, 1, 57},
-  {0, 3, 57},
-  {0, 4, 57},
-  {0, 5, 57},
+  {0, 1, FRUIT_ROUTE_NOTE},
+  {0, 3, FRUIT_ROUTE_NOTE},
+  {0, 5, FRUIT_ROUTE_NOTE},
 };
+#elif FRUIT_ROUTE_PRESET == FRUIT_ROUTE_PRESET_EC_FANOUT
+// EC1 -> activa EC1, EE1 y EF1
+static const MidiRoute FRUIT_ROUTES[] = {
+  {0, 2, FRUIT_ROUTE_NOTE},
+  {0, 4, FRUIT_ROUTE_NOTE},
+  {0, 5, FRUIT_ROUTE_NOTE},
+};
+#else
+// CUSTOM -> permite override desde okua_node_secrets.h
+#ifndef FRUIT_ROUTE_1_CHANNEL_1B
+#define FRUIT_ROUTE_1_CHANNEL_1B 1
+#endif
+#ifndef FRUIT_ROUTE_1_NOTE
+#define FRUIT_ROUTE_1_NOTE FRUIT_ROUTE_NOTE
+#endif
+#ifndef FRUIT_ROUTE_2_CHANNEL_1B
+#define FRUIT_ROUTE_2_CHANNEL_1B 3
+#endif
+#ifndef FRUIT_ROUTE_2_NOTE
+#define FRUIT_ROUTE_2_NOTE FRUIT_ROUTE_NOTE
+#endif
+#ifndef FRUIT_ROUTE_3_CHANNEL_1B
+#define FRUIT_ROUTE_3_CHANNEL_1B 5
+#endif
+#ifndef FRUIT_ROUTE_3_NOTE
+#define FRUIT_ROUTE_3_NOTE FRUIT_ROUTE_NOTE
+#endif
+static const MidiRoute FRUIT_ROUTES[] = {
+  {0, FRUIT_ROUTE_1_CHANNEL_1B, FRUIT_ROUTE_1_NOTE},
+  {0, FRUIT_ROUTE_2_CHANNEL_1B, FRUIT_ROUTE_2_NOTE},
+  {0, FRUIT_ROUTE_3_CHANNEL_1B, FRUIT_ROUTE_3_NOTE},
+};
+#endif
 
 static const uint8_t FRUIT_ROUTE_COUNT = sizeof(FRUIT_ROUTES) / sizeof(FRUIT_ROUTES[0]);
 
@@ -336,6 +405,16 @@ static const uint8_t FRUIT_ROUTE_COUNT = sizeof(FRUIT_ROUTES) / sizeof(FRUIT_ROU
 #define FRUIT_AUTOCAL_REFINE_MS 8000
 #define FRUIT_HARD_TIMEOUT_MS  60000
 #define FRUIT_RECOVERY_MS        250
+#define FRUIT_REL_BASE_CAP_V    0.35f
+#ifndef FRUIT_DEBUG_SERIAL
+#define FRUIT_DEBUG_SERIAL      0
+#endif
+#ifndef FRUIT_FIXED_OFFSET_V
+#define FRUIT_FIXED_OFFSET_V    (-1.0f)
+#endif
+#ifndef FRUIT_FIXED_OFFSET_WINDOW_V
+#define FRUIT_FIXED_OFFSET_WINDOW_V 0.35f
+#endif
 
 
 /*============================================================================================
@@ -415,6 +494,39 @@ float readVmed3() {
   if ((b <= a && a <= c) || (c <= a && a <= b)) return a;
   return c;
 }
+
+#if FRUIT_ADC_SCAN_SERIAL
+static const uint8_t kFruitAdcScanPins[] = {32, 33, 34, 35, 36, 39};
+static unsigned long g_fruitAdcScanLastMs = 0;
+
+void serviceFruitAdcScan() {
+  if (ACTIVE_SENSOR != SENSOR_FRUIT) return;
+
+  const unsigned long now = millis();
+  if ((now - g_fruitAdcScanLastMs) < FRUIT_ADC_SCAN_INTERVAL_MS) return;
+  g_fruitAdcScanLastMs = now;
+
+  Serial.print("[ADC_SCAN] sel=");
+  Serial.print(PIN_SIGNAL);
+
+  for (size_t i = 0; i < (sizeof(kFruitAdcScanPins) / sizeof(kFruitAdcScanPins[0])); ++i) {
+    const uint8_t pin = kFruitAdcScanPins[i];
+    const int raw = analogRead(pin);
+    const float v = raw * (3.3f / 4095.0f);
+    Serial.print(" p");
+    Serial.print(pin);
+    Serial.print("=");
+    Serial.print(v, 3);
+    Serial.print("(");
+    Serial.print(raw);
+    Serial.print(")");
+    if (pin == PIN_SIGNAL) Serial.print("*");
+  }
+  Serial.println();
+}
+#else
+void serviceFruitAdcScan() {}
+#endif
 
 
 /*============================================================================================
@@ -1691,11 +1803,11 @@ const FruitDetectParams FRUIT_V2 = {
   0.05f, 0.20f, 0.60f,
   0.030f, 0.015f,
   5.0f, 3.0f,
-  0.100f,
-  0.30f, 0.25f,
-  40, 80, 120,
+  0.070f,
+  0.12f, 0.25f,
+  30, 80, 120,
   800, 12000,
-  0.45f
+  0.35f
 };
 
 const FruitDetectParams& FD = (ACTIVE_FRUIT_VARIANT == FRUIT_VARIANT_V1) ? FRUIT_V1 : FRUIT_V2;
@@ -1713,6 +1825,7 @@ float g_fruitSigma = 0.0f;
 
 bool  g_fruitContactActive = false;
 int8_t g_fruitTouchSign = +1;
+int8_t g_fruitPendingSign = +1;
 unsigned long g_fruitContactStartMs = 0;
 unsigned long g_fruitLastReleaseMs = 0;
 unsigned long g_fruitUpHoldStartMs = 0;
@@ -1720,6 +1833,9 @@ unsigned long g_fruitDownHoldStartMs = 0;
 unsigned long g_fruitLastEnergyOkMs = 0;
 unsigned long g_fruitRecoveryUntilMs = 0;
 unsigned long g_fruitLastKeepaliveMs = 0;
+#if FRUIT_DEBUG_SERIAL
+unsigned long g_fruitDebugLastMs = 0;
+#endif
 
 void fruitSendAll(bool noteOn, uint8_t vel, uint8_t flags) {
   for (uint8_t i = 0; i < FRUIT_ROUTE_COUNT; ++i) {
@@ -1745,6 +1861,14 @@ void calibrateFruit2Phases(float vNow) {
   win[wi++] = vNow;
   if (wi >= WIN) wi = 0;
   if (filled < WIN) filled++;
+
+  if (!g_fruitCalFastDone && FRUIT_FIXED_OFFSET_V >= 0.0f) {
+    // Optional manual seed for sensors that need a fixed ADC anchor.
+    g_fruitBaselineV = FRUIT_FIXED_OFFSET_V;
+    if (g_fruitBaselineV < FRUIT_BASE_CLAMP_MIN) g_fruitBaselineV = FRUIT_BASE_CLAMP_MIN;
+    g_fruitCalFastDone = true;
+    g_fruitRefineStartMs = now;
+  }
 
   if (!g_fruitCalFastDone) {
     if ((now - g_fruitBootMs) >= FRUIT_AUTOCAL_FAST_MS && filled >= WIN) {
@@ -1772,10 +1896,23 @@ void calibrateFruit2Phases(float vNow) {
   }
 
   if (!g_fruitCalRefineDone) {
-    float dv = vNow - g_fruitBaselineV;
-    if (fabsf(dv) < 0.12f) {
-      g_fruitBaselineV += 0.01f * dv;
+    if (FRUIT_FIXED_OFFSET_V >= 0.0f) {
+      float window = FRUIT_FIXED_OFFSET_WINDOW_V;
+      if (window < 0.02f) window = 0.02f;
+      if (fabsf(vNow - FRUIT_FIXED_OFFSET_V) <= window) {
+        float target = (0.85f * FRUIT_FIXED_OFFSET_V) + (0.15f * vNow);
+        float dv = target - g_fruitBaselineV;
+        g_fruitBaselineV += 0.02f * dv;
+      } else {
+        g_fruitBaselineV += 0.002f * (FRUIT_FIXED_OFFSET_V - g_fruitBaselineV);
+      }
       if (g_fruitBaselineV < FRUIT_BASE_CLAMP_MIN) g_fruitBaselineV = FRUIT_BASE_CLAMP_MIN;
+    } else {
+      float dv = vNow - g_fruitBaselineV;
+      if (fabsf(dv) < 0.12f) {
+        g_fruitBaselineV += 0.01f * dv;
+        if (g_fruitBaselineV < FRUIT_BASE_CLAMP_MIN) g_fruitBaselineV = FRUIT_BASE_CLAMP_MIN;
+      }
     }
 
     if ((now - g_fruitRefineStartMs) >= FRUIT_AUTOCAL_REFINE_MS) {
@@ -1814,7 +1951,7 @@ void serviceFruitField() {
   g_fruitPrevV = g_fruitFilteredV;
 
   int8_t dvSign = (dv >= 0.0f) ? +1 : -1;
-  int8_t signUse = g_fruitContactActive ? g_fruitTouchSign : dvSign;
+  int8_t signUse = g_fruitContactActive ? g_fruitTouchSign : ((g_fruitUpHoldStartMs != 0) ? g_fruitPendingSign : dvSign);
 
   float dv_proj = dv * (float)signUse;
   float slope_proj = dv_dt * (float)signUse;
@@ -1825,7 +1962,9 @@ void serviceFruitField() {
   }
 
   float th_rel_up = 0.0f;
-  if (g_fruitBaselineV >= FD.v_rel_min) th_rel_up = FD.rel_up * g_fruitBaselineV;
+  float relBase = g_fruitBaselineV;
+  if (relBase > FRUIT_REL_BASE_CAP_V) relBase = FRUIT_REL_BASE_CAP_V;
+  if (relBase >= FD.v_rel_min) th_rel_up = FD.rel_up * relBase;
 
   float th_up   = fmaxf(FD.abs_min_up,   fmaxf(th_rel_up, FD.k_sigma_up * g_fruitSigma));
   float th_down = fmaxf(FD.abs_min_down, fmaxf(FD.rel_down_f * th_up, FD.k_sigma_down * g_fruitSigma));
@@ -1836,7 +1975,11 @@ void serviceFruitField() {
   bool enterCand = ampStrong || (ampGate && slopeGate);
 
   if (enterCand) {
-    if (g_fruitUpHoldStartMs == 0) g_fruitUpHoldStartMs = now;
+    if (g_fruitUpHoldStartMs == 0) {
+      // Lock candidate polarity during hold to avoid bidirectional noise retriggers.
+      g_fruitPendingSign = dvSign;
+      g_fruitUpHoldStartMs = now;
+    }
   } else {
     g_fruitUpHoldStartMs = 0;
   }
@@ -1848,13 +1991,18 @@ void serviceFruitField() {
 
   if (enterNow) {
     g_fruitContactActive = true;
-    g_fruitTouchSign = dvSign;
+    g_fruitTouchSign = g_fruitPendingSign;
     g_fruitContactStartMs = now;
     g_fruitLastEnergyOkMs = now;
     g_fruitDownHoldStartMs = 0;
     g_fruitLastKeepaliveMs = 0;
 
     fruitSendAll(true, 100, EVT_FLAG_TOUCH);
+#if FRUIT_DEBUG_SERIAL
+    Serial.printf(
+      "[FRUIT] ENTER dv=%.4f th_up=%.4f slope=%.4f sign=%d base=%.4f filt=%.4f\n",
+      dv_proj, th_up, slope_proj, (int)g_fruitTouchSign, g_fruitBaselineV, g_fruitFilteredV);
+#endif
   }
 
   if (g_fruitContactActive) {
@@ -1893,17 +2041,44 @@ void serviceFruitField() {
   if (exitNow) {
     g_fruitContactActive = false;
     g_fruitLastReleaseMs = now;
+    g_fruitPendingSign = +1;
     g_fruitUpHoldStartMs = 0;
     g_fruitDownHoldStartMs = 0;
     g_fruitRecoveryUntilMs = now + FRUIT_RECOVERY_MS;
 
     fruitSendAll(false, 0, 0);
+#if FRUIT_DEBUG_SERIAL
+    Serial.printf(
+      "[FRUIT] EXIT dv=%.4f th_down=%.4f slope=%.4f rsn(level=%d,noE=%d,to=%d,der=%d)\n",
+      dv_proj, th_down, slope_proj,
+      (int)releaseLevel, (int)releaseNoEnergy, (int)releaseTimeout, (int)releaseDeriv);
+#endif
   }
 
   if (!g_fruitContactActive && now >= g_fruitRecoveryUntilMs) {
-    g_fruitBaselineV += FRUIT_BASE_A * (g_fruitFilteredV - g_fruitBaselineV);
+    if (FRUIT_FIXED_OFFSET_V >= 0.0f) {
+      float window = FRUIT_FIXED_OFFSET_WINDOW_V;
+      if (window < 0.02f) window = 0.02f;
+      if (fabsf(g_fruitFilteredV - FRUIT_FIXED_OFFSET_V) <= window) {
+        g_fruitBaselineV += FRUIT_BASE_A * (g_fruitFilteredV - g_fruitBaselineV);
+      } else {
+        g_fruitBaselineV += (FRUIT_BASE_A * 0.25f) * (FRUIT_FIXED_OFFSET_V - g_fruitBaselineV);
+      }
+    } else {
+      g_fruitBaselineV += FRUIT_BASE_A * (g_fruitFilteredV - g_fruitBaselineV);
+    }
     if (g_fruitBaselineV < FRUIT_BASE_CLAMP_MIN) g_fruitBaselineV = FRUIT_BASE_CLAMP_MIN;
   }
+
+#if FRUIT_DEBUG_SERIAL
+  if ((now - g_fruitDebugLastMs) >= 200UL) {
+    g_fruitDebugLastMs = now;
+    Serial.printf(
+      "[FRUIT] v=%.4f b=%.4f dv=%.4f dvt=%.4f sig=%.4f up=%.4f dn=%.4f ec=%d ca=%d us=%d ps=%d\n",
+      g_fruitFilteredV, g_fruitBaselineV, dv, dv_dt, g_fruitSigma, th_up, th_down,
+      (int)enterCand, (int)g_fruitContactActive, (int)dvSign, (int)g_fruitPendingSign);
+  }
+#endif
 }
 
 
@@ -2017,6 +2192,15 @@ void setup() {
   pinMode(PIN_SIGNAL, INPUT);
   analogReadResolution(12);
   analogSetPinAttenuation(PIN_SIGNAL, ADC_11db);
+#if FRUIT_ADC_SCAN_SERIAL
+  for (size_t i = 0; i < (sizeof(kFruitAdcScanPins) / sizeof(kFruitAdcScanPins[0])); ++i) {
+    const uint8_t pin = kFruitAdcScanPins[i];
+    if (pin != PIN_SIGNAL) {
+      pinMode(pin, INPUT);
+    }
+    analogSetPinAttenuation(pin, ADC_11db);
+  }
+#endif
 
   ledInit();
 
@@ -2108,6 +2292,8 @@ void loop() {
       serviceFruitField();
     }
   }
+
+  serviceFruitAdcScan();
 
   const uint32_t stat_interval_ms = (g_statIntervalMs > 0) ? g_statIntervalMs : (uint32_t)STAT_INTERVAL_MS;
   if (millis() - g_lastStatMs >= stat_interval_ms) {

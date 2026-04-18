@@ -15,7 +15,6 @@ from control_okua.services.remote_user_store import (
     normalize_remote_username,
 )
 
-
 PASSWORD_SCRYPT_N = 2**14
 PASSWORD_SCRYPT_R = 8
 PASSWORD_SCRYPT_P = 1

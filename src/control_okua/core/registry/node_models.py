@@ -155,6 +155,7 @@ class NodeSnapshot:
     recovering: bool = False
     last_transition_summary: str = ""
     recent_events: tuple[NodeRuntimeEvent, ...] = ()
+    last_boot_marker: int | None = None
 
 
 @dataclass(frozen=True)

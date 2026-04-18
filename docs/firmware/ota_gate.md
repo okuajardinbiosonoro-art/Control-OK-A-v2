@@ -248,7 +248,7 @@ El manifest OTA mínimo del primer corte tendrá este contrato conceptual:
   "artifact_id": "sha256:0123456789abcdef...",
   "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "file_size": 756688,
-  "download_url": "http://192.168.88.254:8080/ota/artifacts/0123456789abcdef.bin",
+  "download_url": "http://192.168.88.254:18080/ota/artifacts/0123456789abcdef.bin",
   "changelog_short": "Ajuste de runtime y observabilidad",
   "rollout_channel": "stable",
   "published_at_utc": "2026-03-28T21:30:00Z",
@@ -419,9 +419,9 @@ Ubicación lógica recomendada:
 
 Puerto por defecto congelado:
 
-- `8080`
+- `18080`
 
-Debe poder cambiarse por configuración luego, pero el valor por defecto queda congelado en `8080`.
+Debe poder cambiarse por configuración luego, pero el valor por defecto queda congelado en `18080`.
 
 ## 9. Health-check congelado
 

@@ -82,6 +82,9 @@ class OtaNodeDeployStatus:
     rollout_token: str = ""
     artifact_id: str = ""
     last_message: str = ""
+    baseline_uptime_s: int | None = None
+    baseline_reset_reason: int | None = None
+    baseline_boot_marker: int | None = None
     observed_at_utc: str = field(default_factory=utc_now_iso)
 
     def __post_init__(self) -> None:
@@ -102,6 +105,9 @@ class OtaNodeDeployStatus:
         object.__setattr__(self, "rollout_token", normalize_text(self.rollout_token))
         object.__setattr__(self, "artifact_id", normalize_text(self.artifact_id))
         object.__setattr__(self, "last_message", normalize_text(self.last_message))
+        object.__setattr__(self, "baseline_uptime_s", _coerce_optional_non_negative_int(self.baseline_uptime_s))
+        object.__setattr__(self, "baseline_reset_reason", _coerce_optional_non_negative_int(self.baseline_reset_reason))
+        object.__setattr__(self, "baseline_boot_marker", _coerce_optional_boot_marker(self.baseline_boot_marker))
         object.__setattr__(self, "observed_at_utc", normalize_text(self.observed_at_utc, fallback=utc_now_iso()))
 
 
@@ -113,6 +119,25 @@ def coerce_ota_deploy_phase(value: OtaNodeDeployPhase | str) -> OtaNodeDeployPha
         return OtaNodeDeployPhase(raw)
     except ValueError as exc:
         raise OtaDeployValidationError(f"fase OTA invalida: {value!r}") from exc
+
+
+def _coerce_optional_non_negative_int(value: object) -> int | None:
+    if value is None:
+        return None
+    try:
+        resolved = int(value)
+    except (TypeError, ValueError):
+        return None
+    if resolved < 0:
+        return None
+    return resolved
+
+
+def _coerce_optional_boot_marker(value: object) -> int | None:
+    resolved = _coerce_optional_non_negative_int(value)
+    if resolved is None or resolved > 0x0F:
+        return None
+    return resolved
 
 
 @dataclass(frozen=True)
