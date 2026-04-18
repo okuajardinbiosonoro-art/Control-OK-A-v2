@@ -1185,10 +1185,13 @@ class MainWindow(QMainWindow):
                 f"No se pudo actualizar el servicio remoto: {exc}",
             )
             return
+        # Si el usuario quiso habilitarlo pero el servicio no arrancó, mostrar como warning.
+        service_state = getattr(_status, "service_state", "")
+        toast_level = "warning" if enabled and service_state != "running" else "success"
         self._show_toast(
             title="Servicio remoto",
             message=message,
-            level="success",
+            level=toast_level,
         )
 
     def _refresh_firmware_shell_summary(self) -> None:
