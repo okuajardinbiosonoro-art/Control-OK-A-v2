@@ -1,7 +1,7 @@
 # Checklist de cierre técnico de baseline — Control OKÚA CKv2
 
 Rama: `desarrollo-fase-2`  
-Última actualización: 2026-04-17 (Ticket 35.3 — protocolo de validación OTA hardware preparado)
+Última actualización: 2026-04-18 (Ticket 35.5 — portal remoto `/remote/` validado con navegador y Tailscale)
 
 ---
 
@@ -92,7 +92,9 @@ Ver acta completa en `docs/ui/baseline_functional_qa_execution.md` (sección "Va
 - ~~4 QActions huérfanos en menú~~ — ELIMINADOS en 35.1: `view_diagnostics_action`, `toggle_preflight_action`, `firmware_manager_action`, `advanced_tools_action` eliminados de `main_window.py`; referencias residuales limpiadas
 - Confirmación visual interactiva del mapa por José David (click en cajas, CTA "Ver nodos")
 - ~~QA funcional de Firmware Manager / OTA UI (catálogo, campaña, despliegue)~~ — UI/flujo EJECUTADO en 35.2; end-to-end OTA real pendiente de hardware compatible
-- Test de OTA Deploy end-to-end con hardware real — protocolo preparado en 35.3 ([`firmware_ota_hardware_validation.md`](firmware_ota_hardware_validation.md)); ejecución pendiente de sesión con José David y hardware
+- ~~Test de OTA Deploy end-to-end con hardware real~~ — EJECUTADO en 35.3: EB1 flasheada, despliegue OTA real confirmado (ACK_MATCHED, BOOT_CONFIRMED)
+- ~~QA funcional del módulo Remoto (código + suite)~~ — EJECUTADO en 35.4: 33/33 tests, BUG-1 corregido, toast level
+- ~~Validación del portal web `/remote/` con navegador y Tailscale~~ — EJECUTADO en 35.5: 29/29 escenarios PASS, portal validado, `tailscale_only` confirmado — ver [`remote_portal_validation.md`](remote_portal_validation.md)
 - Test de campaña OTA end-to-end con hardware real — pendiente de hardware y ciclo posterior
 
 ---

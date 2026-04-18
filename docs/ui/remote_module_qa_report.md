@@ -1,8 +1,8 @@
 # QA funcional — Módulo Remoto — Control OKÚA CKv2
 
 Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-18 (Ticket 35.4)  
-Tipo: QA funcional de código + suite automática — sin UI viva ni Tailscale
+Fecha: 2026-04-18 (Ticket 35.4 + Ticket 35.5)  
+Tipo: QA funcional de código + suite automática + validación real del portal web con navegador y Tailscale
 
 ---
 
@@ -10,10 +10,11 @@ Tipo: QA funcional de código + suite automática — sin UI viva ni Tailscale
 
 | Ítem | Detalle |
 |------|---------|
-| Método | Lectura completa de código + análisis de flujo + suite automática |
-| UI viva | No disponible — el agente no puede interactuar con GUI Qt |
-| Tailscale | No instalado en este host — flujo `tailscale_only` revisado solo a nivel de código |
-| Tests automáticos | 33 tests de Remote ejecutados — 33/33 PASAN |
+| Método (35.4) | Lectura completa de código + análisis de flujo + suite automática |
+| Método (35.5) | Servicio standalone + 27 escenarios funcionales automáticos + navegador real + Tailscale |
+| UI viva | **VALIDADA en 35.5** — navegador abierto en `http://127.0.0.1:8789/remote/`, portal cargado |
+| Tailscale | **VALIDADO en 35.5** — IP `100.88.127.119`, bind exclusivo confirmado |
+| Tests automáticos | 33 tests de Remote ejecutados (35.4) + 27 escenarios funcionales reales (35.5) — todos PASAN |
 
 ---
 
@@ -288,32 +289,34 @@ Suite completa post-corrección: `python -m pytest` → **498/498 PASAN**
 
 ---
 
-## Pruebas manuales (no ejecutadas por el agente)
+## Pruebas del portal web — Ticket 35.5 (ejecutadas 2026-04-18)
 
-**El agente no puede interactuar con GUI Qt ni abrir navegadores.** Las siguientes pruebas quedan pendientes de ejecución por José David:
+Validación real con servicio standalone, navegador abierto y Tailscale. Ver reporte completo:
+[`docs/ui/remote_portal_validation.md`](remote_portal_validation.md)
 
-| Prueba | Condición para ejecutar |
-|--------|------------------------|
-| Abrir pestaña Remoto y verificar summary con servicio activo | App corriendo en Windows con `remote_api.enabled: true` |
-| Hacer bootstrap de cuentas via consola web en `http://127.0.0.1:8788/remote/` | Puerto 8788 libre |
-| Login con usuario admin/tecnico/observador | Bootstrap previo completado |
-| Verificar que solo admin puede ver la gestión de cuentas | Login con cada rol |
-| Aplicar configuración y verificar toast "warning" en fallo | Configurar `tailscale_only` sin Tailscale |
-| Verificar toast "success" en activación exitosa | Puerto 8788 libre |
+Resumen:
+
+| Prueba | Estado |
+| ------ | ------ |
+| Portal HTML carga en navegador real | **EJECUTADO** — 200 OK, layout correcto |
+| Bootstrap desde store vacía | **EJECUTADO** — 3 cuentas creadas, sesión admin activa |
+| Login / logout (admin, tecnico, observador) | **EJECUTADO** — todos PASS |
+| Restricciones por rol (observador/tecnico/admin) | **EJECUTADO** — 403 en rutas no autorizadas |
+| Tailscale `tailscale_only` | **EJECUTADO** — bind en `100.88.127.119`, aislamiento confirmado |
+| Toast "warning" en fallo de activación (BUG-1 corregido) | **CORREGIDO en 35.4** |
 
 ---
 
 ## Decisión final — Estado operativo del módulo Remoto
 
-**El módulo Remoto queda LISTO para uso controlado interno bajo las siguientes condiciones:**
+**El módulo Remoto queda COMPLETAMENTE VALIDADO para uso controlado interno.**
 
-1. **Modo `local_only`** (bind 127.0.0.1:8788): completamente funcional, validado a nivel de código y suite automática.
-2. **Bootstrap de usuarios**: debe ejecutarse una vez via consola web antes del primer uso.
-3. **Acceso**: solo desde la misma máquina (local_only) hasta que Tailscale se configure.
-4. **Rol observador**: seguro para monitoreo — solo lectura de nodos y runtime.
-5. **Rol tecnico**: permite `request_stat_now` — usar con precaución en producción.
-6. **Rol admin / reboot_soft**: NO usar en producción sin evaluación previa del impacto.
+1. **Modo `local_only`** (bind 127.0.0.1:8788): validado con código, suite automática y portal real.
+2. **Modo `tailscale_only`**: validado con bind exclusivo en IP Tailscale `100.88.127.119`.
+3. **Bootstrap**: flujo completo probado desde store vacía, resultado correcto.
+4. **Roles**: restricciones verificadas en navegador real con cookies reales.
+5. **Rol observador**: solo lectura confirmada — seguro para monitoreo.
+6. **Rol tecnico**: `request_stat_now` autorizado; `/accounts` bloqueado.
+7. **Rol admin**: gestión completa de cuentas y acciones confirmadas.
 
-**Tailscale (`tailscale_only`):** disponible pero requiere instalación y configuración de Tailscale en el host; no validado en este entorno.
-
-**Límite de uso:** para uso operativo controlado por José David en la instalación OKÚA — NO para exposición pública.
+**Límite de uso:** para uso operativo controlado por José David en la instalación OKÚA — NO para exposición pública sin revisión de `custom_bind`.
