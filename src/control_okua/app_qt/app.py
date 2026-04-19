@@ -69,7 +69,10 @@ def run_app() -> int:
     if qss_path.exists():
         app.setStyleSheet(load_qss(qss_path))
 
-    icon_path = app_icon_path()
+    # Taskbar icon: fondo BRAND_DEEP + espiral blanca — visible en taskbar oscura.
+    # La ventana principal usa app_icon_path() (logo blanco transparente) para la barra de título.
+    taskbar_icon_path = resource_path("assets/branding/okua_taskbar_icon.png")
+    icon_path = taskbar_icon_path if taskbar_icon_path.exists() else app_icon_path()
     if icon_path.exists():
         app.setWindowIcon(QIcon(str(icon_path)))
 
