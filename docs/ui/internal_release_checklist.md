@@ -135,12 +135,28 @@ Ver detalle completo en [`internal_operational_pilot.md`](internal_operational_p
 
 Ver detalle completo en [`internal_operational_observation.md`](internal_operational_observation.md).
 
+## Observación operativa prolongada real (Ticket 37.2)
+
+| Ítem | Estado |
+|------|--------|
+| Observación prolongada real ejecutada | **PASA completamente** (2026-04-19) |
+| Duración observada | 690 s (~11m30s) — 15 muestras de proceso |
+| Nodos reales activos | EB1 + EB2 en línea durante toda la ventana |
+| Tráfico real observado | EVT + STAT continuos, con tres pulsos `REQUEST_STAT_NOW` confirmados por ACK |
+| Sin crash ni terminación inesperada | CONFIRMADO |
+| Sin leak de memoria | CONFIRMADO — RSS 78.4–105.3 MB |
+| CPU normal | CONFIRMADO — pico 5.5 % |
+| Bugs encontrados | Ninguno — sin cambios de código |
+| Estabilidad prolongada declarada | **RC1 estable para uso operativo controlado continuado** |
+
+Ver detalle completo en [`internal_operational_observation_real.md`](internal_operational_observation_real.md).
+
 ---
 
 ## Decisión de cierre
 
 **El ciclo RC queda cerrado. Este checklist es evidencia de entrega de la Release Interna Controlada RC1.**  
-**El piloto interno (37.0) confirma estabilidad operativa para uso controlado continuado.**
+**El piloto interno (37.0) y la observación real prolongada (37.2) confirman estabilidad operativa para uso controlado continuado.**
 
 Para contexto completo de validación: [`release_candidate_handoff.md`](release_candidate_handoff.md)  
 Para release notes: [`internal_release_notes_rc1.md`](internal_release_notes_rc1.md)  

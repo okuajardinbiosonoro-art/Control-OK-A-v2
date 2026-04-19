@@ -49,6 +49,7 @@ El artefacto principal es la ejecución desde fuente con `python main.py` en la 
 | Suite completa de tests | 498/498 PASAN | 34.8 → 37.0 |
 | Piloto interno controlado — arranque, estabilidad, cierre | PASA con observaciones menores — ninguna bloqueante | 37.0 |
 | Observación prolongada 602 s — memoria, CPU, stdout, MIDI | **PASA completamente** — sin crash, sin leak, sin errores | 37.1 |
+| Observación prolongada real 690 s — nodos vivos, control-plane ACK, sesión limpia | **PASA completamente** — EB1/EB2 activos, 3 `REQUEST_STAT_NOW` reales, 0 errores | 37.2 |
 
 ---
 
@@ -60,6 +61,8 @@ El artefacto principal es la ejecución desde fuente con `python main.py` en la 
 | Toast level hardcodeado en fallo de servicio remoto | `level="success"` fijo → verifica `service_state != "running"` antes de elegir nivel | 35.4 |
 | 4 QActions huérfanos en menú principal | `view_diagnostics_action`, `toggle_preflight_action`, `firmware_manager_action`, `advanced_tools_action` eliminados de `main_window.py` | 35.1 |
 | `_extract_build_profile` / `_extract_default_target_kind` no manejaban defines indirectos | Soporte para `ACTIVE_MODE OKUA_DEFAULT_ACTIVE_MODE` y `ACTIVE_SENSOR OKUA_DEFAULT_ACTIVE_SENSOR` | 34.8 |
+
+La observación real 37.2 refuerza la conclusión operativa: la RC1 sostiene nodos reales activos con tráfico y control-plane confirmados, sin degradación observable.
 
 ---
 

@@ -147,6 +147,7 @@ Todas las pendientes no bloqueantes quedaron resueltas:
 - Suite de tests 498/498: **PASAN** (actualizado post-37.0)
 - Piloto interno 37.0: **PASA con observaciones menores**
 - Observación prolongada 37.1 (602 s): **PASA completamente** — sin crash, sin leak, MIDI OK
+- Observación prolongada real 37.2 (690 s): **PASA completamente** — EB1/EB2 vivos, tres `REQUEST_STAT_NOW` con ACK, sin degradación
 
 ## Qué sigue después de esta release
 
@@ -176,5 +177,7 @@ Ensayo ejecutado sobre una copia limpia del repositorio en `C:\Users\JOSE DAVID\
 ### Decisión
 
 La entrega interna es reproducible en una copia limpia, siempre que el primer arranque deje claro el perfil operativo. En esta máquina, la ruta validada fue `CKV2_AUTOPROFILE=udp_jardin` + `python main.py`.
+
+La observación real 37.2 fortalece la decisión de uso controlado continuado porque confirma la misma baseline con nodos físicos activos y sesión viva sostenida.
 
 Para operación inmediata: ver `release_candidate_runbook.md`.
