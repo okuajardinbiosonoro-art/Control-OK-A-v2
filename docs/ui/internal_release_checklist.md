@@ -120,6 +120,21 @@ Ver contingencia completa en `release_candidate_runbook.md` §4.
 
 Ver detalle completo en [`internal_operational_pilot.md`](internal_operational_pilot.md).
 
+## Observación operativa prolongada (Ticket 37.1)
+
+| Ítem | Estado |
+|------|--------|
+| Observación prolongada ejecutada | **PASA completamente** (2026-04-19) |
+| Duración observada | 602 s (~10 min) — 9 muestras de proceso |
+| Sin crash ni terminación inesperada | CONFIRMADO |
+| Sin leak de memoria | CONFIRMADO — baseline ~120 MB estable |
+| CPU normal (idle 0–7.8 %) | CONFIRMADO |
+| MIDI inicializado correctamente | CONFIRMADO — ambos buses abiertos |
+| Bugs encontrados | Ninguno — sin cambios de código |
+| Estabilidad prolongada declarada | **RC1 estable para uso operativo controlado continuado** |
+
+Ver detalle completo en [`internal_operational_observation.md`](internal_operational_observation.md).
+
 ---
 
 ## Decisión de cierre

@@ -48,6 +48,7 @@ El artefacto principal es la ejecución desde fuente con `python main.py` en la 
 | Portal `/remote/` — bootstrap, login, roles, Tailscale | 29/29 escenarios PASS | 35.5 |
 | Suite completa de tests | 498/498 PASAN | 34.8 → 37.0 |
 | Piloto interno controlado — arranque, estabilidad, cierre | PASA con observaciones menores — ninguna bloqueante | 37.0 |
+| Observación prolongada 602 s — memoria, CPU, stdout, MIDI | **PASA completamente** — sin crash, sin leak, sin errores | 37.1 |
 
 ---
 

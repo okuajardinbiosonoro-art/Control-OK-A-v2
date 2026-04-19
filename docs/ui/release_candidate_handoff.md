@@ -144,7 +144,9 @@ Todas las pendientes no bloqueantes quedaron resueltas:
 - Mapa Home — confirmación visual interactiva: **CONFIRMADO por José David (2026-04-18)**
 - QA Firmware/OTA: **VALIDADO** (35.2 / 35.3 / 35.6)
 - Módulo Remoto y portal: **VALIDADO** (35.4 / 35.5)
-- Suite de tests 494/494: **PASAN**
+- Suite de tests 498/498: **PASAN** (actualizado post-37.0)
+- Piloto interno 37.0: **PASA con observaciones menores**
+- Observación prolongada 37.1 (602 s): **PASA completamente** — sin crash, sin leak, MIDI OK
 
 ## Qué sigue después de esta release
 
