@@ -109,10 +109,25 @@ Ver contingencia completa en `release_candidate_runbook.md` §4.
 
 ---
 
+## Piloto interno (Ticket 37.0)
+
+| Ítem | Estado |
+|------|--------|
+| Piloto interno controlado ejecutado | PASA con observaciones menores (2026-04-19) |
+| Suite completa post-piloto | 498/498 PASAN — 0 fallos |
+| Bugfix BUG-1 piloto (test desactualizado) | CORREGIDO en `tests/test_resources_icons.py` |
+| Estabilidad operativa declarada | Lista para uso controlado continuado |
+
+Ver detalle completo en [`internal_operational_pilot.md`](internal_operational_pilot.md).
+
+---
+
 ## Decisión de cierre
 
-**El ciclo RC queda cerrado. Este checklist es evidencia de entrega de la Release Interna Controlada RC1.**
+**El ciclo RC queda cerrado. Este checklist es evidencia de entrega de la Release Interna Controlada RC1.**  
+**El piloto interno (37.0) confirma estabilidad operativa para uso controlado continuado.**
 
 Para contexto completo de validación: [`release_candidate_handoff.md`](release_candidate_handoff.md)  
 Para release notes: [`internal_release_notes_rc1.md`](internal_release_notes_rc1.md)  
-Para operación de campo: [`release_candidate_runbook.md`](release_candidate_runbook.md)
+Para operación de campo: [`release_candidate_runbook.md`](release_candidate_runbook.md)  
+Para piloto interno: [`internal_operational_pilot.md`](internal_operational_pilot.md)

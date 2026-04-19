@@ -14,9 +14,11 @@ if str(SRC_DIR) not in sys.path:
 from control_okua.app_qt.resources import app_icon_path, resource_path  # noqa: E402
 
 
-def test_app_icon_path_prefers_new_branding_icon_set() -> None:
+def test_app_icon_path_prefers_png_over_ico() -> None:
+    # app_icon_path() prefiere PNG para que QIcon lo cargue de forma confiable;
+    # el ICO permanece en la spec como recurso PE del exe (taskbar anclado).
     resolved = app_icon_path()
-    expected = resource_path("assets/branding/okua_app_icon.ico")
+    expected = resource_path("assets/branding/okua_icon_256.png")
 
     assert resolved == expected
     assert resolved.exists()

@@ -46,7 +46,8 @@ El artefacto principal es la ejecución desde fuente con `python main.py` en la 
 | OTA Deploy individual con hardware real | EB1 TRIGGERED → ACK_MATCHED → BOOT_CONFIRMED | 35.3 |
 | Campaña OTA wave-by-wave con hardware real | EB1 canary, COMPLETED, health gate PASSED, reboot confirmado UDP+serial | 35.6 |
 | Portal `/remote/` — bootstrap, login, roles, Tailscale | 29/29 escenarios PASS | 35.5 |
-| Suite completa de tests | 494/494 PASAN | 34.8 → 35.x |
+| Suite completa de tests | 498/498 PASAN | 34.8 → 37.0 |
+| Piloto interno controlado — arranque, estabilidad, cierre | PASA con observaciones menores — ninguna bloqueante | 37.0 |
 
 ---
 
@@ -78,7 +79,7 @@ El artefacto principal es la ejecución desde fuente con `python main.py` en la 
 
 Commit de cierre del ciclo RC: **`1e1f474`** (mapa Home confirmado — último commit pre-36.0).
 
-El `.exe` empaquetado (`dist/Control OKÚA CKv2.exe`, PyInstaller 6.19.0) fue generado y verificado en 34.3 pero **no es la ruta operativa validada** para esta release. Usar solo si se requiere distribución sin entorno Python.
+El `.exe` empaquetado (`dist/Control OKÚA CKv2/Control OKÚA CKv2.exe`, PyInstaller 6.19.0, one-dir) fue validado visualmente por José David (2026-04-19, ticket 36.2): ícono, mapa, navegación y cierre — todos PASAN. Es la alternativa secundaria para distribución sin entorno Python.
 
 ---
 
