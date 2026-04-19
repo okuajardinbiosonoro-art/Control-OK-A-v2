@@ -57,6 +57,10 @@ def run_app() -> int:
     for warning in remote_runtime_warnings:
         _emit_runtime_message(f"[remote_api] {warning}")
 
+    if sys.platform == "win32":
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("okua.ckv2.control")
+
     app = QApplication(sys.argv)
     app.setApplicationName(APP_DISPLAY_NAME)
     app.setApplicationDisplayName(APP_DISPLAY_NAME)

@@ -30,12 +30,12 @@ def load_qss(path: Path) -> str:
 
 
 def app_icon_path() -> Path:
-    """Prefiere el set de branding actual y cae a legados solo si hace falta."""
+    """Prefiere PNG sobre ICO — QIcon de Qt carga PNGs más confiablemente que ICO generados con Pillow."""
     candidates = (
-        "assets/branding/okua_app_icon.ico",
         "assets/branding/okua_icon_256.png",
         "assets/branding/okua_icon_128.png",
         "assets/branding/okua_icon_64.png",
+        "assets/branding/okua_app_icon.ico",
         "assets/icons/app_icon.ico",
         "assets/icons/app_icon.png",
     )
