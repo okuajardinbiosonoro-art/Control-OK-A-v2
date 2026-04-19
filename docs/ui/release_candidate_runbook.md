@@ -152,7 +152,7 @@ python -m pytest tests/ -q
 python main.py
 ```
 
-> Commit de cierre del ciclo RC: `1e1f474` (mapa Home confirmado — Release Interna Controlada RC1). `494/494` tests pasan.
+> Commit de referencia estable actual: `0aff3ba` (post-37.2 — suite 498/498, observación real validada). Baseline original RC1: `1e1f474`. Ver tabla completa de commits en `internal_operational_acceptance.md` §Bloque 4.
 
 ---
 
@@ -168,7 +168,7 @@ python main.py
 | Flujo mapa ↔ Nodos — capa de datos | VALIDADO — filtrado y resolución inversa correctos (34.7) |
 | QA pantalla Firmware / OTA UI | VALIDADO — catálogo, despliegue y campaign dialog (35.2) |
 | Campaña OTA end-to-end con hardware real | VALIDADO — EB1 canary COMPLETED, health gate PASSED (35.6) |
-| Suite completa de tests (491/491) | PASA |
+| Suite completa de tests (498/498) | PASA |
 | Arranque visual y navegación básica | CONFIRMADO por José David (34.5, commit a27d2b5) |
 
 ### Qué queda pendiente (post release interna RC1)

@@ -151,12 +151,24 @@ Ver detalle completo en [`internal_operational_observation.md`](internal_operati
 
 Ver detalle completo en [`internal_operational_observation_real.md`](internal_operational_observation_real.md).
 
+## Aceptación operativa interna (Ticket 38.0)
+
+| Ítem | Estado |
+|------|--------|
+| Acta de aceptación operativa formal | **EMITIDA** (2026-04-19) |
+| Deuda residual clasificada | CLASIFICADA — sin bloqueantes |
+| Plan de seguimiento y mantenimiento | DOCUMENTADO |
+| Criterios de incidente y rollback | CONSOLIDADOS |
+| Referencias de rollback estables | `0aff3ba` (actual), `c9e978b`, `1e1f474` (baseline RC1) |
+
+Ver detalle completo en [`internal_operational_acceptance.md`](internal_operational_acceptance.md).
+
 ---
 
 ## Decisión de cierre
 
 **El ciclo RC queda cerrado. Este checklist es evidencia de entrega de la Release Interna Controlada RC1.**  
-**El piloto interno (37.0) y la observación real prolongada (37.2) confirman estabilidad operativa para uso controlado continuado.**
+**La aceptación operativa interna (38.0) es la declaración formal de cierre del ciclo de validación.**
 
 Para contexto completo de validación: [`release_candidate_handoff.md`](release_candidate_handoff.md)  
 Para release notes: [`internal_release_notes_rc1.md`](internal_release_notes_rc1.md)  
