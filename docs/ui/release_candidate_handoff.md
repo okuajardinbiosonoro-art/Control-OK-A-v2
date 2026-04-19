@@ -64,7 +64,9 @@ config.json con perfil activo configurado o primer arranque resuelto con selecto
 ### Artefacto principal
 
 **Ruta principal: `python main.py` desde el repositorio en `desarrollo-fase-2`.**  
-El `.exe` empaquetado (`ControlOkuaV2.spec`) es alternativa secundaria para distribución futura. Esta RC fue validada desde fuente.
+El `.exe` empaquetado (`ControlOkuaV2.spec`) es alternativa secundaria viable para distribución. Build confirmado el 2026-04-19 (53.8 MB, PyInstaller 6.19.0); arranque sin crash confirmado programáticamente. Verificación visual pendiente de José David — ver [`internal_release_packaged_rehearsal.md`](internal_release_packaged_rehearsal.md).
+
+> Nota de distribución: para entregar el exe a otra máquina, copiar `config.example.json` como `config.json` junto al exe. El `dist/config.json` actual contiene la config personal de José David (ports MIDI locales, remote_api tailscale_only) y no es un config genérico.
 
 Si `config.json` no existe en el primer arranque, la app lo crea y puede pedir perfil. En un entorno limpio, la ruta no interactiva validada fue `CKV2_AUTOPROFILE=udp_jardin` antes de `python main.py`.
 
