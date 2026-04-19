@@ -1,8 +1,8 @@
 # Ensayo de entrega empaquetada (.exe) — Control OKÚA CKv2 — RC1
 
 Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-19 (Ticket 36.2)  
-Clasificación: **PASA con observaciones menores**
+Fecha: 2026-04-19 (Ticket 36.2 — actualizado post-correcciones)  
+Clasificación: **PASA con observaciones menores** (pendiente confirmación visual de José David)
 
 ---
 
@@ -121,9 +121,61 @@ Para ejecutar: doble clic en `dist/Control OKÚA CKv2.exe`. Asegurarse de que lo
 
 ---
 
-## Bloque 4 — Correcciones realizadas
+## Bloque 4 — Correcciones realizadas (post validación visual de José David)
 
-No se requirieron correcciones de código o spec. Los hallazgos son notas operativas de distribución, no bugs.
+Tras la validación visual, José David reportó:
+
+1. **El mapa no estaba disponible** en la app empaquetada.
+2. **El ícono en la barra de tareas era genérico** (no el de OKÚA).
+
+### BUG-1 corregido — Mapa no disponible en exe (path frozen incorrecto)
+
+**Causa raíz:** `resolve_home_map_asset_path()` en `home_map_panel.py` usaba `Path(sys.executable).resolve().parent` en modo frozen. En one-file, esto apunta al directorio `dist/` (donde está el `.exe`), pero el asset del mapa está en `sys._MEIPASS` (directorio de extracción temporal). En one-dir, el problema persistía porque `_internal/` no es el directorio del exe.
+
+**Corrección:** Reemplazado por `resource_path("assets/maps/okua_home_base.png")` de `control_okua.app_qt.resources`, que usa correctamente `sys._MEIPASS` tanto en one-file como en one-dir.
+
+**Archivo:** `src/control_okua/app_qt/widgets/home_map_panel.py`  
+**Tests:** 8/8 tests de mapa pasan post-corrección.
+
+### Decisión de formato — one-dir en lugar de one-file
+
+**Motivo:** En PyInstaller one-file, el exe extrae todo a un dir temporal en cada arranque (`%TEMP%/_MEIxxxxx/`), lo que causa:
+
+- Tiempo de arranque mayor (extracción en cada ejecución)
+- Rutas temporales que cambian en cada run — puede interferir con el ícono en taskbar de Windows
+- Más difícil de depurar assets faltantes
+
+**Decisión: one-dir** (`COLLECT` en spec). La carpeta de distribución queda:
+
+```text
+Control OKÚA CKv2/
+  Control OKÚA CKv2.exe   ← 2.6 MB (solo bootstrap)
+  config.json              ← copiado manualmente desde config.dist.json
+  _internal/               ← runtime PyInstaller (DLLs, pyc, assets)
+    assets/
+      maps/okua_home_base.png
+      branding/okua_app_icon.ico
+      theme.qss
+    ...
+```
+
+**Ventajas:** arranque inmediato, assets inspeccionables, ícono resuelto desde ruta estable, fácil de actualizar parcialmente, sin extracción temporal.
+
+**Spec actualizada:** `ControlOkuaV2.spec` — reemplazado one-file `EXE(a.binaries, a.datas)` por `EXE(exclude_binaries=True)` + `COLLECT()`.
+
+### Config de distribución limpia — `config.dist.json`
+
+**Problema:** `dist/config.json` contenía la config personal de José David (ports MIDI `"loopMIDI Port 1 1"`, remote_api `tailscale_only` en puerto 8802).
+
+**Corrección:** Creado `config.dist.json` en la raíz del repo como plantilla de distribución limpia:
+
+- `midi.outputs`: `"loopMIDI Port 1"` y `"loopMIDI Port 2"` (nombres estándar)
+- `remote_api.enabled`: `false`
+- `remote_api.exposure_mode`: `"local_only"`
+- `remote_api.port`: `8788`
+- Perfil: `udp_jardin`, modo `udp`
+
+**Uso:** Copiar `config.dist.json` como `config.json` junto al exe antes de distribuir.
 
 ---
 

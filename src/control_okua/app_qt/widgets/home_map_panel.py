@@ -27,11 +27,8 @@ from control_okua.core.registry import NodeStatus
 
 
 def resolve_home_map_asset_path() -> Path:
-    if getattr(sys, "frozen", False):
-        base_dir = Path(sys.executable).resolve().parent
-    else:
-        base_dir = Path(__file__).resolve().parents[4]
-    return base_dir / "assets" / "maps" / "okua_home_base.png"
+    from control_okua.app_qt.resources import resource_path
+    return resource_path("assets/maps/okua_home_base.png")
 
 
 class HomeMapPanel(QWidget):
