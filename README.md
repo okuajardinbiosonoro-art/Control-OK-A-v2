@@ -1,10 +1,200 @@
 # Control OKÚA CKv2
 
-## Arranque rapido
+> Aplicación de escritorio para la operación de la instalación OKÚA Jardín Biosonoro
 
-### 1) Crear entorno virtual
+---
 
-Windows (PowerShell):
+## Estado del proyecto
+
+| Campo | Valor |
+|-------|-------|
+| Release | RC1 — Release Interna Controlada |
+| Rama principal | `main` — promovida el 2026-04-19 |
+| Tag de referencia | `rc1-interna` (commit `6a16c33`) |
+| Rama de trabajo activa | `desarrollo-fase-2` |
+| Suite de tests | 498/498 PASAN |
+| Aceptación operativa | Emitida formalmente (2026-04-19, Ticket 38.0) |
+
+CKv2 ha completado su ciclo de Release Candidate: RC funcional → ensayo empaquetado → piloto interno → observación prolongada → observación real con hardware → aceptación formal → promoción a `main`. Es operativa para uso controlado por José David en la instalación OKÚA.
+
+---
+
+## Descripción general
+
+Control OKÚA CKv2 es la aplicación principal de operación del sistema OKÚA, una instalación de jardín biosonoro que convierte señales de sensores biológicos en eventos MIDI a través de una red de nodos ESP32 distribuidos físicamente.
+
+CKv2 cubre tres responsabilidades principales:
+
+1. **Gestión de sesión y observación de nodos** — inicia y detiene sesiones de comunicación UDP o serial con los nodos OKÚA, visualiza su estado en tiempo real y enruta eventos MIDI hacia instrumentos virtuales o físicos.
+2. **Actualizaciones OTA de firmware** — permite importar, gestionar y desplegar firmware sobre los nodos físicos de forma controlada, con soporte para despliegues individuales y campañas wave-by-wave con health gate.
+3. **Módulo remoto** — expone un servidor HTTP local con portal web para administración remota de la sesión, con roles diferenciados y soporte opcional para acceso vía Tailscale.
+
+CKv2 reemplaza la generación anterior (CKv1) con una arquitectura desacoplada, una UI basada en PySide6 (Qt6) y un ciclo de validación formal completo.
+
+---
+
+## Alcance funcional actual
+
+### Qué hace hoy
+
+| Función | Estado |
+|---------|--------|
+| Sesión UDP con nodos OKÚA en red local | Validado — 320 EVT + 16 STAT, 0 errores (Ticket 34.7) |
+| Enrutamiento MIDI via loopMIDI | Validado — 320 mensajes sin error |
+| Mapa Home con estado de cajas por sesión UDP | Validado — 5 cajas con estados coherentes |
+| Árbol de nodos con filtrado y resolución por caja | Validado con nodos reales EB1 + EB2 |
+| OTA Deploy individual (un nodo) | Validado — EB1: TRIGGERED → BOOT_CONFIRMED (Ticket 35.3) |
+| Campaña OTA canary con health gate | Validado — EB1 canary COMPLETED, health gate PASSED (Ticket 35.6) |
+| Portal remoto `/remote/` con roles | Validado — 29/29 escenarios (Ticket 35.5) |
+| Control Plane F3 (PING / REQUEST_STAT_NOW / REBOOT_SOFT) | Validado via sesión UDP real |
+| Preflight de readiness antes de iniciar sesión | Validado — detecta condiciones bloqueantes sin iniciar backend |
+| Empaquetado como exe (one-dir, PyInstaller) | Validado visualmente — ícono, mapa, navegación, cierre |
+
+### Módulos principales
+
+| Módulo | Superficie en app | Descripción |
+|--------|------------------|-------------|
+| Home / Mapa | `Inicio` | Estado agregado de la instalación, sesión y acción principal |
+| Nodos | `Nodos` | Árbol de nodos por caja, estado individual, métricas runtime |
+| Diagnóstico | `Diagnóstico` | Readiness, runtime serial/UDP, preflight findings |
+| Técnico / Control F3 | `Técnico` | Herramientas avanzadas, comandos de control-plane F3 |
+| Firmware / OTA | `Firmware` | Catálogo, importación, despliegue individual y campañas |
+| Remoto | `Remoto` | Estado y control del servidor remoto; portal `/remote/` |
+
+---
+
+## Arquitectura funcional
+
+### Capas principales
+
+```
+UI (PySide6 / Qt6)
+  └── ViewModels  →  SessionController
+                          ├── Backends (UDP / Serial)
+                          │       ├── UdpTransportAdapter
+                          │       └── SerialTransportAdapter
+                          ├── NodeRegistry   (estado por nodo)
+                          ├── MidiRouter     (enrutamiento por bus)
+                          ├── ControlPlaneRuntime  (F3 PING/STAT/REBOOT)
+                          └── RecordingWriter  (session.jsonl / report.json)
+
+Servicios complementarios
+  ├── FirmwareCatalogService   (artifacts/firmware_catalog.json)
+  ├── OtaDeployService
+  ├── OtaCampaignService
+  └── RemoteApiService         (HTTP + /remote/ portal)
+```
+
+### Flujo de sesión
+
+1. `SessionController` ejecuta preflight de readiness antes de abrir el backend.
+2. Si readiness está `blocked`, la sesión pasa a estado de error controlado con motivo legible — sin intentar el backend.
+3. Si readiness es `ready` o `ready_with_warnings`, se inicia el backend (UDP o Serial).
+4. El backend alimenta `NodeRegistry` por paquete parseado (EVT → estado, STAT → métricas).
+5. `MidiRouter` enruta eventos musicales a los buses loopMIDI según la política por caja (determinista, no dependiente de IP).
+6. Al detener, el registro de nodos se limpia para evitar nodos fantasmas en la siguiente sesión.
+
+### Identidad de nodos y ruteo MIDI
+
+La política es determinista y derivada exclusivamente de `node_id`:
+
+| `node_id` | Caja | Bus MIDI | Puerto loopMIDI |
+|-----------|------|----------|-----------------|
+| 1–5 | Caja 1 | 0 | loopMIDI Port 1 |
+| 6–10 | Caja 2 | 0 | loopMIDI Port 1 |
+| 11–15 | Caja 3 | 0 | loopMIDI Port 1 |
+| 16–20 | Caja 4 | 1 | loopMIDI Port 2 |
+| 21–25 | Caja 5 | 1 | loopMIDI Port 2 |
+
+Nombres lógicos de nodo: función pura de `node_id` (patrón `EB/EC/ED/EE/EF` por caja).
+
+### Protocolo UDP (perfil `udp_jardin`)
+
+| Puerto | Función |
+|--------|---------|
+| 5005 | `evt_port` — eventos musicales de nodo |
+| 5006 | `stat_port` — estado de nodo |
+| 5007 | `cmd_port` — comandos F3 salientes |
+| 5008 | `ack_port` — ACKs de comandos F3 entrantes |
+
+El parser OKUA valida cabecera `OKUA_HDR`, descarta datagramas malformados y clasifica por tipo (EVT / STAT). No depende de IP de origen para identificar al nodo.
+
+---
+
+## Capacidades validadas
+
+### Sesión UDP y observación de nodos
+
+- Sesión real validada con nodos EB1 (192.168.1.89, Caja 1) y EB2 (192.168.1.90, Caja 2).
+- Estado ONLINE/DEGRADED/OFFLINE derivado de timestamps de recepción y umbrales configurables (`thresholds.online_ms`, `degraded_ms`, `offline_ms`).
+- Observación prolongada real de 690 s con 15 muestras de proceso: sin crash, sin leak de memoria (RSS 78–105 MB), CPU ≤ 5.5 %.
+- Tres pulsos `REQUEST_STAT_NOW` confirmados por ACK de nodo en condiciones reales.
+
+### OTA Firmware
+
+- **Despliegue individual:** selección de artifact, publicación de rollout local, disparo de `OTA_CHECK_NOW` sobre el nodo. Telemetría observable: `fetching_manifest → validating_manifest → downloading → ready_reboot → boot_validating → boot_confirmed`.
+- **Campaña canary con health gate:** EB1 completó ciclo completo — wave configurada, health gate PASSED, reboot confirmado por UDP y serial.
+- **Downgrade explícito:** autorizable por opción en OTA Deploy (`Permitir downgrade / reinstalar versión no más nueva`); el manifest se publica con `flags.allow_downgrade = true`.
+- **Deduplicación por SHA256:** importar el mismo binario con nombre diferente no crea un artifact duplicado.
+
+### Módulo remoto
+
+- Servidor HTTP local con portal web en `/remote/`.
+- Roles soportados: `admin`, `tecnico`, `observador` — restricciones de acceso verificadas (403 en operaciones no autorizadas).
+- Modos de bind: `local_only` (loopback únicamente) y `tailscale_only` (bind exclusivo en IP Tailscale, loopback rechazado).
+- Bootstrap desde store vacía validado con 3 cuentas: login, logout y cambio de rol.
+
+### Control Plane F3
+
+- Comandos disponibles desde UI `Técnico → Control F3`: `PING`, `REQUEST_STAT_NOW`, `REBOOT_SOFT`.
+- El operador trabaja por `node_id`; la resolución `node_id → IP` usa el runtime UDP activo.
+- `REBOOT_SOFT` requiere confirmación explícita antes de enviar.
+- Auditoría en memoria: `command_sent`, `command_retry`, `command_ack`, `command_timeout`.
+- Los eventos de control-plane se escriben en `session.jsonl`.
+
+---
+
+## Ruta de operación
+
+### Ruta principal (recomendada)
+
+```bash
+python main.py
+```
+
+Ejecutar desde la raíz del repositorio en `desarrollo-fase-2`. Esta es la ruta validada íntegramente para uso controlado. Requiere entorno Python instalado (ver §Instalación).
+
+### Ruta alternativa (ejecutable empaquetado)
+
+```
+dist/Control OKÚA CKv2/Control OKÚA CKv2.exe
+```
+
+Generado con PyInstaller 6.19.0 en formato one-dir. Validado visualmente por José David (2026-04-19): ícono OKÚA correcto en barra de título y taskbar, Home con mapa, navegación a Nodos/Diagnóstico/Técnico, cierre limpio. Es la alternativa para distribución sin entorno Python. Antes de distribuir, reemplazar `config.json` junto al exe con `config.dist.json` como base.
+
+---
+
+## Requisitos
+
+| Requisito | Versión / Condición |
+|-----------|---------------------|
+| Sistema operativo | Windows 11 (validado en Windows 11 Home 10.0.26200) |
+| Python | 3.11 o superior |
+| Dependencias Python | Ver `requirements.txt` — principales: PySide6, rtmidi |
+| loopMIDI | Con `loopMIDI Port 1` y `loopMIDI Port 2` activos antes de arrancar |
+| Red local | Subred con nodos OKÚA activos (perfil `udp_jardin`: 192.168.1.x) |
+| Firewall | Puertos UDP 5005, 5006 y 5007 abiertos para tráfico local |
+| `config.json` | Presente en raíz del repo (se crea automáticamente en primer arranque) |
+
+> **Nota:** El bus `loopMIDI Port 3` es opcional. Si no existe, la app lo reporta como aviso no bloqueante y continúa con los buses disponibles.
+
+---
+
+## Instalación
+
+### 1. Crear entorno virtual
+
+**Windows (PowerShell):**
 
 ```powershell
 python -m venv .venv
@@ -13,7 +203,7 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Linux/macOS:
+**Linux/macOS** (entorno de desarrollo — no validado para operación):
 
 ```bash
 python3 -m venv .venv
@@ -22,485 +212,348 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 2) Ejecutar en desarrollo
+### 2. Verificar instalación
+
+```powershell
+pip show PySide6 rtmidi
+python -m compileall src main.py -q
+```
+
+Sin errores: la instalación es correcta.
+
+### 3. Configuración inicial
+
+Si es la primera vez:
+
+- Copiar `config.example.json` a `config.json` en la raíz del repo y ajustar el perfil activo, **o**
+- Dejar que el primer arranque cree `config.json` automáticamente y seleccionar perfil en el selector guiado.
+
+Para arranque no interactivo en un entorno limpio:
+
+```powershell
+$env:CKV2_AUTOPROFILE = "udp_jardin"
+python main.py
+Remove-Item Env:CKV2_AUTOPROFILE
+```
+
+---
+
+## Ejecución
+
+### Arranque normal
 
 ```powershell
 python main.py
 ```
 
-### 3) Build con PyInstaller
+### Qué esperar al abrir
+
+| Elemento | Estado esperado |
+|----------|----------------|
+| Título de ventana | `Control OKÚA · CKv2` |
+| Barra lateral | Inicio / Nodos / Diagnóstico / Técnico / Firmware / Remoto |
+| Chip de estado en Home | `Sesión inactiva` |
+| Mapa Home | 5 cajas visibles, sin color activo (sin sesión activa) |
+| Consola | Sin traceback, sin `ERROR` en las primeras líneas |
+
+### Primer arranque en entorno limpio
+
+Si `config.json` no existe, la app lo crea con defaults v2 y abre el selector guiado de perfil. Seleccionar `UDP Jardín` para el perfil operativo principal. El selector no se vuelve a mostrar si el perfil ya quedó guardado.
+
+### Notas de configuración útiles
+
+- `config.json` en la raíz del repo es la fuente de configuración activa.
+- Si está corrupto, la app lo renombra como `config.corrupt.<timestamp>.json` y regenera uno limpio.
+- Si detecta una config CKv1 antigua, la migra automáticamente a v2 y guarda respaldo.
+- El perfil activo se puede cambiar desde `Aplicación → Cambiar perfil`.
+- Cambiar perfil o recargar configuración queda bloqueado mientras haya una sesión activa.
+
+### Generación del ejecutable (opcional)
 
 ```powershell
 pyinstaller ControlOkuaV2.spec
 ```
 
-El ejecutable queda en `dist/Control OKÚA CKv2/Control OKÚA CKv2.exe` (formato one-dir).
-Copiar `config.dist.json` como `config.json` junto al exe antes de distribuir.
-
-## Estado actual de la app (UX)
-
-La ventana principal usa una shell no modal con navegación lateral persistente y un stack interno con tabs ocultas:
-
-- Superficies principales: `Inicio`, `Nodos`, `Diagnóstico`, `Firmware`, `Técnico`, `Remoto`.
-- Vista `Estado actual` disponible bajo demanda desde la propia app, sin ocupar la portada.
-- `Inicio` es la entrada principal y usa el plano real del repo como protagonista visual.
-- `Nodos` sigue agrupando cajas desplegables (`Caja 1` a `Caja 5`) con nombres lógicos (`EB1`, `EC1`, `...`).
-- `Diagnóstico` concentra resumen técnico, advertencias y panel de preflight desplegable.
-- `Técnico` integra `Control F3` y herramientas avanzadas.
-- `Firmware` deja visible el acceso al `Firmware Manager`.
-- `Remoto` queda confirmado como superficie principal de primer nivel porque ya expone estado y control rápido del servicio remoto sin depender del diálogo avanzado.
-- `Inicio` queda definida como portada limpia: mapa protagonista, estado breve de sesión y una única acción principal visible.
-- El detalle operativo y técnico vive fuera de la portada:
-  - `Estado actual` concentra el resumen largo de sesión
-  - `Diagnóstico` concentra readiness, advertencias y runtime
-  - `Técnico` concentra control avanzado y herramientas delicadas
-  - `Remoto` concentra el estado y acceso del servicio remoto
-
-Acciones y menú principal:
-
-- `Inicio` mantiene una acción primaria visible: `Iniciar sesión` o `Detener sesión`, según el estado real.
-- Las acciones secundarias de la Home se reducen a `Estado actual` y `Reiniciar error` dentro de `Más`.
-- `Cambiar perfil` queda como ruta única bajo `Aplicación`.
-- Menú superior reducido:
-  - `Aplicación`: `Cambiar perfil`, `Recargar configuración`, `Salir`
-  - `Ayuda`: `Acerca de`
-
-## Flujo de sesion y readiness (Tickets 3.3 + 4.x)
-
-- La Home `Inicio` está conectada a `SessionController` real y muestra un resumen breve de sesión (`idle`, `starting`, `running`, `stopping`, `error`).
-- Antes de intentar backend, `SessionController` ejecuta preflight/readiness puro.
-- Si readiness esta `blocked`, no intenta backend y la sesion pasa a `error` controlado con motivo de configuracion.
-- Si readiness esta `ready` o `ready_with_warnings`, se intenta backend.
-- `Inicio` mantiene la portada limpia y `Diagnostico` muestra findings (severidad, codigo, mensaje, detalle).
-- La UI distingue fallo por readiness/configuracion vs fallo posterior de backend/runtime.
-- `Reiniciar error` devuelve la sesion a estado inactivo y refresca readiness visible.
-- Mientras la sesion esta en `starting`, `running` o `stopping`, la UI bloquea cambios de perfil y recarga de config para evitar inconsistencias.
-
-## Flujo serial real (Tickets 5.1 a 5.3)
-
-- Existe parser incremental MIDI por bytes (`MidiByteStreamParser`) para stream serial.
-- Existe `SerialTransportAdapter` real con lectura, parseo y metricas runtime.
-- El backend serial real se integra en el lifecycle de sesion via `SessionBackendFactory` + `SessionController`.
-- El flujo en arquitectura es: `Serial -> parser -> backend serial -> MidiRouter`.
-- `SessionController` solo deja la sesion en `running` si el backend serial arranca realmente.
-- `Diagnostico` muestra el detalle tecnico de runtime serial sin recargar la portada `Inicio`.
-
-## Flujo UDP runtime y NodeRegistry (Tickets 6.x + 7.x)
-
-- Existe parser binario UDP OKUA (`OKUA_HDR + EVT + STAT`) con validaciones y descarte controlado.
-- Existe `UdpTransportAdapter` real con bind, recepcion en background y metricas runtime.
-- Existe `UdpSessionBackend` real integrado al lifecycle de sesion via `SessionBackendFactory` + `SessionController`.
-- El flujo en arquitectura es: `UDP -> parser OKUA -> backend UDP -> MidiRouter (EVT)` y `STAT -> runtime interno`.
-- `SessionController` solo deja la sesion en `running` si el backend UDP arranca realmente (sin `running` falso).
-- El backend UDP alimenta `NodeRegistry` por paquete parseado (`EVT -> observe_evt`, `STAT -> observe_stat`) sin duplicar parser ni dominio.
-- `SessionController` expone `get_node_snapshots()` y `get_node_registry_summary()` para consumo UI.
-- La pestaña `Nodos` usa esos snapshots como fuente de verdad (sin recalcular estado/pps/perdida en UI).
-- La UI distingue estado de runtime UDP (`Diagnostico`) vs estado por nodo (pestaña Nodos).
-- La pestaña `Nodos` no inventa datos en no-UDP: muestra mensaje de no aplicacion. En UDP corriendo sin trafico, muestra estado vacio coherente.
-- `Diagnostico` muestra el detalle tecnico de runtime UDP.
-- `Estado actual` concentra el detalle largo de sesion de forma responsive para evitar saturar `Inicio`.
-- `NodeRegistry` se reinicia por sesion UDP, evitando nodos fantasmas entre stop/restart.
-
-## Identidad de nodos y ruteo MIDI
-
-La política es explícita y determinista, y no depende de IP/router:
-
-- Identidad de nodo: `node_id`.
-- Nombre lógico: función pura de `node_id` (patrón `EB/EC/ED/EE/EF` por caja).
-- Caja: función pura de `node_id` (`1..5 -> Caja 1`, `6..10 -> Caja 2`, etc.).
-- Bus MIDI: función pura de caja:
-  - `Caja 1` a `Caja 3` -> `midi_bus=0` (LoopMIDI 1)
-  - `Caja 4` a `Caja 5` -> `midi_bus=1` (LoopMIDI 2)
-
-Precedencia en runtime UDP:
-
-- CKv2 deriva el bus efectivo desde `node_id -> caja -> midi_bus`.
-- Si el paquete trae otro `midi_bus`, prevalece la política por caja.
-
-## Recording por sesion y replay basico (Tickets 8.x)
-
-- El recording por sesion ya esta integrado al lifecycle real via `SessionController` cuando `logging.enabled=true`.
-- El formato canonico de evidencia es `JSONL` (archivo `session.jsonl` por sesion).
-- Los artefactos por sesion se guardan en `logs/sessions/<session_id>/`:
-  - `session.jsonl`
-  - `report.json`
-- El flujo puede dejar evidencia util incluso si `start_session()` falla (por preflight bloqueado o error de backend).
-- `report.json` resume metadatos finales de sesion y contadores agregados observados durante el intento/ejecucion.
-- El replay basico ya existe y se alimenta desde `session.jsonl`, usando como fuente canonica:
-  - `event_type = midi_event`
-  - `ts_rel_ms` para timing relativo
-- El replay ignora eventos no musicales para reproduccion (ej. `udp_evt`, `serial_message`, runtime snapshots), que se mantienen para analisis/post-mortem.
-- La separacion de responsabilidades queda en:
-  - lifecycle real: `SessionController` + backends
-  - recording: `core/recording` (writer + accumulator + report)
-  - replay: `core/recording` (loader/extractor/replayer basico)
-
-## Perfil como fuente de verdad (coherencia operacional)
-
-- El operador trabaja por `perfil`, no por `mode`.
-- `mode` se mantiene como dato tecnico derivado para compatibilidad de config/runtime.
-- Al cambiar `profile.active`, la app sincroniza automaticamente `mode` segun el perfil.
-- Si una config antigua trae conflicto entre `profile.active` y `mode`, se normaliza a favor del perfil con advertencia tecnica legible.
-
-## Config (v2)
-
-- En desarrollo: copiar `config.example.json` a `config.json` en la raiz del repo.
-- En ejecutable PyInstaller: `config.json` junto a `Control Okua.exe`.
-- Si falta `config.json`, se crea automaticamente con defaults v2.
-- Si el archivo esta corrupto, se renombra a `config.corrupt.<timestamp>.json` y se regenera.
-- Si detecta CKv1, se crea `config.v1.backup.<timestamp>.json` y se migra a v2.
-
-Campos principales:
-
-- `mode`: `"serial"` o `"udp"` (puede iniciar como `null` antes de seleccionar).
-- `profile.active`: perfil operativo activo (`serial_local`, `udp_jardin`, `lab_sim`) o `null`.
-- `serial`: baudrate, running_status, flush_ms, max_silence_s, auto_reconnect, port.
-- `udp`: bind_ip, evt_port (5005), stat_port (5006), cmd_port (5007), rcvbuf_bytes.
-- `midi.outputs`: mapping explicito de buses (`"0"`..`"255"`) a nombre de puerto.
-- `thresholds`: `online_ms < degraded_ms < offline_ms`.
-
-## Control Plane F3 (Ticket 14.1)
-
-- El emisor app-side de `OKUA_CMD` usa secreto compartido via entorno:
-  - `CKV2_CONTROL_SECRET` (preferido)
-  - `CKV2_CONTROL_SECRET_FILE` (ruta opcional a archivo local no trackeado)
-- Si no hay secreto configurado, el servicio de comandos falla de forma explicita y no envia paquetes.
-- El estado local de nonce (`last_control_epoch_s`) se persiste en `control_plane_state.json` para mantener monotonia entre reinicios.
-- En este ticket, el servicio es estrictamente send-only al `CMD_PORT=5007` y no abre listener de `ACK_PORT=5008`.
-
-## Control Plane F3 (Ticket 14.2)
-
-- Existe `AckListenerService` aislado para `OKUA_ACK` con bind explícito en `ACK_PORT=5008`.
-- El parseo de ACK es estricto (`28 bytes`, `magic`, `version`, `type`) y clasifica datagramas inválidos.
-- Existe `PendingCommandStore` para correlación básica por `cmd_seq + cmd_id_echo + nonce_echo` con resultados:
-  - `MATCHED`
-  - `UNMATCHED_ACK`
-  - `INVALID_ACK`
-- Aún no se implementan timeout/retry ni auditoría persistente final (quedan para 14.3+).
-
-## Control Plane F3 (Ticket 14.3)
-
-- Existe `ControlTransactionService` para ejecutar transacciones F3 sin UI.
-- El flujo cubre:
-  - envío de CMD
-  - registro de pendiente
-  - espera de ACK
-  - retry controlado
-  - cierre de resultado
-- Timeout y retries son configurables por transacción.
-- Los retries reutilizan exactamente `cmd_seq` y `nonce` del comando lógico original.
-- La auditoría básica expone eventos en memoria como:
-  - `command_sent`
-  - `command_retry`
-  - `command_ack`
-  - `command_timeout`
-- `INVALID_ACK` y `UNMATCHED_ACK` se observan durante la espera sin cerrar prematuramente la transacción.
-
-## Control Plane F3 (Ticket 14.4)
-
-- Existe un panel mínimo en `Técnico` para ejecutar transacciones F3 sin usar consola.
-- La UI expone solo:
-  - `PING`
-  - `REQUEST_STAT_NOW`
-  - `REBOOT_SOFT`
-- El panel consume `ControlTransactionService` y muestra resultado legible (`final_status`, `cmd_seq`, `nonce`, `attempt_count`, detalles ACK).
-- El operador usa solo `node_id`; la IP del nodo se resuelve automáticamente en background desde runtime UDP.
-- `REBOOT_SOFT` requiere confirmación explícita antes de enviar.
-- Durante ejecución, el panel deshabilita controles y mantiene la ventana responsive.
-
-## Control Plane F3 (Ticket 14.5)
-
-- Bloque app-side F3 mínimo consolidado para:
-  - `PING`
-  - `REQUEST_STAT_NOW`
-  - `REBOOT_SOFT`
-- Validación de cierre separada por niveles:
-  - nivel 1: local/fake (obligatorio)
-  - nivel 2: integración app-side por loopback UDP local
-  - nivel 3: nodo ESP32 real (cuando haya hardware disponible)
-- Se mantiene el alcance actual sin abrir `SET_*`.
-- Documento canónico de cierre del bloque:
-  - `docs/app/control_plane_f3_app_minimal.md`
-
-## Control Plane F3 (Ticket 15)
-
-- El runtime de control-plane quedó integrado al lifecycle de `SessionController` (start/stop de sesión UDP/LAB).
-- El despacho de comandos desde capas superiores opera por `node_id`; la resolución `node_id -> ip` usa el runtime real de sesión.
-- Los eventos de control-plane (`command_sent`, `command_retry`, `command_ack`, `command_timeout`) se escriben en el `session.jsonl` existente.
-- Se expone `ControlPlaneRuntimeSnapshot` para consumo de UI/diagnóstico con contadores, último resultado y estado por nodo.
-- Se expone snapshot canónico por nodo desde backend/session:
-  - `SessionController.get_control_plane_node_snapshots()`
-  - `SessionController.get_control_plane_node_snapshot(node_id)`
-- El estado canónico por nodo distingue `resolved/stale/unresolved` e incluye último resultado F3 + resumen de verificación de reboot.
-- El panel técnico `Técnico` consume la API integrada de `SessionController` (sin instancias privadas de runtime en widgets).
-
-## Firmware catalog, artifacts y OTA local
-
-- La app ya mantiene una biblioteca local de firmware en:
-  - `artifacts/firmware_catalog.json`
-  - `artifacts/firmware_store/`
-- `Firmware Manager` permite:
-  - importar `.bin` al managed store
-  - inspeccionar metadata OTA
-  - abrir `OTA Deploy`
-  - borrar artifacts mal cargados desde la propia UI
-- La ingesta deduplica por `sha256`; cambiar el nombre del archivo no crea un artifact nuevo si el contenido es el mismo.
-- Los estados operativos del catálogo son:
-  - `current`
-  - `beta`
-  - `obsolete`
-  - `situational`
-- Para pruebas de banco, comparación, probes y builds de red, la convención actual es usar `situational`.
-
-## Agente de artifacts OTA
-
-- Existe un agente reusable para generar artifacts OTA y probes de banco:
-  - `src/control_okua/core/firmware/artifact_agent_service.py`
-  - `tools/firmware_artifact_agent.py`
-- El agente soporta:
-  - clon del baseline actual
-  - comparativos OTA-compatible
-  - probe observable de banco
-  - perfiles de red por artifact
-- Los exports del agente se guardan bajo:
-  - `artifacts/ota_artifact_agent/`
-- El sidecar `artifact_build_overrides.h` exportado por el agente redacta credenciales sensibles (`password`, `secret`) para no dejar esos datos en claro en los outputs operativos.
-
-## Probe observable de banco
-
-- El firmware soporta un modo de prueba observable embebido por macro de build:
-  - blink del LED onboard (`GPIO2`) cada segundo
-  - emisión de notas ascendentes `0..80`
-  - reinicio de la secuencia a `0` al llegar a `80`
-- Este probe se usa para verificar en banco una OTA física real con evidencia visual y serial, sin cambiar `target_kind`, `target_variant` ni `build_profile`.
-
-## OTA Deploy actual
-
-- `OTA Deploy` publica un rollout local y dispara `OTA_CHECK_NOW` sobre nodos seleccionados explícitamente.
-- El campo `Host visible al nodo` ya se autocompleta desde el `PC_IP` embebido en la metadata del artifact cuando ese dato está presente en `notes/source_notes`.
-- Esto evita publicar por error un artifact de una red hacia el host de otra red.
-- La telemetría OTA observable en app distingue, entre otros:
-  - `fetching_manifest`
-  - `validating_manifest`
-  - `downloading`
-  - `ready_reboot`
-  - `boot_validating`
-  - `boot_confirmed`
-
-## Downgrade OTA explícito
-
-- La política OTA actual no obliga a “inventar” bins nuevos solo para volver atrás.
-- `OTA Deploy` ya permite autorizar un downgrade con advertencia explícita:
-  - opción: `Permitir downgrade / reinstalar versión no más nueva`
-- Cuando se activa:
-  - el manifest se publica con `flags.allow_downgrade = true`
-  - el firmware acepta instalar una versión más vieja o no más nueva solo si ese permiso viene explícito en el rollout
-- Si no se activa esa opción, se mantiene la protección normal contra downgrade accidental.
-
-## Perfiles de red embebidos
-
-- El firmware soporta overrides de build para:
-  - `SSID`
-  - `password`
-  - `OKUA_CONTROL_SECRET`
-  - `WIFI_CHANNEL`
-  - `PC_IP`
-- Esto permite generar bins específicos por red sin depender del `okua_node_secrets.h` local del momento.
-- La convención de banco actual usa perfiles por red para `ED1`:
-  - `KITTY`
-  - `MARIANA`
-  - `MIKROTIK`
-- Cada perfil puede tener:
-  - un baseline `1.0.0-dev`
-  - un probe observable `1.0.1-dev`
-
-## Control Plane F3 (Tickets 16.1 a 16.4RRR)
-
-- Existe snapshot canónico backend-side por nodo para control-plane F3:
-  - `SessionController.get_control_plane_node_snapshots()`
-  - `SessionController.get_control_plane_node_snapshot(node_id)`
-- El snapshot por nodo incluye identidad/resolución, estado transaccional, ACK relevante, reboot verification y señales runtime (`uptime/reset_reason/boot_marker`).
-- La resolución `node_id -> ip` usa contrato tipado estable `str | None` y cache rica interna (`ControlPlaneResolvedIp`) sin exponer objetos en la API de resolución.
-- La correlación multi-nodo está aislada: ACK de un nodo no cierra transacción de otro y no contamina snapshots cruzados.
-- La vista técnica `Control F3` consume snapshot backend-side por nodo y muestra evidencia compacta por secciones (estado del nodo, última transacción, último ACK, reinicio, bitácora).
-- Se corrigió la coherencia atómica de render de última transacción/ACK:
-  - no mezcla parcial entre snapshot y fallback local;
-  - `ack_matched` no convive con timeout del mismo resultado;
-  - `timeout` mantiene ACK ausente de forma explícita.
-- Se implementó write-back canónico por nodo al cerrar transacciones (`PING`, `REQUEST_STAT_NOW`, `REBOOT_SOFT`) para evitar supervivencia de estado stale:
-  - precedencia por `cmd_seq` más nuevo;
-  - con `cmd_seq` igual, gana el paquete más completo;
-  - estado transaccional de control-plane es session-scoped y se limpia en start/stop/reset/reload.
-- El fallback local de UI quedó relegado a ventana transitoria corta y ya no es fuente principal de verdad cuando el snapshot backend-side está actualizado.
-- Alcance funcional se mantiene sin abrir comandos `SET_*`.
-
-Notas de consistencia runtime:
-
-- Si `profile.active` es `null` o invalido, la app pide seleccionar perfil al iniciar.
-- Si `profile.active` existe y es valido, el runtime normaliza `mode` al valor derivado por perfil.
-- Si no hay perfil activo valido, la app mantiene compatibilidad con configs heredadas sin romper el arranque.
-- Si `midi.outputs` llega vacio o invalido, se restauran defaults (`0/1/2 -> loopMIDI Port 1/2/3`).
-- Si alguna salida MIDI configurada no existe en la maquina, el arranque sigue con los buses disponibles; en esta RC el bus `2` es opcional y solo genera un aviso si falta.
-
-## Perfiles operativos
-
-El sistema soporta una capa de perfiles operativos para trabajar sin pensar primero en JSON tecnico:
-
-- `serial_local`: uso con Maestro conectado por USB/Serial.
-- `udp_jardin`: uso en instalacion OKUA por red UDP.
-- `lab_sim`: uso de laboratorio/simulacion sobre runtime UDP real.
-
-Cada perfil define:
-
-- nombre corto
-- descripcion
-- modo esperado (`serial` o `udp`)
-- nivel de uso
-- resumen operativo para UI
-
-Regla practica entre perfiles UDP:
-
-- `udp_jardin`: flujo productivo final sobre protocolo OKUA.
-- `lab_sim`: ruta de pruebas/simulación sobre backend UDP.
-
-Compatibilidad:
-
-- Si `profile.active` falta o es `null`, el arranque sigue siendo compatible y la app solicita perfil.
-- `mode` tecnico permanece para compatibilidad interna y herramientas avanzadas.
-
-## Flujo de perfiles (primer arranque)
-
-1. La app carga `config.json`.
-2. Si `profile.active` no es valido, abre selector guiado de perfil:
-   - `Serial local`
-   - `UDP Jardin`
-   - `LAB / simulacion`
-3. Al confirmar, guarda `profile.active` y ajusta `mode` asociado.
-4. Si el perfil ya estaba persistido, no vuelve a preguntar automaticamente.
-5. Para un arranque no interactivo en una copia limpia, exporta `CKV2_AUTOPROFILE=udp_jardin` antes de `python main.py`.
-
-## Cambiar perfil desde la app
-
-- Usar `Aplicación > Cambiar perfil`.
-- El cambio se guarda en `config.json` y refresca la vista.
-- El modo tecnico (`mode`) se deriva automaticamente desde el perfil seleccionado.
-
-## Perfil, modo y configuracion avanzada
-
-- `profile.active` representa la intencion operativa para usuarios no tecnicos.
-- `mode` sigue existiendo como dato tecnico de compatibilidad.
-- `Herramientas avanzadas` concentra acciones de soporte (ver config, recargar, carpeta, MIDI) sin exponer JSON en la vista principal.
-
-## Validacion y pruebas
-
-### Compileall
+El artefacto queda en `dist/Control OKÚA CKv2/Control OKÚA CKv2.exe`.
+
+---
+
+## Perfiles de uso
+
+| Profile ID | Nombre visible | Modo | Cuándo usar |
+|------------|---------------|------|-------------|
+| `udp_jardin` | UDP Jardín | UDP | Instalación OKÚA con nodos en red local — perfil operativo principal |
+| `serial_local` | Serial local | Serial | Maestro OKÚA conectado por USB/serial — pendiente de validación con hardware |
+| `lab_sim` | LAB / simulación | UDP | Pruebas reproducibles sin nodos físicos — no usar en operación real |
+
+El perfil activo se guarda en `config.json` bajo `"profile": {"active": "<id>"}`. Al seleccionar un perfil, la app sincroniza automáticamente el modo técnico (`mode`) derivado.
+
+---
+
+## Operación básica
+
+### Preflight antes de cada sesión
+
+| # | Verificación | Cómo confirmar |
+|---|-------------|----------------|
+| P1 | Python disponible | `python --version` → 3.11.x o superior |
+| P2 | Dependencias instaladas | `pip show PySide6 rtmidi` sin error |
+| P3 | `config.json` presente con perfil correcto | Raíz del repo; `"profile": {"active": "udp_jardin"}` |
+| P4 | loopMIDI activo con Port 1 y Port 2 visibles | Ícono en bandeja del sistema; dos puertos abiertos |
+| P5 | Red local accesible | `ping 192.168.1.89` responde |
+| P6 | Sin proceso previo colgado | Administrador de tareas sin `python main.py` activo |
+
+### Iniciar sesión UDP
+
+1. Verificar que el chip de estado en Home diga `Sesión inactiva`.
+2. Confirmar que el perfil visible es `UDP Jardín`. Si no: `Aplicación → Cambiar perfil → UDP Jardín → Aceptar`.
+3. Clic en **"Iniciar sesión"**.
+4. Esperar sincronización (2–5 s con nodos activos).
+5. Confirmación: chip de estado cambia, cajas con nodos ONLINE se colorean, árbol `Nodos` muestra EB1/EB2.
+
+### Flujo mapa ↔ Nodos
+
+1. En Home, clic sobre una caja con nodos activos.
+2. Aparece CTA **"Ver nodos"**.
+3. Clic → `Nodos` abre con barra de contexto de caja (`Caja: X — N nodos`).
+4. Clic **"Ver caja en inicio"** → retorno a Home con caja seleccionada.
+
+### Detener sesión y salida segura
+
+1. Clic **"Detener sesión"** en Home (o desde `Diagnóstico`).
+2. Chip regresa a `Sesión inactiva`.
+3. Verificar consola — sin `ERROR` ni traceback al detener.
+4. Cerrar la ventana o `Aplicación → Salir`.
+5. Confirmar que el proceso Python terminó (Administrador de tareas).
+
+### Diagnóstico y herramientas
+
+- **Diagnóstico:** 7 campos de resumen runtime, sección "Chequeos previos" plegable con findings de readiness, estado de backend UDP/serial.
+- **Técnico → Control F3:** panel para `PING`, `REQUEST_STAT_NOW`, `REBOOT_SOFT` sobre nodos identificados por `node_id`.
+- **Herramientas avanzadas** (desde `Técnico`): ver config, recargar config, abrir carpeta del repo, listar salidas MIDI.
+
+---
+
+## Firmware y OTA
+
+El módulo Firmware de CKv2 gestiona el ciclo de vida del firmware de los nodos OKÚA: biblioteca local de artifacts, despliegues individuales y campañas controladas.
+
+### Firmware Manager
+
+- Biblioteca local en `artifacts/firmware_catalog.json` + `artifacts/firmware_store/`.
+- Permite importar `.bin` al managed store, inspeccionar metadata OTA, abrir OTA Deploy y eliminar artifacts mal cargados.
+- La ingesta deduplica por SHA256; renombrar el archivo no crea un artifact nuevo si el contenido es idéntico.
+- Estados operativos del catálogo: `current`, `beta`, `obsolete`, `situational`.
+
+### OTA Deploy (despliegue individual)
+
+- Selección de artifact, configuración de red (host visible al nodo, puerto HTTP), selección de nodo.
+- El campo "Host visible al nodo" se autocompleta desde la metadata del artifact cuando está disponible.
+- Dispara `OTA_CHECK_NOW` al nodo seleccionado.
+- Telemetría observable en app: `fetching_manifest → validating_manifest → downloading → ready_reboot → boot_validating → boot_confirmed`.
+- Soporte para downgrade explícito con advertencia clara.
+
+### OTA Campaign (campaña con health gate)
+
+- Preview de waves con soporte canary.
+- Health gate configurable entre waves.
+- Ciclo completo validado con hardware real: EB1 canary COMPLETED, health gate PASSED, reboot confirmado por UDP y serial (Ticket 35.6).
+
+### Probe observable de banco
+
+Para verificar OTA en banco con evidencia visual y serial sin modificar el artifact de producción, el firmware soporta un modo probe embebido por macro de build:
+- Blink del LED onboard (GPIO2) cada segundo.
+- Emisión de notas ascendentes 0–80.
+
+---
+
+## Módulo Remoto
+
+CKv2 incluye un servidor HTTP local para administración remota de la instalación sin depender del acceso físico al equipo.
+
+### Portal `/remote/`
+
+- Interfaz web accesible en `http://<host>:<port>/remote/`.
+- Bootstrap inicial desde store vacía: crear cuentas, asignar roles.
+- Roles: `admin` (control total), `tecnico` (operación), `observador` (solo lectura).
+- Restricciones de acceso por rol verificadas — 403 en operaciones no autorizadas.
+
+### Modos de operación
+
+| Modo | Comportamiento |
+|------|---------------|
+| `local_only` | Bind en loopback únicamente — acceso solo desde la misma máquina |
+| `tailscale_only` | Bind exclusivo en IP de red Tailscale — loopback rechazado; acceso remoto seguro |
+
+### Configuración
+
+El módulo remoto se activa/desactiva en `config.json` bajo `remote_api.enabled`. En un `config.json` creado desde cero (primer arranque limpio), `remote_api.enabled` es `false` por defecto — sin warnings de Tailscale al arranque.
+
+---
+
+## Documentación complementaria
+
+| Documento | Contenido |
+|-----------|-----------|
+| [`docs/ui/release_candidate_runbook.md`](docs/ui/release_candidate_runbook.md) | Guía de operación de campo: preflight, arranque, operación, contingencia, rollback |
+| [`docs/ui/internal_operational_acceptance.md`](docs/ui/internal_operational_acceptance.md) | Acta de aceptación operativa formal, deuda residual, mantenimiento, incidentes |
+| [`docs/ui/internal_release_checklist.md`](docs/ui/internal_release_checklist.md) | Checklist de entrega interna RC1 |
+| [`docs/ui/internal_release_notes_rc1.md`](docs/ui/internal_release_notes_rc1.md) | Release notes internas RC1 — bloques cerrados y validaciones clave |
+| [`docs/ui/release_candidate_handoff.md`](docs/ui/release_candidate_handoff.md) | Paquete completo de evidencia de validación RC |
+| [`docs/ui/post_release_early_operation_log.md`](docs/ui/post_release_early_operation_log.md) | Bitácora de operación temprana post-promoción |
+| [`config.example.json`](config.example.json) | Plantilla de configuración con todos los campos documentados |
+
+---
+
+## Estado de validación
+
+CKv2 RC1 fue validada en el siguiente ciclo completo:
+
+| Fase | Resultado |
+|------|-----------|
+| Sesión UDP real con nodos EB1 + EB2 | PASA — 320 EVT, 16 STAT, 0 errores |
+| OTA Deploy individual con hardware real | PASA — EB1: TRIGGERED → BOOT_CONFIRMED |
+| Campaña OTA canary con health gate | PASA — EB1 canary COMPLETED, health gate PASSED |
+| Portal remoto — bootstrap, login, roles, Tailscale | PASA — 29/29 escenarios |
+| Suite completa de tests | PASA — 498/498 |
+| Piloto interno controlado | PASA con observaciones menores — ninguna bloqueante |
+| Observación prolongada 602 s (sin hardware) | PASA — sin crash, sin leak, CPU ≤ 7.8 % |
+| Observación real 690 s (EB1 + EB2 activos) | PASA — 3 `REQUEST_STAT_NOW` con ACK, RSS 78–105 MB, CPU ≤ 5.5 % |
+| Ensayo desde copia limpia (tag `rc1-interna`) | PASA — config auto-creada, perfil resuelto, proceso estable 30 s |
+
+Validación visual confirmada por José David: arranque, navegación completa, mapa, About dialog, toasts, ejecutable empaquetado.
+
+---
+
+## Limitaciones y alcance actual
+
+| ID | Limitación | Impacto |
+|----|-----------|---------|
+| SERIAL-1 | Sesión serial con Maestro USB no validada | Sin Maestro USB durante el ciclo; el perfil UDP cubre el flujo operativo principal |
+| OTA-CAMP-1 | Campaña OTA multi-wave (>1 wave con gate intermedio) no ejecutada en hardware | Lógica multi-wave cubierta por tests; wave única validada con hardware real |
+| SCOPE-1 | Validado solo con EB1 + EB2 — sin prueba con más de 2 nodos simultáneos | Técnicamente soportado; no validado con más nodos |
+| SCOPE-2 | Validado únicamente en Windows 11 Home (máquina de José David) | No probado en otro entorno Windows |
+
+CKv2 RC1 **no es** un release de producción masivo. Es un sistema para uso controlado por José David en la instalación OKÚA Jardín Biosonoro.
+
+---
+
+## Estructura del repositorio
+
+```
+Control-OK-A-v2/
+├── main.py                        # Punto de entrada de la aplicación
+├── requirements.txt               # Dependencias Python
+├── config.example.json            # Plantilla de configuración
+├── config.dist.json               # Config base para distribución del exe
+├── ControlOkuaV2.spec             # Spec de PyInstaller (one-dir)
+│
+├── src/control_okua/
+│   ├── app_qt/                    # Capa UI — widgets, viewmodels, contratos
+│   │   ├── widgets/               # Superficies: Home, Nodos, Diagnóstico, Técnico, Firmware, Remoto
+│   │   └── viewmodels/            # ViewModels desacoplados de la UI
+│   ├── core/
+│   │   ├── session/               # SessionController, preflight, lifecycle
+│   │   ├── udp/                   # Parser OKUA, backend UDP, transport
+│   │   ├── control_plane/         # F3: comandos, ACK, transacciones, runtime
+│   │   ├── firmware/              # Catálogo, OTA deploy, OTA campaign, artifact agent
+│   │   ├── recording/             # Recording de sesión (JSONL), report, replay
+│   │   ├── registry/              # NodeRegistry — estado por nodo
+│   │   ├── midi/                  # MidiRouter, buses, enrutamiento por caja
+│   │   ├── profiles/              # Perfiles operativos (udp_jardin, serial_local, lab_sim)
+│   │   ├── config/                # Config v2, migración, defaults
+│   │   └── preflight/             # Readiness checks
+│   ├── services/
+│   │   ├── backends/              # SessionBackendFactory, UdpSessionBackend, SerialSessionBackend
+│   │   └── remote_console_assets/ # Assets del portal /remote/
+│   └── transports/
+│       ├── udp/                   # UdpTransportAdapter
+│       └── serial/                # SerialTransportAdapter, MidiByteStreamParser
+│
+├── tests/                         # Suite de tests (498 tests)
+├── tools/                         # Herramientas de desarrollo (emisor UDP, listado MIDI, etc.)
+├── artifacts/                     # Catálogo y store de firmware OTA
+├── assets/                        # Recursos visuales (branding, íconos)
+├── firmware/                      # Firmware ESP32 de los nodos OKÚA
+├── docs/ui/                       # Documentación de validación y operación
+└── logs/                          # Logs de sesión (session.jsonl, report.json por sesión)
+```
+
+---
+
+## Mantenimiento y operación
+
+### Controles por sesión
+
+Ejecutar el preflight (§Operación básica) antes de cada sesión. En particular verificar loopMIDI activo y red local accesible.
+
+### Controles periódicos (cada 10 sesiones o 2 semanas)
+
+```powershell
+# Suite de tests
+PYTHONPATH=src python -m pytest -q
+# → debe mostrar 498 passed
+
+# Compilación limpia
+python -m compileall src main.py -q
+# → sin errores
+
+# Estado del working tree
+git status
+# → sin cambios inesperados en src/
+```
+
+### Contingencia rápida
+
+| Síntoma | Acción |
+|---------|--------|
+| Crash en arranque (`ModuleNotFoundError`) | `pip install -r requirements.txt` y reintentar |
+| Sin nodos visibles en árbol | `ping 192.168.1.89` — verificar red y firewall UDP 5005/5006 |
+| App no responde al detener sesión | Esperar 10 s; si sigue, `Alt+F4` y finalizar proceso en Task Manager |
+| Traceback en consola durante sesión normal | Ver `release_candidate_runbook.md` §4 |
+
+### Rollback a estado estable
+
+```bash
+git fetch origin
+git checkout desarrollo-fase-2
+git reset --hard 0aff3ba   # Commit estable post-validación real 37.2
+PYTHONPATH=src python -m pytest -q
+python main.py
+```
+
+Ver tabla completa de commits de rollback en [`docs/ui/internal_operational_acceptance.md`](docs/ui/internal_operational_acceptance.md) §Bloque 4.
+
+### Procedure de hotfix
+
+1. Identificar el commit que introdujo el problema.
+2. Aplicar fix mínimo directamente en `desarrollo-fase-2`.
+3. Rerun de tests: `PYTHONPATH=src python -m pytest -q` → 498/498 o superior.
+4. Commit y push a `origin/desarrollo-fase-2`.
+5. Documentar en el ticket correspondiente.
+
+---
+
+## Herramientas de desarrollo
+
+| Herramienta | Propósito |
+|-------------|-----------|
+| `tools/udp_okua_v1_sender.py` | Emisor de tráfico OKUA v1 para pruebas locales (con `--dry-run` para vectores de referencia) |
+| `tools/list_midi_ports.py` | Listado de puertos MIDI disponibles en el sistema |
+| `tools/midi_smoke_test.py` | Verificación rápida del enrutamiento MIDI |
+| `tools/firmware_artifact_agent.py` | Generación de artifacts OTA y probes de banco |
+
+Verificación de compilación completa:
 
 ```powershell
 python -m compileall src main.py tools
 ```
 
-### Emisor de prueba UDP OKUA v1 (recomendado)
+---
 
-```powershell
-# Vectores de referencia (sin enviar trafico)
-python tools/udp_okua_v1_sender.py --dry-run
+## Créditos
 
-# Trafico OKUA v1 para CKv2 local
-python tools/udp_okua_v1_sender.py --host 127.0.0.1 --evt-port 5005 --stat-port 5006 --count 50 --interval-ms 20
-```
+Control OKÚA CKv2 es parte del sistema OKÚA Jardín Biosonoro — instalación de arte sonoro que convierte señales biológicas en música mediante nodos ESP32 distribuidos en un jardín.
 
-Referencia técnica de protocolo:
-
-- `docs/protocol/udp_bench_vs_okua_v1.md` (documento histórico comparativo)
-
-### Test puro del view-model (sin UI)
-
-Con `pytest` instalado:
-
-```powershell
-python -m pytest -q tests/test_main_window_vm.py
-```
-
-### Test puro de perfiles operativos
-
-Con `pytest` instalado:
-
-```powershell
-python -m pytest -q tests/test_profile_service.py
-```
-
-### Abrir la app
-
-```powershell
-python main.py
-```
-
-Smoke corto automatizado (opcional):
-
-```powershell
-$env:CKV2_AUTOCLOSE_MS='1200'
-python main.py
-Remove-Item Env:CKV2_AUTOCLOSE_MS
-```
-
-### Smoke manual basico
-
-1. Verificar que la primera superficie sea `Inicio`.
-2. Confirmar estado inicial de sesion en `inactiva`.
-3. Verificar en `Inicio` la acción principal, el mapa protagonista y el resumen breve de sesión.
-4. Verificar en `Diagnostico` el bloque de preflight y los bloques de runtime serial/UDP.
-5. Abrir `Estado actual` desde la Home y validar:
-   - detalle navegable con scroll interno
-   - 2 columnas en ancho amplio
-   - 1 columna en ancho estrecho
-6. Caso serial con config valida declarativa: readiness `Lista` o `Lista con advertencias`; al iniciar, validar:
-   - si hay puerto/hardware disponible, sesion serial en `running`
-   - si no hay puerto/hardware disponible, error runtime serial legible y sin `running` falso
-7. Caso UDP con config valida declarativa: readiness `Lista` o `Lista con advertencias`; al iniciar, validar:
-   - backend UDP en `running` si bind correcto
-   - actividad/contadores en bloques UDP cuando hay trafico
-   - error runtime legible y sin `running` falso cuando hay fallo de bind/config
-8. Pestaña `Nodos` en sesion no-UDP: validar mensaje de no aplicacion (sin nodos inventados).
-9. Pestaña `Nodos` en UDP corriendo sin trafico: validar estado vacio coherente.
-10. Pestaña `Nodos` en UDP con trafico: validar agrupación por cajas (`Caja 1..5`), nombres lógicos (`EB1`, `EC1`, ...) y expandir/colapsar.
-11. En nodos de `Caja 1..3` validar ruteo a LoopMIDI 1 (`bus=0`); en `Caja 4..5` validar LoopMIDI 2 (`bus=1`).
-12. Stop/restart de sesion UDP: validar limpieza visual y ausencia de nodos fantasmas.
-13. Caso config invalida para readiness: validar estado `No lista` y findings bloqueantes en `Diagnostico`.
-14. Pulsar `Reiniciar error` y confirmar retorno a estado inactivo con refresco visual coherente.
-15. Validar bloqueo de `Cambiar perfil`/`Recargar configuracion` cuando la sesion no esta en estado seguro (`starting`, `running`, `stopping`).
-16. Abrir `Ayuda > Acerca de` y confirmar información básica.
-17. Abrir `Herramientas avanzadas` desde `Técnico` y validar `Ver config`, `Abrir carpeta`, `Recargar config` y `Salidas MIDI`.
-18. Cerrar y reabrir la app sin errores.
-
-## Prueba MIDI (LoopMIDI / Ableton)
-
-Requisitos:
-
-- Tener instalado LoopMIDI.
-- Crear un puerto de salida (por ejemplo `loopMIDI Port 1`).
-- Configurar ese nombre en `config.json` dentro de `midi.outputs`.
-
-Comandos:
-
-```powershell
-python tools/list_midi_ports.py
-python tools/midi_smoke_test.py
-```
-
-Si falla:
-
-- Si `available_outputs=[]`, abrir LoopMIDI y crear al menos `loopMIDI Port 1`.
-- Verificar que el nombre del puerto en `config.json` coincida exactamente con el nombre real.
-- Comparar `midi.outputs` de `config.json` contra la salida de `python tools/list_midi_ports.py`.
-
-### Troubleshooting nombres loopMIDI (Windows)
-
-- En Windows, loopMIDI puede aparecer con sufijo numerico (ejemplo: `loopMIDI Port 1 1`) aunque en config este como `loopMIDI Port 1`.
-- CKv2 intenta resolver automaticamente por prefijo y muestra el mapeo resuelto en logs.
-- Para actualizar `config.json` con los nombres exactos resueltos (opt-in):
-
-```powershell
-$env:CKV2_AUTOFIX_OUTPUTS='1'
-python tools/midi_smoke_test.py
-Remove-Item Env:CKV2_AUTOFIX_OUTPUTS
-```
+Diseñado y desarrollado por José David para operación interna controlada.  
+Release Interna Controlada RC1 — 2026-04-19.
