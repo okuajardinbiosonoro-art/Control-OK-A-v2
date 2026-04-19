@@ -4,7 +4,7 @@ import os
 import sys
 
 from PySide6.QtCore import QTimer
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication
 
 from control_okua.app_qt.design_system import APP_DISPLAY_NAME
@@ -71,7 +71,16 @@ def run_app() -> int:
 
     icon_path = app_icon_path()
     if icon_path.exists():
-        app.setWindowIcon(QIcon(str(icon_path)))
+        # Barra de tareas (QApplication): fondo BRAND_DEEP + logo encima, en memoria.
+        # Garantiza visibilidad sobre el fondo oscuro del taskbar sin tocar los archivos.
+        src = QPixmap(str(icon_path))
+        if not src.isNull():
+            bg = QPixmap(src.size())
+            bg.fill(QColor(11, 59, 39))          # BRAND_DEEP
+            painter = QPainter(bg)
+            painter.drawPixmap(0, 0, src)
+            painter.end()
+            app.setWindowIcon(QIcon(bg))
 
     active_profile = _get_active_profile_id(cfg)
     if active_profile is None:
