@@ -12,7 +12,7 @@ Referencia operativa completa: [`release_candidate_runbook.md`](release_candidat
 |------|-------|
 | Ruta de ejecución | `python main.py` desde raíz del repo, rama `desarrollo-fase-2` |
 | Commit de cierre de ciclo RC | `1e1f474` |
-| Alternativa empaquetada | `dist/Control OKÚA CKv2.exe` (PyInstaller 6.19.0) — viable para distribución; verificación visual pendiente de José David (ver 36.2) |
+| Alternativa empaquetada | `dist/Control OKÚA CKv2/Control OKÚA CKv2.exe` (PyInstaller 6.19.0, one-dir) — viable para distribución; validación visual completa confirmada por José David (2026-04-19, ver 36.2) |
 
 ---
 

@@ -2,7 +2,7 @@
 
 Rama: `desarrollo-fase-2`  
 Fecha: 2026-04-19 (Ticket 36.2 — actualizado post-correcciones)  
-Clasificación: **PASA con observaciones menores** (pendiente confirmación visual de José David)
+Clasificación: **PASA — confirmado visualmente por José David (2026-04-19)**
 
 ---
 
@@ -79,21 +79,19 @@ El agente no puede observar la GUI directamente, pero lanzó el proceso y verifi
 | Crash inmediato | **NO** — ningún exit code de error |
 | Proceso terminado limpiamente | Sí — `Stop-Process` ejecutado manualmente |
 
-### Comprobaciones visuales — PENDIENTE DE JOSÉ DAVID
+### Comprobaciones visuales — CONFIRMADAS por José David (2026-04-19)
 
-Las siguientes comprobaciones requieren observación directa del exe en pantalla:
+| # | Comprobación | Resultado |
+|---|-------------|-----------|
+| V1 | Nombre en barra de título | **PASA** — `Control OKÚA · CKv2` visible |
+| V2 | Icono en barra de título y taskbar | **PASA** — ícono OKÚA branding original, visible en barra de título y taskbar |
+| V3 | Home abre correctamente | **PASA** — mapa de 5 cajas visible, chip `Sesión inactiva` |
+| V4 | Navegación a Nodos | **PASA** — árbol de nodos visible sin traceback |
+| V5 | Navegación a Diagnóstico | **PASA** — resumen runtime sin crash |
+| V6 | Navegación a Técnico | **PASA** — sección Comandos visible |
+| V7 | Cierre limpio | **PASA** — ventana cierra, proceso termina |
 
-| # | Comprobación | Qué observar |
-|---|-------------|--------------|
-| V1 | Nombre en barra de título | `Control OKÚA · CKv2` |
-| V2 | Icono en barra de título y taskbar | Icono OKÚA branding (no el icono Python genérico) |
-| V3 | Home abre correctamente | 5 cajas del mapa visibles, chip `Sesión inactiva` |
-| V4 | Navegación a Nodos | Árbol de nodos visible sin traceback |
-| V5 | Navegación a Diagnóstico | Resumen runtime sin crash |
-| V6 | Navegación a Técnico | Sección Comandos visible |
-| V7 | Cierre limpio | Ventana cierra, proceso termina |
-
-Para ejecutar: doble clic en `dist/Control OKÚA CKv2.exe`. Asegurarse de que loopMIDI está activo antes. Si el `config.json` de `dist/` tiene ports MIDI incorrectos para el sistema actual, la app puede mostrar un aviso de MIDI pero abrirá igualmente.
+Validación ejecutada directamente por José David en `josecillo` (Windows 11 Home, 10.0.26200) mediante doble clic en `dist/Control OKÚA CKv2/Control OKÚA CKv2.exe`.
 
 ---
 
@@ -179,23 +177,6 @@ Control OKÚA CKv2/
 
 ---
 
-## Protocolo de validación visual para José David
-
-Para completar la validación del exe en esta máquina:
-
-1. Abrir `dist/Control OKÚA CKv2.exe` (doble clic o desde Explorer)
-2. Confirmar que:
-   - El ícono en la taskbar es el ícono OKÚA (no el Python genérico)
-   - La barra de título muestra `Control OKÚA · CKv2`
-   - Home carga con el mapa de 5 cajas y chip `Sesión inactiva`
-3. Navegar a Nodos, Diagnóstico, Técnico brevemente (10 segundos cada uno)
-4. Cerrar la app con `Aplicación → Salir` o con la X
-5. Confirmar que el proceso termina (no queda colgado en Task Manager)
-
-Completar la tabla del Bloque 2 §Comprobaciones visuales al ejecutar este protocolo.
-
----
-
 ## Resumen de escenarios
 
 | Escenario | Estado |
@@ -204,21 +185,22 @@ Completar la tabla del Bloque 2 §Comprobaciones visuales al ejecutar este proto
 | S2 — Nombre del exe | **PASA** — `Control OKÚA CKv2.exe` |
 | S3 — Icono embebido en spec | **PASA** — `assets/branding/okua_app_icon.ico` referenciado correctamente |
 | S4 — Arranque sin crash (proceso vivo 7 s) | **PASA (programático)** |
-| S5 — Verificación visual icono/título | **PENDIENTE — José David** |
-| S6 — Home y navegación mínima | **PENDIENTE — José David** |
-| S7 — Cierre limpio | **PENDIENTE — José David** |
+| S5 — Verificación visual icono/título | **PASA — confirmado por José David (2026-04-19)** |
+| S6 — Home y navegación mínima | **PASA — confirmado por José David (2026-04-19)** |
+| S7 — Cierre limpio | **PASA — confirmado por José David (2026-04-19)** |
 
 ---
 
 ## Decisión final
 
-**La ruta empaquetada `.exe` es VIABLE como alternativa de distribución.**
+**La ruta empaquetada `.exe` es VIABLE como alternativa de distribución — validación visual completa confirmada por José David (2026-04-19).**
 
 Condiciones confirmadas:
 1. El build es exitoso y reproducible con `pyinstaller ControlOkuaV2.spec --noconfirm`.
-2. El exe arranca sin crash (confirmado programáticamente).
+2. El exe arranca sin crash (confirmado programáticamente y visualmente).
 3. La spec está correctamente configurada: nombre, icono, assets incluidos.
-4. Para distribución limpia, se debe proveer un `config.json` basado en `config.example.json` junto al exe — el `dist/config.json` actual es la config personal de José David.
-5. La verificación visual del icono, título y navegación queda pendiente de confirmación por José David (protocolo en Bloque 4).
+4. Para distribución limpia, copiar `config.dist.json` como `config.json` junto al exe.
+5. Ícono OKÚA branding visible en barra de título y barra de tareas — confirmado visualmente.
+6. Mapa Home, navegación a Nodos/Diagnóstico/Técnico y cierre limpio — todos confirmados.
 
-**Esta ruta sigue siendo secundaria respecto a `python main.py`.** La ruta desde fuente es la validada para uso operativo. El exe es la alternativa para distribución sin entorno Python.
+**Esta ruta sigue siendo secundaria respecto a `python main.py`.** La ruta desde fuente es la principal para uso operativo. El exe es la alternativa validada para distribución sin entorno Python.
