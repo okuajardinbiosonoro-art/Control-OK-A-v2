@@ -34,7 +34,8 @@ python main.py
 pyinstaller ControlOkuaV2.spec
 ```
 
-El ejecutable queda en `dist/Control OKUA CKv2.exe`.
+El ejecutable queda en `dist/Control OKÚA CKv2/Control OKÚA CKv2.exe` (formato one-dir).
+Copiar `config.dist.json` como `config.json` junto al exe antes de distribuir.
 
 ## Estado actual de la app (UX)
 
