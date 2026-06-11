@@ -16,14 +16,14 @@
 ## Versioned tree checks
 
 - Binarios/logs/configs reales: no se detectaron rutas versionadas refinadas para `dist/`, `build/`, ejecutables, DLL, Pyd, binarios firmware, logs, configs reales, tokens remotos o secrets firmware reales.
-- Secretos directos: no se detectaron `BEGIN PRIVATE KEY`, `api_key`, asignaciones de `CKV2_CONTROL_SECRET` ni bearer tokens fuera de fixtures de test.
+- Secretos directos: no se detectaron marcadores de claves privadas, `api_key`, asignaciones de `CKV2_CONTROL_SECRET` ni bearer tokens fuera de fixtures de test.
 - Firmware secrets: `firmware/**/okua_node_secrets.h` no esta versionado; el example versionado usa placeholders.
 - Dist/build: no se detectaron como rutas versionadas.
 - Hallazgos: la primera pasada marco `pyrightconfig.json` por el texto `config.json`; clasificado como falso positivo de nombre de archivo.
 
 ## Pattern scan
 
-- Patrones revisados: `CKV2_CONTROL_SECRET`, `password_hash`, `remote_api_tokens`, `remote_api_users`, `BEGIN PRIVATE KEY`, `api_key`, `token`, `password`, `contraseña`, `ssid`, `wifi`, `tailscale`, prefijo `100.` y patron de ruta Windows de usuario.
+- Patrones revisados: `CKV2_CONTROL_SECRET`, `password_hash`, `remote_api_tokens`, `remote_api_users`, marcador de clave privada, `api_key`, `token`, `password`, `contraseña`, `ssid`, `wifi`, `tailscale`, prefijo `100.` y patron de ruta Windows de usuario.
 - Hallazgos sanitizados:
   - Referencias de codigo, docs y tests a nombres de secretos/control remoto sin valores expuestos.
   - Tres referencias versionadas a rutas Windows de usuario en documentacion historica.
