@@ -42,7 +42,7 @@
 
 // Optional fruit routing presets:
 // - FRUIT_ROUTE_PRESET_EB_FANOUT -> ch 1, 3, 5  (EB1 + ED1 + EF1)
-// - FRUIT_ROUTE_PRESET_EC_FANOUT -> ch 2, 4, 5  (EC1 + EE1 + EF1)
+// - FRUIT_ROUTE_PRESET_EC_FANOUT -> ch 2, 4    (EC1 + EE1)
 // - FRUIT_ROUTE_PRESET_CUSTOM    -> define FRUIT_ROUTE_* manually
 // #define FRUIT_ROUTE_PRESET FRUIT_ROUTE_PRESET_EB_FANOUT
 
@@ -61,6 +61,13 @@
 // which pin changes while touching the sensor.
 // #define FRUIT_ADC_SCAN_SERIAL 1
 // #define FRUIT_ADC_SCAN_INTERVAL_MS 200UL
+
+// Optional UDP diagnostics for fruit mode.
+// When enabled, the node emits a text line with raw/filter/baseline/sigma/
+// threshold/contact state to the PC IP on port 5010.
+// #define FRUIT_DEBUG_UDP 1
+// #define FRUIT_DEBUG_UDP_PORT 5010
+// #define FRUIT_DEBUG_UDP_INTERVAL_MS 200UL
 
 // ---------------------------------------------------------------------------
 // Test-bank notes (no production defaults changed):
@@ -93,5 +100,6 @@
 // #define ACTIVE_MODE MODE_FIELD
 // #define ACTIVE_SENSOR SENSOR_FRUIT
 // #define FRUIT_ROUTE_PRESET FRUIT_ROUTE_PRESET_EC_FANOUT
+// #define FRUIT_ROUTE_NOTE 61
 // #define FRUIT_FIXED_OFFSET_V -1.0f
 // #define WIFI_CHANNEL 0
