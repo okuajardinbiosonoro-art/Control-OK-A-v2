@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("matplotlib")
+
 from tools.live_diagnostics_panel import (
     DiagnosticsModel,
     THEME,
