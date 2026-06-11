@@ -234,3 +234,59 @@ firmware/okua_node_udp_v1/okua_node_secrets.h
 .piolibdeps/
 .pio-home/
 
+# CKv2 safety guardrails (000D)
+# Runtime/build artifacts
+dist/
+build/
+*.exe
+*.dll
+*.pyd
+*.spec.bak
+
+# Python/cache
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# CKv2 runtime configs/secrets/state
+config.json
+remote_api_tokens.json
+remote_api_users.json
+remote_api_access.txt
+control_plane_state.json
+*.local.json
+*.secret.json
+
+# Field/startup secrets
+start_ckv2_with_secret*.bat
+*CKV2_CONTROL_SECRET*
+
+# Firmware secrets
+firmware/**/okua_node_secrets.h
+firmware/**/okua_node_secrets.h.bak*
+!firmware/**/okua_node_secrets.example.h
+
+# Logs and generated outputs
+logs/
+*.log
+*.out.txt
+*_listener.out.txt
+
+# OTA/generated firmware artifacts
+ota_binaries/
+*.bin
+*.elf
+*.map
+.pio/
+.pio-home/
+
+# Agent local state
+.claude/worktrees/
+.claude/settings.local.json
+
+# Temporary generated files
+tmp_catalog.json
+
