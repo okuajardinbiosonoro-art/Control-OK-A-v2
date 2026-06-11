@@ -13,7 +13,7 @@ Tipo: QA funcional de código + suite automática + validación real del portal 
 | Método (35.4) | Lectura completa de código + análisis de flujo + suite automática |
 | Método (35.5) | Servicio standalone + 27 escenarios funcionales automáticos + navegador real + Tailscale |
 | UI viva | **VALIDADA en 35.5** — navegador abierto en `http://127.0.0.1:8789/remote/`, portal cargado |
-| Tailscale | **VALIDADO en 35.5** — IP `100.88.127.119`, bind exclusivo confirmado |
+| Tailscale | **VALIDADO en 35.5** — IP `198.51.100.10`, bind exclusivo confirmado |
 | Tests automáticos | 33 tests de Remote ejecutados (35.4) + 27 escenarios funcionales reales (35.5) — todos PASAN |
 
 ---
@@ -302,7 +302,7 @@ Resumen:
 | Bootstrap desde store vacía | **EJECUTADO** — 3 cuentas creadas, sesión admin activa |
 | Login / logout (admin, tecnico, observador) | **EJECUTADO** — todos PASS |
 | Restricciones por rol (observador/tecnico/admin) | **EJECUTADO** — 403 en rutas no autorizadas |
-| Tailscale `tailscale_only` | **EJECUTADO** — bind en `100.88.127.119`, aislamiento confirmado |
+| Tailscale `tailscale_only` | **EJECUTADO** — bind en `198.51.100.10`, aislamiento confirmado |
 | Toast "warning" en fallo de activación (BUG-1 corregido) | **CORREGIDO en 35.4** |
 
 ---
@@ -312,7 +312,7 @@ Resumen:
 **El módulo Remoto queda COMPLETAMENTE VALIDADO para uso controlado interno.**
 
 1. **Modo `local_only`** (bind 127.0.0.1:8788): validado con código, suite automática y portal real.
-2. **Modo `tailscale_only`**: validado con bind exclusivo en IP Tailscale `100.88.127.119`.
+2. **Modo `tailscale_only`**: validado con bind exclusivo en IP Tailscale `198.51.100.10`.
 3. **Bootstrap**: flujo completo probado desde store vacía, resultado correcto.
 4. **Roles**: restricciones verificadas en navegador real con cookies reales.
 5. **Rol observador**: solo lectura confirmada — seguro para monitoreo.

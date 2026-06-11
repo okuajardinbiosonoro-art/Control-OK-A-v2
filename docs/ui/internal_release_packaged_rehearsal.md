@@ -10,7 +10,7 @@ Clasificación: **PASA — confirmado visualmente por José David (2026-04-19)**
 
 | Ítem | Valor |
 |------|-------|
-| Máquina | josecillo (Windows 11 Home, 10.0.26200) |
+| Máquina | <DEV_PC> (Windows 11 Home, 10.0.26200) |
 | Python | 3.11.0 |
 | PyInstaller | 6.19.0 |
 | Spec usada | `ControlOkuaV2.spec` (en raíz del repo) |
@@ -91,7 +91,7 @@ El agente no puede observar la GUI directamente, pero lanzó el proceso y verifi
 | V6 | Navegación a Técnico | **PASA** — sección Comandos visible |
 | V7 | Cierre limpio | **PASA** — ventana cierra, proceso termina |
 
-Validación ejecutada directamente por José David en `josecillo` (Windows 11 Home, 10.0.26200) mediante doble clic en `dist/Control OKÚA CKv2/Control OKÚA CKv2.exe`.
+Validación ejecutada directamente por José David en `<DEV_PC>` (Windows 11 Home, 10.0.26200) mediante doble clic en `dist/Control OKÚA CKv2/Control OKÚA CKv2.exe`.
 
 ---
 

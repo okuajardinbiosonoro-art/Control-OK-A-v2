@@ -28,14 +28,14 @@ El único incidente fue operativo: el primer intento usó un `rollout_token` ya 
 |------|-------|
 | Rama | `desarrollo-fase-2` |
 | Perfil activo | `udp_jardin` |
-| IP del PC | `192.168.1.72` |
+| IP del PC | `192.0.2.10` |
 | Sesión | UDP viva con `SessionController` y control-plane disponible |
 | Nodo observado | EB1 (`node_id = 1`) |
 | Nodos en red | EB1 y EB2 visibles, pero la campaña se ejecutó sólo sobre EB1 |
 | Serial observado | `COM4` (USB-SERIAL CH340) |
 | Serial alterno | `COM6` presente, no usado |
-| Evidencia de red | EB1 resolvió `192.168.1.89` |
-| Evidencia de red | EB2 resolvió `192.168.1.90` |
+| Evidencia de red | EB1 resolvió `192.0.2.10` |
+| Evidencia de red | EB2 resolvió `192.0.2.10` |
 
 ---
 
@@ -51,7 +51,7 @@ El único incidente fue operativo: el primer intento usó un `rollout_token` ya 
 | Versión | `1.0.1-dev` |
 | Target | `plant/eb1` |
 | Canal | `situational` |
-| Advertise host | `192.168.1.72` |
+| Advertise host | `192.0.2.10` |
 | Bind host | `0.0.0.0` |
 | Puerto OTA | `18080` |
 | Ack timeout | `600 ms` |
@@ -100,7 +100,7 @@ Nota: EB2 quedó fuera del alcance de esta campaña porque el flujo OTA valida `
 - `FW_VERSION_CD : 10001`
 - `FW_TARGET     : plant/eb1`
 - `FW_PROFILE    : test`
-- `OTA_BASE_URL  : http://192.168.1.72:18080`
+- `OTA_BASE_URL  : http://192.0.2.10:18080`
 
 El banner también reporta `FW_ARTIFACT` / `FW_SHA256` del runtime, que en este firmware corresponde al SHA de la partición en ejecución. Eso no coincide con el SHA del bin del catálogo y es esperado por diseño. Ver `docs/firmware/ota_firmware_runtime.md`.
 

@@ -21,7 +21,7 @@ Esta RC congela la baseline funcional validada operativamente. No es un release 
 | Ítem | Evidencia | Ticket |
 |------|-----------|--------|
 | Sesión UDP real — perfil `udp_jardin` | 320 EVT + 16 STAT, 0 errores, detención limpia | 34.7 |
-| Nodos EB1/Caja 1 (192.168.1.89) y EB2/Caja 2 (192.168.1.90) ONLINE | uptime ~30 h, rssi −13/−15 dBm, fw 1.0 | 34.7 |
+| Nodos EB1/Caja 1 (192.0.2.10) y EB2/Caja 2 (192.0.2.10) ONLINE | uptime ~30 h, rssi −13/−15 dBm, fw 1.0 | 34.7 |
 | MIDI enrutado via loopMIDI Port 1 + loopMIDI Port 2 | 320 mensajes sin error | 34.7 |
 | Flujo mapa ↔ Nodos — capa de datos | ViewModels con datos reales, filtrado y resolución inversa correctos | 34.7 |
 | Estado del mapa por caja (ONLINE/DEGRADED/OFFLINE) | 5 cajas renderizadas con datos reales | 34.7 |
@@ -99,7 +99,7 @@ Si el archivo parte vacío o inexistente, el primer arranque guiado también es 
 
 - `config.json` con `"mode": "udp"` y perfil activo `udp_jardin`
 - loopMIDI Port 1 y loopMIDI Port 2 disponibles (configurados en `config.json["midi"]["outputs"]`)
-- Red local con nodos OKÚA activos en la subred (confirmado: 192.168.1.89 y 192.168.1.90 activos)
+- Red local con nodos OKÚA activos en la subred (confirmado: 192.0.2.10 y 192.0.2.10 activos)
 
 ---
 
@@ -158,7 +158,7 @@ Todas las pendientes no bloqueantes quedaron resueltas:
 
 ## Ensayo 36.1 — reproducibilidad operativa
 
-Ensayo ejecutado sobre una copia limpia del repositorio en `C:\Users\JOSE DAVID\AppData\Local\Temp\okua_rehearsal_clean` con un venv nuevo.
+Ensayo ejecutado sobre una copia limpia del repositorio en `<USER_HOME>\AppData\Local\Temp\okua_rehearsal_clean` con un venv nuevo.
 
 ### Qué funcionó
 

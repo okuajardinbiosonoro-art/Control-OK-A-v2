@@ -10,7 +10,7 @@ Clasificación: **PASA completamente**
 
 | Ítem | Valor |
 |------|-------|
-| Máquina | josecillo (Windows 11 Home, 10.0.26200) |
+| Máquina | <DEV_PC> (Windows 11 Home, 10.0.26200) |
 | Python | 3.11.0 |
 | Rama | `desarrollo-fase-2` (commit `c9e978b` al inicio) |
 | Ruta de operación | `python main.py` — ruta principal definida |

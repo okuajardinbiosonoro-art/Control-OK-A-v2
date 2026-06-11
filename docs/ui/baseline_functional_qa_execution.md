@@ -341,7 +341,7 @@ Ejecutado por: Claude Code (agente) sobre máquina Windows 11 del usuario (misma
 | Config activa | `config.json` — mode=udp, bind=0.0.0.0:5005/5006/5007 |
 | MIDI disponible | loopMIDI Port 1 + loopMIDI Port 2 (rtmidi) |
 | Hardware serial | COM3 + COM18 — ambos Bluetooth; sin Maestro USB detectado |
-| Nodos UDP en red | **SÍ** — 192.168.1.89 (node_id=1) y 192.168.1.90 (node_id=6) activos |
+| Nodos UDP en red | **SÍ** — 192.0.2.10 (node_id=1) y 192.0.2.10 (node_id=6) activos |
 | Camino elegido | **Camino B — UDP real** |
 
 ### Camino A (serial) — no disponible
@@ -356,8 +356,8 @@ Escucha en 0.0.0.0:5005 (evt) y 0.0.0.0:5006 (stat) por 3 segundos:
 
 | IP | node_id | node_label | box_label | uptime | rssi | fw |
 |----|---------|-----------|-----------|--------|------|----|
-| 192.168.1.89 | 1 | EB1 | Caja 1 | 108330 s (~30 h) | -15 dBm | 1.0 |
-| 192.168.1.90 | 6 | EB2 | Caja 2 | 108318 s (~30 h) | -13 dBm | 1.0 |
+| 192.0.2.10 | 1 | EB1 | Caja 1 | 108330 s (~30 h) | -15 dBm | 1.0 |
+| 192.0.2.10 | 6 | EB2 | Caja 2 | 108318 s (~30 h) | -13 dBm | 1.0 |
 
 #### Ejecución de la sesión
 

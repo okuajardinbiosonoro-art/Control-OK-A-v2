@@ -12,7 +12,7 @@ Clasificación: **PASA completamente**
 |------|-------|
 | Fuente del ensayo | Tag `rc1-interna` (commit `6a16c33`) |
 | Método de checkout | `git worktree add --detach C:/Temp/okua_rc1_39_1 rc1-interna` |
-| Máquina | josecillo (Windows 11 Home, 10.0.26200) |
+| Máquina | <DEV_PC> (Windows 11 Home, 10.0.26200) |
 | Python | 3.11.0 (entorno existente — venv ya instalado) |
 | Directorio del ensayo | `C:/Temp/okua_rc1_39_1` (worktree limpio, sin `config.json` previo) |
 | Diferencias respecto a `desarrollo-fase-2` | Ninguna en código — `rc1-interna` y `desarrollo-fase-2` HEAD coincidían en `6a16c33` |

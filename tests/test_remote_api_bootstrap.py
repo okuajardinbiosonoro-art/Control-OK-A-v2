@@ -140,14 +140,14 @@ def test_resolve_remote_api_bind_host_for_tailscale_only(
     )
     monkeypatch.setattr(
         "control_okua.services.remote_api_bootstrap._discover_tailscale_ipv4_address",
-        lambda: "100.88.127.119",
+        lambda: "198.51.100.10",
     )
 
     bind_host = resolve_remote_api_bind_host(config)
     status = build_remote_api_exposure_status(config, effective_bind_host=bind_host)
 
-    assert bind_host == "100.88.127.119"
-    assert status.remote_access_url == "http://100.88.127.119:8788/remote/"
+    assert bind_host == "198.51.100.10"
+    assert status.remote_access_url == "http://198.51.100.10:8788/remote/"
 
 
 def test_resolve_remote_api_bind_host_fails_cleanly_without_tailscale_ip(

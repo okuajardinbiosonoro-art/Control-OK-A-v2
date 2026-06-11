@@ -11,7 +11,7 @@ Validar end-to-end en hardware real el segundo `SET_*` curado (`SET_THROTTLE`) d
 ## 2) Prerequisitos
 
 1. Red Wi-Fi activa: `Kitty_2.4`.
-2. Host CKv2 alcanzable por los nodos con la IP cargada en firmware (`192.168.1.57`).
+2. Host CKv2 alcanzable por los nodos con la IP cargada en firmware (`192.0.2.10`).
 3. Nodos de prueba encendidos y emitiendo EVT/STAT en modo `TEST + PLANT`.
 4. App ejecutada desde repo local (`python main.py`), no `.exe`.
 5. Sesion UDP/LAB en `RUNNING`.
@@ -102,13 +102,13 @@ Resultado: **bloqueada por precondicion de red/IP**.
 
 Precondicion de red: **cumplida**.
 
-- Host en `192.168.1.57` (Ethernet), coincidente con `PC_IP` cargada en nodos.
+- Host en `192.0.2.10` (Ethernet), coincidente con `PC_IP` cargada en nodos.
 - Sondeo UDP (`5005/5006`, 12 s): trafico activo.
 
 Descubrimiento real de nodos:
 
-- `EC2` (`node_id=7`) -> `192.168.1.71`
-- `ED2` (`node_id=8`) -> `192.168.1.65`
+- `EC2` (`node_id=7`) -> `192.0.2.10`
+- `ED2` (`node_id=8`) -> `192.0.2.10`
 - `EB2` (`node_id=6`) no aparecio en trafico durante la ventana de validacion.
 
 Comprobacion de canal F3 base (control positivo):
@@ -152,11 +152,11 @@ Conclusiones de la corrida:
 
 Precondicion de red: **cumplida**.
 
-- Host CKv2: `192.168.1.57` (Ethernet).
+- Host CKv2: `192.0.2.10` (Ethernet).
 - Nodos detectados en trafico UDP:
-  - `EB2` (`node_id=6`) -> `192.168.1.67`
-  - `EC2` (`node_id=7`) -> `192.168.1.71`
-  - `ED2` (`node_id=8`) -> `192.168.1.65`
+  - `EB2` (`node_id=6`) -> `192.0.2.10`
+  - `EC2` (`node_id=7`) -> `192.0.2.10`
+  - `ED2` (`node_id=8`) -> `192.0.2.10`
 
 Control positivo del canal F3:
 

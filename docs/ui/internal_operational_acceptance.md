@@ -28,9 +28,9 @@ Esta aceptación se basa en:
 
 Esta aceptación es válida bajo las siguientes condiciones:
 
-1. **Operador único:** José David en `josecillo` (Windows 11 Home, 10.0.26200).
+1. **Operador único:** José David en `<DEV_PC>` (Windows 11 Home, 10.0.26200).
 2. **Ruta de operación:** `python main.py` desde la raíz del repositorio, rama `desarrollo-fase-2`.
-3. **Perfil operativo:** `udp_jardin` con nodos EB1 (192.168.1.89) y EB2 (192.168.1.90) en la subred local.
+3. **Perfil operativo:** `udp_jardin` con nodos EB1 (192.0.2.10) y EB2 (192.0.2.10) en la subred local.
 4. **Dependencias externas:** loopMIDI con Port 1 y Port 2 activos antes de arrancar.
 5. **Máximo de nodos validado:** 2 nodos simultáneos (EB1 + EB2). Más nodos son posibles técnicamente pero no han sido validados.
 
@@ -57,7 +57,7 @@ La siguiente deuda existe pero no bloquea el uso operativo controlado actual:
 | SERIAL-1 | Sesión serial con Maestro USB no validada | Media | Cuando haya Maestro conectado disponible |
 | OTA-CAMP-1 | Campaña OTA multi-wave (>1 wave con gate intermedio) no validada en hardware | Baja | Próximo ciclo operativo |
 | SCOPE-1 | Validado solo con 2 nodos (EB1 + EB2) | Baja | Cuando haya más nodos disponibles |
-| SCOPE-2 | Validado solo en `josecillo` — no probado en otro entorno Windows | Baja | Si se requiere otra máquina |
+| SCOPE-2 | Validado solo en `<DEV_PC>` — no probado en otro entorno Windows | Baja | Si se requiere otra máquina |
 
 ### Deuda de firmware
 
@@ -88,7 +88,7 @@ Antes de cada sesión operativa, ejecutar el preflight del runbook (`release_can
 | P2 | `pip show PySide6 rtmidi` sin error |
 | P3 | `config.json` presente y con perfil correcto |
 | P4 | loopMIDI activo con Port 1 y Port 2 visibles |
-| P5 | Red local accesible (`ping 192.168.1.89`) |
+| P5 | Red local accesible (`ping 192.0.2.10`) |
 | P6 | Sin proceso previo colgado en Task Manager |
 
 ### Controles recomendados cada 10 sesiones o cada 2 semanas

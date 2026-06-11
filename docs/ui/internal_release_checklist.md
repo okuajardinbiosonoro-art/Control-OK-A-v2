@@ -40,7 +40,7 @@ Referencia operativa completa: [`release_candidate_runbook.md`](release_candidat
 | P3 | `config.json` presente | Archivo existe en raíz del repo, o fue creado por el primer arranque |
 | P4 | Perfil activo correcto | `config.json` → `"profile": {"active": "udp_jardin"}`; si viene `null`, completar el selector guiado o usar `CKV2_AUTOPROFILE=udp_jardin` |
 | P5 | loopMIDI activo | Ícono en bandeja; Port 1 y Port 2 visibles |
-| P6 | Red local accesible | `ping 192.168.1.89` responde |
+| P6 | Red local accesible | `ping 192.0.2.10` responde |
 | P7 | Sin proceso previo colgado | Administrador de tareas sin `python main.py` activo |
 
 ---
@@ -81,7 +81,7 @@ Referencia operativa completa: [`release_candidate_runbook.md`](release_candidat
 | Bootstrap desde store vacía — 3 cuentas | VALIDADO (35.5) |
 | Login/logout — roles admin, tecnico, observador | VALIDADO (35.5) |
 | Restricciones por rol (403 en operaciones no autorizadas) | VALIDADO (35.5) |
-| Modo `tailscale_only` — bind exclusivo, loopback rechazado | VALIDADO — `100.88.127.119` (35.5) |
+| Modo `tailscale_only` — bind exclusivo, loopback rechazado | VALIDADO — `198.51.100.10` (35.5) |
 
 ---
 
@@ -90,7 +90,7 @@ Referencia operativa completa: [`release_candidate_runbook.md`](release_candidat
 | Síntoma | Acción inmediata |
 |---------|-----------------|
 | Crash en arranque (`ModuleNotFoundError`) | `pip install -r requirements.txt` y reintentar |
-| Sin nodos visibles en árbol | `ping 192.168.1.89` — verificar red y firewall UDP 5005/5006 |
+| Sin nodos visibles en árbol | `ping 192.0.2.10` — verificar red y firewall UDP 5005/5006 |
 | App no responde al detener sesión | Esperar 10 s; si sigue, `Alt+F4` y finalizar proceso en Task Manager |
 | Rollback al último estado verificado | `git reset --hard 1e1f474` → `python main.py` |
 

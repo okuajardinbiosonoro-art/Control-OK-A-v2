@@ -42,21 +42,21 @@ Ejemplos (PowerShell, desde raiz del repo):
   -NodeLabel EB2 `
   -WifiSsid "Kitty_2.4" `
   -WifiPass "66661174" `
-  -PcIp "192.168.1.57"
+  -PcIp "192.0.2.10"
 
 # EC2
 .\firmware\okua_node_udp_v1\prepare_test_node_kitty24.ps1 `
   -NodeLabel EC2 `
   -WifiSsid "Kitty_2.4" `
   -WifiPass "66661174" `
-  -PcIp "192.168.1.57"
+  -PcIp "192.0.2.10"
 
 # ED2
 .\firmware\okua_node_udp_v1\prepare_test_node_kitty24.ps1 `
   -NodeLabel ED2 `
   -WifiSsid "Kitty_2.4" `
   -WifiPass "66661174" `
-  -PcIp "192.168.1.57"
+  -PcIp "192.0.2.10"
 ```
 
 Notas:

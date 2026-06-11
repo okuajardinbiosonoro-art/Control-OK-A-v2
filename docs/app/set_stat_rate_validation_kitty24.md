@@ -13,7 +13,7 @@ Ejecutado sobre repo local (no `.exe`) con referencias de operacion de `python m
 ## 2) Precondiciones del run
 
 1. PC y nodos en LAN `192.168.1.x` (nodos en SSID `Kitty_2.4`).
-2. IP destino configurada en firmware: `192.168.1.57`.
+2. IP destino configurada en firmware: `192.0.2.10`.
 3. Secret de control disponible en:
    - `firmware/okua_node_udp_v1/okua_node_secrets.h`
 4. Allowlist curada vigente:
@@ -23,7 +23,7 @@ Ejecutado sobre repo local (no `.exe`) con referencias de operacion de `python m
 
 ## 3) Verificacion de precondicion de red (2026-03-27)
 
-- `ipconfig`: interfaz activa con IPv4 `192.168.1.57`.
+- `ipconfig`: interfaz activa con IPv4 `192.0.2.10`.
 - `netsh wlan show interfaces`: adaptador Wi-Fi reportado como desconectado.
 - La validacion se ejecuto con conectividad real en la misma LAN de los nodos (tramas EVT/STAT y ACK recibidas en esta maquina).
 
@@ -31,9 +31,9 @@ Ejecutado sobre repo local (no `.exe`) con referencias de operacion de `python m
 
 Discovery inicial de corrida principal (STAT/5006):
 
-- `node_id=6` -> `192.168.1.67`
-- `node_id=7` -> `192.168.1.71`
-- `node_id=8` -> `192.168.1.65`
+- `node_id=6` -> `192.0.2.10`
+- `node_id=7` -> `192.0.2.10`
+- `node_id=8` -> `192.0.2.10`
 
 Artefacto de evidencia:
 
@@ -53,7 +53,7 @@ Por cada nodo validado:
 
 ## 6) Resultado por nodo (ACK + cadencia)
 
-### 6.1 EB2 (`node_id=6`, `ip=192.168.1.67`)
+### 6.1 EB2 (`node_id=6`, `ip=192.0.2.10`)
 
 Corrida de seguimiento para estabilizar evidencia de ACK:
 
@@ -69,7 +69,7 @@ Corrida de seguimiento para estabilizar evidencia de ACK:
 
 Nota de campo: hubo jitter/picos esporadicos de red (intervalos largos aislados), pero la mediana siguio la cadencia objetivo.
 
-### 6.2 EC2 (`node_id=7`, `ip=192.168.1.71`)
+### 6.2 EC2 (`node_id=7`, `ip=192.0.2.10`)
 
 - `SET_STAT_RATE=1000`:
   - `final_status=ack_matched`, `ack_stage=1`, `status_code=0`, `err_detail=0`
@@ -81,7 +81,7 @@ Nota de campo: hubo jitter/picos esporadicos de red (intervalos largos aislados)
   - `final_status=ack_matched`, `ack_stage=1`, `status_code=0`, `err_detail=0`
   - cadencia observada: mediana `2.000 s`
 
-### 6.3 ED2 (`node_id=8`, `ip=192.168.1.65`)
+### 6.3 ED2 (`node_id=8`, `ip=192.0.2.10`)
 
 - `SET_STAT_RATE=1000`:
   - `final_status=ack_matched`, `ack_stage=1`, `status_code=0`, `err_detail=0`
