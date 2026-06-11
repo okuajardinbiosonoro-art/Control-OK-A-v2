@@ -293,4 +293,5 @@ tmp_catalog.json
 # Local machine wrappers and private field prompts
 /platformio.cmd
 tools/field_pc_*prompt.txt
+docs/process/POLITICA_ARCHIVO_HISTORICO_EVIDENCIA_VISUAL.md
 
