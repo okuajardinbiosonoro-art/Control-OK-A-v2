@@ -395,6 +395,13 @@ El módulo remoto se activa/desactiva en `config.json` bajo `remote_api.enabled`
 
 | Documento | Contenido |
 |-----------|-----------|
+| [`docs/status/CKV2_LIVE_STATE_2026-06-11.md`](docs/status/CKV2_LIVE_STATE_2026-06-11.md) | Estado vivo CKv2 y reconciliacion documental del baseline de campo |
+| [`docs/release/FIELD_BUILD_MANIFEST.md`](docs/release/FIELD_BUILD_MANIFEST.md) | Manifiesto del build de campo y hash baseline |
+| [`docs/dev/BUILD_EXE.md`](docs/dev/BUILD_EXE.md) | Proceso y cautelas para build del ejecutable |
+| [`docs/ops/FIELD_RUNBOOK.md`](docs/ops/FIELD_RUNBOOK.md) | Runbook de campo para operacion pasiva y contingencias |
+| [`docs/security/TOOLING_SECURITY_POLICY.md`](docs/security/TOOLING_SECURITY_POLICY.md) | Politica de seguridad para herramientas y agentes |
+| [`docs/ai/AGENT_WORKFLOW.md`](docs/ai/AGENT_WORKFLOW.md) | Flujo de trabajo de agentes sobre CKv2 |
+| [`docs/adr/ADR-0001-CKV2-PRODUCTION-LIGHTWEIGHT-BASELINE.md`](docs/adr/ADR-0001-CKV2-PRODUCTION-LIGHTWEIGHT-BASELINE.md) | ADR-0001: baseline de produccion liviana |
 | [`docs/ui/release_candidate_runbook.md`](docs/ui/release_candidate_runbook.md) | Guía de operación de campo: preflight, arranque, operación, contingencia, rollback |
 | [`docs/ui/internal_operational_acceptance.md`](docs/ui/internal_operational_acceptance.md) | Acta de aceptación operativa formal, deuda residual, mantenimiento, incidentes |
 | [`docs/ui/internal_release_checklist.md`](docs/ui/internal_release_checklist.md) | Checklist de entrega interna RC1 |
