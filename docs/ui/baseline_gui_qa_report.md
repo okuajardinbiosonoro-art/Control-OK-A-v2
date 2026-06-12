@@ -1,7 +1,7 @@
 # QA de baseline GUI — Control OKÚA CKv2
 
-Rama: `desarrollo-fase-2`  
-Fecha QA: 2026-04-13 (Ticket 34.3)  
+Rama: `desarrollo-fase-2`
+Fecha QA: 2026-04-13 (Ticket 34.3)
 Tipo de QA: code-audit + validación de tests + smoke de packaging
 
 ---

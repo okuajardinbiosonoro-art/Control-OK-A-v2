@@ -5,7 +5,19 @@
 *.txt  text eol=lf
 *.json text eol=lf
 *.md   text eol=lf
+*.ino text eol=lf
+*.h text eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
 *.png binary
+*.jpg binary
+*.jpeg binary
 *.ico binary
+*.exe binary
+*.dll binary
+*.pyd binary
+*.bin binary
+*.elf binary
 .gitignore text eol=lf
 .gitattributes text eol=lf

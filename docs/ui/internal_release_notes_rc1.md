@@ -1,7 +1,7 @@
 # Release Notes Internas — Control OKÚA CKv2 — RC1 / Release Interna Controlada
 
-Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-18 (Ticket 36.0)  
+Rama: `desarrollo-fase-2`
+Fecha: 2026-04-18 (Ticket 36.0)
 Estado: **Release Interna Controlada — ciclo RC cerrado**
 
 ---
@@ -73,7 +73,7 @@ La observación real 37.2 refuerza la conclusión operativa: la RC1 sostiene nod
 | SERIAL-1 | Sesión serial con Maestro USB no validada | Sin Maestro USB durante el ciclo; Camino B (UDP) cubre el requisito operativo |
 | OTA-CAMP-1 | Campaña OTA multi-wave (más de 1 wave con gate intermedio) no ejecutada en hardware | Lógica multi-wave cubierta por tests; wave única validada con hardware real |
 | SCOPE-1 | Validado solo con EB1 + EB2 en subred 192.168.1.x | Sin prueba con más de 2 nodos simultáneos |
-| SCOPE-2 | Validado únicamente en la máquina de José David (Windows 11 Home, josecillo) | No probado en otro entorno Windows |
+| SCOPE-2 | Validado únicamente en la máquina de José David (Windows 11 Home, <DEV_PC>) | No probado en otro entorno Windows |
 
 ---
 

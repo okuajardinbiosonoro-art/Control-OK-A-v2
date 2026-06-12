@@ -106,7 +106,7 @@ Evidencia recolectada:
    - pero `node_id=1` y `node_id=3` quedaron sin resolucion/IP en ventana de espera.
 3. Sondeo UDP directo (`0.0.0.0:5005/5006`, 12 s):
    - paquetes recibidos: `{5005: 0, 5006: 0}`.
-4. Prueba transaccional directa a IP historica de EB1 (`192.168.88.253`):
+4. Prueba transaccional directa a IP historica de EB1 (`192.0.2.10`):
    - `PING`: timeout (sin ACK)
    - `SET_STAT_RATE=1000`: timeout (sin ACK)
 

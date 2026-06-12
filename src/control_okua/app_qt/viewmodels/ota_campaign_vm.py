@@ -207,4 +207,3 @@ def build_ota_campaign_continue_hint(result: OtaCampaignResult | None) -> str:
     if result.campaign_status is OtaCampaignStatus.ABORTED:
         return "La campaña fue abortada y ya no admite nuevas olas."
     return "La siguiente ola aún no está habilitada."
-

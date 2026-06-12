@@ -1,8 +1,8 @@
 # Acta de Ejecución — QA Funcional Real — Control OKÚA CKv2 — Ticket 34.5
 
-Rama: `desarrollo-fase-2`  
-Fecha ejecución: 2026-04-13 (Ticket 34.5)  
-Tipo: validación funcional real — ejecución de runbook de campo  
+Rama: `desarrollo-fase-2`
+Fecha ejecución: 2026-04-13 (Ticket 34.5)
+Tipo: validación funcional real — ejecución de runbook de campo
 Ejecutado por: José David / Claude Code (agente)
 
 ---
@@ -64,7 +64,7 @@ import control_okua.core.session.session_state_machine
 import control_okua.core.profiles.profile_service
 ```
 
-**Resultado: PASA** — todos los módulos principales importan sin error.  
+**Resultado: PASA** — todos los módulos principales importan sin error.
 `run_app` es callable: confirmado.
 
 ---
@@ -90,7 +90,7 @@ subprocess.Popen([sys.executable, 'main.py'], stdout=PIPE, stderr=PIPE)
 | Salida por stdout | Vacía (normal en PySide6) |
 | Código de salida antes del timeout | N/A (proceso terminado por agente tras 5s) |
 
-**Conclusión del smoke launch:**  
+**Conclusión del smoke launch:**
 La aplicación arrancó sin excepción, sin traceback y sin error de importación. El proceso estuvo vivo 5+ segundos con stderr limpio. La ventana SE ABRIÓ en el display de la máquina del usuario (Windows 11, sesión activa), pero el agente no tiene capacidad de observar qué se renderizó en pantalla.
 
 **Esto es un avance real respecto a 34.4**, donde el lanzamiento no fue intentado. Sin embargo, **no sustituye la validación visual**.
@@ -341,7 +341,7 @@ Ejecutado por: Claude Code (agente) sobre máquina Windows 11 del usuario (misma
 | Config activa | `config.json` — mode=udp, bind=0.0.0.0:5005/5006/5007 |
 | MIDI disponible | loopMIDI Port 1 + loopMIDI Port 2 (rtmidi) |
 | Hardware serial | COM3 + COM18 — ambos Bluetooth; sin Maestro USB detectado |
-| Nodos UDP en red | **SÍ** — 192.168.1.89 (node_id=1) y 192.168.1.90 (node_id=6) activos |
+| Nodos UDP en red | **SÍ** — 192.0.2.10 (node_id=1) y 192.0.2.10 (node_id=6) activos |
 | Camino elegido | **Camino B — UDP real** |
 
 ### Camino A (serial) — no disponible
@@ -356,8 +356,8 @@ Escucha en 0.0.0.0:5005 (evt) y 0.0.0.0:5006 (stat) por 3 segundos:
 
 | IP | node_id | node_label | box_label | uptime | rssi | fw |
 |----|---------|-----------|-----------|--------|------|----|
-| 192.168.1.89 | 1 | EB1 | Caja 1 | 108330 s (~30 h) | -15 dBm | 1.0 |
-| 192.168.1.90 | 6 | EB2 | Caja 2 | 108318 s (~30 h) | -13 dBm | 1.0 |
+| 192.0.2.10 | 1 | EB1 | Caja 1 | 108330 s (~30 h) | -15 dBm | 1.0 |
+| 192.0.2.10 | 6 | EB2 | Caja 2 | 108318 s (~30 h) | -13 dBm | 1.0 |
 
 #### Ejecución de la sesión
 

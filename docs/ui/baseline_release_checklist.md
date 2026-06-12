@@ -1,6 +1,6 @@
 # Checklist de cierre técnico de baseline — Control OKÚA CKv2
 
-Rama: `desarrollo-fase-2`  
+Rama: `desarrollo-fase-2`
 Última actualización: 2026-04-18 (mapa Home confirmado visualmente por José David — checklist 100 % completo)
 
 ---

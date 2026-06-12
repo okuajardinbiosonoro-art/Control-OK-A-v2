@@ -46,4 +46,3 @@ const char* okuaBuildProfile();
 const char* okuaBuildProtocolVersion();
 const char* okuaBuildFirmwareFamily();
 const char* okuaBuildCompatibleHw();
-

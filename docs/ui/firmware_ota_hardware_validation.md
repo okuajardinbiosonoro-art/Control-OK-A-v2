@@ -1,7 +1,7 @@
 # Protocolo de validación OTA con hardware real — Control OKÚA CKv2
 
-Rama: `desarrollo-fase-2`  
-Fecha de preparación: 2026-04-17 (Ticket 35.3)  
+Rama: `desarrollo-fase-2`
+Fecha de preparación: 2026-04-17 (Ticket 35.3)
 Estado: **PENDIENTE DE EJECUCIÓN POR JOSÉ DAVID**
 
 > Este documento es un protocolo de validación, no un acta. El agente no puede interactuar con la GUI ni observar dispositivos físicos. La ejecución real corresponde a José David con acceso físico al hardware y la app abierta en pantalla.
@@ -70,7 +70,7 @@ Verificar TODAS antes de iniciar:
 
 | # | Precondición | Cómo verificar |
 |---|-------------|----------------|
-| PRE-1 | Nodo objetivo encendido y en red | `ping 192.168.1.89` responde |
+| PRE-1 | Nodo objetivo encendido y en red | `ping 192.0.2.10` responde |
 | PRE-2 | Nodo ejecuta firmware OTA-compatible | Consola serial: debe mostrar `OTA_BASE_URL  :` al arranque |
 | PRE-3 | `OKUA_OTA_BASE_URL` apunta al PC correcto | Consola serial: URL debe tener la IP del PC de control |
 | PRE-4 | Puerto 18080 libre en el PC | `netstat -an \| findstr 18080` → sin resultado |
@@ -104,7 +104,7 @@ Verificar TODAS antes de iniciar:
    - Token: cualquier valor no-cero
    - Canal: `plant` (o el que corresponda)
    - Timeout y reintentos: valores razonables (ej. 30 s, 3 reintentos)
-4. En la lista de nodos: seleccionar EB1 (`192.168.1.89`).
+4. En la lista de nodos: seleccionar EB1 (`192.0.2.10`).
 5. Clic **"Publicar actualización"**.
 
 **Resultado esperado inmediato:**

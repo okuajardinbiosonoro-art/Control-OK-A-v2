@@ -1,7 +1,7 @@
 # Validación del portal web remoto — `/remote/` — Control OKÚA CKv2
 
-Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-18 (Ticket 35.5)  
+Rama: `desarrollo-fase-2`
+Fecha: 2026-04-18 (Ticket 35.5)
 Tipo: Validación funcional real con servicio standalone + navegador abierto + Tailscale
 
 ---
@@ -10,14 +10,14 @@ Tipo: Validación funcional real con servicio standalone + navegador abierto + T
 
 | Ítem | Detalle |
 |------|---------|
-| Host | josecillo (Windows 11 Home, 10.0.26200) |
+| Host | <DEV_PC> (Windows 11 Home, 10.0.26200) |
 | Navegador | Windows default browser (abierto automáticamente por el script de validación) |
 | Puerto de validación | 8789 (standalone, evita conflicto con app en 8788) |
 | URL usada | `http://127.0.0.1:8789/remote/` |
 | User store | Temporal limpio (TemporaryDirectory) — bootstrap real ejecutado desde cero |
 | Runtime | Mock completo con 2 nodos ficticios (EB1 online, EB2 offline) |
 | Suite automática | 27 escenarios funcionales, todos PASS |
-| Tailscale | Disponible — `100.88.127.119 / josecillo.tail45c171.ts.net` — validado |
+| Tailscale | Disponible — `198.51.100.10 / <DEV_PC>.tail45c171.ts.net` — validado |
 
 ---
 
@@ -102,11 +102,11 @@ Tailscale estaba disponible en el host. Resultado de la validación:
 
 | Ítem | Resultado |
 |------|-----------|
-| IP Tailscale del host | `100.88.127.119` |
-| DNS Tailscale del host | `josecillo.tail45c171.ts.net` |
-| `resolve_remote_api_bind_host(tailscale_only)` | `100.88.127.119` (correcto) |
-| `effective_bind_host` del servicio | `100.88.127.119` |
-| GET `/remote/` via `100.88.127.119:8790` | **200 OK**, HTML correcto |
+| IP Tailscale del host | `198.51.100.10` |
+| DNS Tailscale del host | `<DEV_PC>.tail45c171.ts.net` |
+| `resolve_remote_api_bind_host(tailscale_only)` | `198.51.100.10` (correcto) |
+| `effective_bind_host` del servicio | `198.51.100.10` |
+| GET `/remote/` via `198.51.100.10:8790` | **200 OK**, HTML correcto |
 | GET `/remote/` via `127.0.0.1:8790` | **ConnectionRefusedError** — servicio NO escucha en loopback (correcto, aislamiento Tailscale efectivo) |
 
 **Conclusión Tailscale:** el modo `tailscale_only` funciona correctamente. El servicio binds exclusivamente a la IP Tailscale, rechazando conexiones desde loopback o LAN directa. El aislamiento es real y verificado.

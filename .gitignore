@@ -183,9 +183,9 @@ cython_debug/
 .abstra/
 
 # Visual Studio Code
-#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
+#  Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore
 #  that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
-#  and can be added to the global gitignore or merged into this file. However, if you prefer, 
+#  and can be added to the global gitignore or merged into this file. However, if you prefer,
 #  you could uncomment the following to ignore the entire vscode folder
 # .vscode/
 
@@ -234,3 +234,64 @@ firmware/okua_node_udp_v1/okua_node_secrets.h
 .piolibdeps/
 .pio-home/
 
+# CKv2 safety guardrails (000D)
+# Runtime/build artifacts
+dist/
+build/
+*.exe
+*.dll
+*.pyd
+*.spec.bak
+
+# Python/cache
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# CKv2 runtime configs/secrets/state
+config.json
+remote_api_tokens.json
+remote_api_users.json
+remote_api_access.txt
+control_plane_state.json
+*.local.json
+*.secret.json
+
+# Field/startup secrets
+start_ckv2_with_secret*.bat
+*CKV2_CONTROL_SECRET*
+
+# Firmware secrets
+firmware/**/okua_node_secrets.h
+firmware/**/okua_node_secrets.h.bak*
+!firmware/**/okua_node_secrets.example.h
+
+# Logs and generated outputs
+logs/
+.security-reports/
+*.log
+*.out.txt
+*_listener.out.txt
+
+# OTA/generated firmware artifacts
+ota_binaries/
+*.bin
+*.elf
+*.map
+.pio/
+.pio-home/
+
+# Agent local state
+.claude/worktrees/
+.claude/settings.local.json
+
+# Temporary generated files
+tmp_catalog.json
+
+# Local machine wrappers and private field prompts
+/platformio.cmd
+tools/field_pc_*prompt.txt
+docs/process/POLITICA_ARCHIVO_HISTORICO_EVIDENCIA_VISUAL.md

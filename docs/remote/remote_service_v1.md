@@ -335,7 +335,7 @@ Respuesta `200`:
           "health_confirmed": true
         },
         "control_plane": {
-          "resolved_ip": "192.168.88.31",
+          "resolved_ip": "192.0.2.10",
           "resolution_status": "resolved",
           "transaction_active": false,
           "last_command_name": "REQUEST_STAT_NOW",
@@ -402,7 +402,7 @@ Respuesta `200`:
       "health_confirmed": true
     },
     "control_plane": {
-      "resolved_ip": "192.168.88.31",
+      "resolved_ip": "192.0.2.10",
       "resolution_status": "resolved",
       "resolution_age_s": 0.6,
       "transaction_active": false,

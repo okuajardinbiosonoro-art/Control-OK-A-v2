@@ -57,7 +57,7 @@ El artifact `fruit/ed1` generado en `OTA-A`:
 ### 5.1 PC del sitio
 
 - Host en red `Kitty_2.4`
-- IP alcanzable por nodos: `192.168.1.70`
+- IP alcanzable por nodos: `192.0.2.10`
 - Puerto OTA local de CKv2: `18080` fijo en esta rama
 - Si cambias ese puerto a mano, recompila el firmware del nodo y vuelve a alinear la app con el mismo valor.
 - App CKv2 ejecutable con:
@@ -78,7 +78,7 @@ python main.py
 - `FW_VERSION_CD : 10000`
 - `FW_ARTIFACT   : sha256:...`
 - `FW_SHA256     : ...`
-- `OTA_BASE_URL  : http://192.168.1.70:18080`
+- `OTA_BASE_URL  : http://192.0.2.10:18080`
 
 Si no aparece eso, reflashear por cable antes de la OTA.
 
@@ -88,7 +88,7 @@ Comando recomendado:
 
 ```powershell
 python tools/firmware_artifact_agent.py build-first-physical-test `
-  --platformio-exe "C:\Users\JOSE DAVID\.platformio\penv\Scripts\platformio.exe" `
+  --platformio-exe "<USER_HOME>\.platformio\penv\Scripts\platformio.exe" `
   --import-generated `
   --pretty
 ```
@@ -131,7 +131,7 @@ Seleccionar:
 
 - artifact comparativo `plant/ed1`
 - nodo `ED1`
-- `Host visible al nodo = 192.168.1.70`
+- `Host visible al nodo = 192.0.2.10`
 - `Bind host = 0.0.0.0`
 - `Puerto OTA = 18080`
 - Si cambiaste el puerto en el firmware, vuelve a dejar la app en el mismo valor antes de publicar.
@@ -150,7 +150,7 @@ Verificar que existan:
 Verificar manifest:
 
 ```powershell
-Invoke-WebRequest http://192.168.1.70:18080/ota/rollouts/<token>/manifest.json | Select-Object -ExpandProperty Content
+Invoke-WebRequest http://192.0.2.10:18080/ota/rollouts/<token>/manifest.json | Select-Object -ExpandProperty Content
 ```
 
 Campos obligatorios:
@@ -219,7 +219,7 @@ Eso confirma que el firmware realmente cambió.
 - comparativo `plant/ed1` importado
 - `version_code` mayor
 - manifest publicado con `build_profile=test`
-- servidor OTA responde en `192.168.1.70:18080`
+- servidor OTA responde en `192.0.2.10:18080`
 
 ### NO-GO
 

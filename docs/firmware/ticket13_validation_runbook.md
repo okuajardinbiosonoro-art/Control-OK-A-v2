@@ -68,7 +68,7 @@ Unicast:
 
 ```powershell
 python tools/firmware_f3_validator.py ping `
-  --target-ip 192.168.88.120 `
+  --target-ip 192.0.2.10 `
   --node-id 16
 ```
 
@@ -83,7 +83,7 @@ Unicast:
 
 ```powershell
 python tools/firmware_f3_validator.py request_stat_now `
-  --target-ip 192.168.88.120 `
+  --target-ip 192.0.2.10 `
   --node-id 16
 ```
 
@@ -96,7 +96,7 @@ Success criteria:
 
 ```powershell
 python tools/firmware_f3_validator.py reboot_soft `
-  --target-ip 192.168.88.120 `
+  --target-ip 192.0.2.10 `
   --node-id 16 `
   --allow-reboot `
   --reboot-delay-ms 200

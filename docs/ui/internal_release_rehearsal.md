@@ -16,7 +16,7 @@ Objetivo: verificar que la Release Interna Controlada se puede reproducir en una
 | Python | 3.11.0 |
 | Plataforma Qt durante el ensayo | `QT_QPA_PLATFORM=offscreen` |
 | Perfil usado para el arranque no interactivo | `udp_jardin` |
-| Ruta de trabajo | `C:\Users\JOSE DAVID\AppData\Local\Temp\okua_rehearsal_clean` |
+| Ruta de trabajo | `<USER_HOME>\AppData\Local\Temp\okua_rehearsal_clean` |
 
 La copia limpia se obtuvo con `git clone --no-hardlinks . %TEMP%\okua_rehearsal_clean` desde la rama `desarrollo-fase-2`.
 

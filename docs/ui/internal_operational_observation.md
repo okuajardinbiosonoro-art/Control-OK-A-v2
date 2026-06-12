@@ -1,7 +1,7 @@
 # Observación operativa prolongada — Control OKÚA CKv2 — RC1
 
-Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-19 (Ticket 37.1)  
+Rama: `desarrollo-fase-2`
+Fecha: 2026-04-19 (Ticket 37.1)
 Clasificación: **PASA completamente**
 
 ---
@@ -10,7 +10,7 @@ Clasificación: **PASA completamente**
 
 | Ítem | Valor |
 |------|-------|
-| Máquina | josecillo (Windows 11 Home, 10.0.26200) |
+| Máquina | <DEV_PC> (Windows 11 Home, 10.0.26200) |
 | Python | 3.11.0 |
 | Rama | `desarrollo-fase-2` (commit `c9e978b` al inicio) |
 | Ruta de operación | `python main.py` — ruta principal definida |
@@ -107,7 +107,7 @@ La release sostuvo 10 minutos continuos sin crash, sin leak, sin errores nuevos 
 
 ## Bloque 5 — Pruebas automáticas
 
-No se ejecutaron pruebas adicionales — no hubo cambios de código.  
+No se ejecutaron pruebas adicionales — no hubo cambios de código.
 La suite completa (498/498) ya fue ejecutada y confirmada en 37.0.
 
 ---

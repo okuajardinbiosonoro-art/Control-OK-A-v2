@@ -18,6 +18,30 @@ Current minimal functional commands in firmware:
 - `REBOOT_SOFT`
 - `OTA_CHECK_NOW`
 
+Current field fruit reference note:
+
+- [docs/firmware/fruit_field_session_2026-04-21.md](../docs/firmware/fruit_field_session_2026-04-21.md)
+- [docs/firmware/fruit_soak_2026-04-22.md](../docs/firmware/fruit_soak_2026-04-22.md)
+- [docs/firmware/fruit_hotstart_2026-04-23.md](../docs/firmware/fruit_hotstart_2026-04-23.md)
+- [docs/firmware/fruit_soak_2026-04-23.md](../docs/firmware/fruit_soak_2026-04-23.md)
+- [docs/firmware/fruit_soak_2026-04-24_runbook.md](../docs/firmware/fruit_soak_2026-04-24_runbook.md)
+- [docs/firmware/fruit_morning_bootguard_2026-04-24.md](../docs/firmware/fruit_morning_bootguard_2026-04-24.md)
+- [docs/firmware/fruit_v7_morning_adaptive_2026-04-24.md](../docs/firmware/fruit_v7_morning_adaptive_2026-04-24.md)
+- [docs/firmware/fruit_v8_morning_resilient_2026-04-24.md](../docs/firmware/fruit_v8_morning_resilient_2026-04-24.md)
+- [docs/firmware/fruit_v14_spike_guard_2026-04-25.md](../docs/firmware/fruit_v14_spike_guard_2026-04-25.md)
+- [docs/firmware/fruit_v15_rearm_balance_2026-04-25.md](../docs/firmware/fruit_v15_rearm_balance_2026-04-25.md)
+- [docs/firmware/fruit_v16_reopen_2026-04-25.md](../docs/firmware/fruit_v16_reopen_2026-04-25.md)
+- [docs/firmware/fruit_v17_release_fix_2026-04-25.md](../docs/firmware/fruit_v17_release_fix_2026-04-25.md)
+- [docs/firmware/fruit_v18_release_timeout_2026-04-25.md](../docs/firmware/fruit_v18_release_timeout_2026-04-25.md)
+- [docs/firmware/fruit_v19_release_deriv_2026-04-25.md](../docs/firmware/fruit_v19_release_deriv_2026-04-25.md)
+- [docs/firmware/fruit_soak_daily_runbook.md](../docs/firmware/fruit_soak_daily_runbook.md)
+- [docs/firmware/fruit_detector_redesign_review_2026-04-26.md](../docs/firmware/fruit_detector_redesign_review_2026-04-26.md)
+- [docs/firmware/fruit_feedback_report_2026-04-26.md](../docs/firmware/fruit_feedback_report_2026-04-26.md)
+- [docs/firmware/fruit_v20_fsm_detector_2026-04-26.md](../docs/firmware/fruit_v20_fsm_detector_2026-04-26.md)
+- [docs/firmware/fruit_v21_entry_guard_2026-04-26.md](../docs/firmware/fruit_v21_entry_guard_2026-04-26.md)
+- [docs/firmware/fruit_morning_status_2026-04-24.md](../docs/firmware/fruit_morning_status_2026-04-24.md)
+- [docs/firmware/fruit_soak_2026-04-24.md](../docs/firmware/fruit_soak_2026-04-24.md)
+
 Known but still not implemented (`UNSUPPORTED_CMD`):
 
 - `SET_PROFILE`

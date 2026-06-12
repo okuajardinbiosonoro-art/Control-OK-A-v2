@@ -1,7 +1,7 @@
 # Runbook operativo — Control OKÚA CKv2 — RC Funcional
 
-Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-16 (Ticket 35.0 — actualizado en 35.0-correctivo)  
+Rama: `desarrollo-fase-2`
+Fecha: 2026-04-16 (Ticket 35.0 — actualizado en 35.0-correctivo)
 Audiencia: José David — uso controlado en instalación OKÚA
 
 > Este documento es la guía de operación de campo. Para contexto de validación, deuda residual y decisión RC ver [`release_candidate_handoff.md`](release_candidate_handoff.md).
@@ -19,7 +19,7 @@ Ejecutar antes de cada sesión. Son 7 verificaciones; si alguna falla, ver §4 (
 | P3 | `config.json` presente en raíz del repo | `ls config.json` — debe existir |
 | P4 | Perfil activo correcto en `config.json` | Abrir `config.json` → `"profile": {"active": "udp_jardin"}` (o el perfil deseado) |
 | P5 | loopMIDI activo con Port 1 y Port 2 visibles | Bandeja del sistema: ícono loopMIDI activo; dos puertos abiertos |
-| P6 | Red local accesible (para UDP) | `ping 192.168.1.89` responde, o nodos confirmados activos |
+| P6 | Red local accesible (para UDP) | `ping 192.0.2.10` responde, o nodos confirmados activos |
 | P7 | Sin proceso previo de la app colgado | Verificar en el Administrador de tareas que no haya `python main.py` corriendo |
 
 ---
@@ -76,7 +76,7 @@ Si la ventana abre y cumple lo anterior: **arranque correcto**. Continuar a §3.
 
 1. Navegar a **Nodos** en la barra lateral.
 2. Confirmar columnas: Nodo, Estado, Último visto, PPS, Pérdida, RSSI, Última nota/vel.
-3. Nodos esperados: `EB1` (192.168.1.89, Caja 1) y `EB2` (192.168.1.90, Caja 2) en estado ONLINE.
+3. Nodos esperados: `EB1` (192.0.2.10, Caja 1) y `EB2` (192.0.2.10, Caja 2) en estado ONLINE.
 
 ### 3.3 — Flujo mapa ↔ Nodos
 
@@ -122,7 +122,7 @@ Si la ventana abre y cumple lo anterior: **arranque correcto**. Continuar a §3.
 | Síntoma | Acción |
 |---------|--------|
 | Chip nunca sale de `Sesión inactiva` | Verificar `config.json` → perfil activo = `udp_jardin` y modo = `udp` |
-| Árbol Nodos vacío | `ping 192.168.1.89` y `.90` — si no responden, los nodos están apagados o fuera de red |
+| Árbol Nodos vacío | `ping 192.0.2.10` y `.90` — si no responden, los nodos están apagados o fuera de red |
 | Puertos UDP bloqueados | Verificar firewall de Windows: puertos 5005 y 5006 UDP deben estar abiertos |
 | Error MIDI en consola | Verificar loopMIDI: `Port 1` y `Port 2` visibles; reiniciar loopMIDI si es necesario |
 

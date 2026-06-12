@@ -74,4 +74,3 @@ def test_ota_server_serves_manifest_and_bin_for_published_rollout(tmp_path: Path
         assert firmware_payload == source_bytes
     finally:
         server.stop()
-

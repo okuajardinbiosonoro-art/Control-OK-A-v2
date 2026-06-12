@@ -1,7 +1,7 @@
 # Piloto interno controlado — Control OKÚA CKv2 — RC1
 
-Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-19 (Ticket 37.0)  
+Rama: `desarrollo-fase-2`
+Fecha: 2026-04-19 (Ticket 37.0)
 Clasificación: **PASA con observaciones menores**
 
 ---
@@ -10,7 +10,7 @@ Clasificación: **PASA con observaciones menores**
 
 | Ítem | Valor |
 |------|-------|
-| Máquina | josecillo (Windows 11 Home, 10.0.26200) |
+| Máquina | <DEV_PC> (Windows 11 Home, 10.0.26200) |
 | Python | 3.11.0 |
 | Rama | `desarrollo-fase-2` (commit `8c52f10` al inicio) |
 | Ruta de operación | `python main.py` — ruta principal definida |
@@ -106,7 +106,7 @@ AssertionError: expected okua_app_icon.ico, got okua_icon_256.png
 
 **Corrección:** Renombrado y actualizado el test a `test_app_icon_path_prefers_png_over_ico` para reflejar el comportamiento correcto actual.
 
-**Archivo:** `tests/test_resources_icons.py`  
+**Archivo:** `tests/test_resources_icons.py`
 **Resultado post-corrección:** 498/498 PASAN.
 
 ---

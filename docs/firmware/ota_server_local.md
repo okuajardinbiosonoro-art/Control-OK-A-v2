@@ -124,18 +124,18 @@ Si `artifact.version` no cumple semver básico, el rollout se rechaza.
 
 ## URLs publicadas
 
-Con `host=192.168.88.254`, `port=18080` y `rollout_token=0x20260328`:
+Con `host=192.0.2.10`, `port=18080` y `rollout_token=0x20260328`:
 
 - manifest:
 
 ```text
-http://192.168.88.254:<puerto_ota>/ota/rollouts/20260328/manifest.json
+http://192.0.2.10:<puerto_ota>/ota/rollouts/20260328/manifest.json
 ```
 
 - bin:
 
 ```text
-http://192.168.88.254:<puerto_ota>/ota/rollouts/20260328/firmware.bin
+http://192.0.2.10:<puerto_ota>/ota/rollouts/20260328/firmware.bin
 ```
 
 Estas URLs son exactamente compatibles con la resolución actual del firmware.

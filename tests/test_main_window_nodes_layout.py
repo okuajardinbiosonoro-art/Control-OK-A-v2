@@ -662,11 +662,11 @@ def test_advanced_tools_dialog_surfaces_remote_api_runtime_status(monkeypatch) -
         enabled=True,
         service_state="running",
         exposure_mode="tailscale_only",
-        effective_bind_host="100.88.127.119",
+        effective_bind_host="198.51.100.10",
         port=8788,
         local_access_url=None,
-        remote_access_url="http://100.88.127.119:8788/remote/",
-        access_urls=("http://100.88.127.119:8788/remote/",),
+        remote_access_url="http://198.51.100.10:8788/remote/",
+        access_urls=("http://198.51.100.10:8788/remote/",),
         failure_message=None,
         user_store_path=Path("remote_api_users.json"),
     )
@@ -680,10 +680,10 @@ def test_advanced_tools_dialog_surfaces_remote_api_runtime_status(monkeypatch) -
         assert dialog.isVisible() is True
         assert dialog.remote_status_label.text() == "running"
         assert dialog.remote_exposure_mode_label.text() == "tailscale_only"
-        assert dialog.remote_bind_label.text() == "100.88.127.119"
+        assert dialog.remote_bind_label.text() == "198.51.100.10"
         assert dialog.remote_port_label.text() == "8788"
         assert dialog.remote_local_url_label.text() == "No disponible"
-        assert dialog.remote_remote_url_label.text() == "http://100.88.127.119:8788/remote/"
+        assert dialog.remote_remote_url_label.text() == "http://198.51.100.10:8788/remote/"
         assert dialog.remote_store_label.text() == "remote_api_users.json"
         assert dialog.remote_failure_label.text() == "Sin errores"
     finally:

@@ -1,7 +1,7 @@
 # Observación operativa prolongada real — Control OKÚA CKv2 — RC1
 
-Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-19 (Ticket 37.2)  
+Rama: `desarrollo-fase-2`
+Fecha: 2026-04-19 (Ticket 37.2)
 Clasificación: **PASA completamente**
 
 ---
@@ -10,7 +10,7 @@ Clasificación: **PASA completamente**
 
 | Ítem | Valor |
 |------|-------|
-| Máquina | JOSECILLO (Windows 11 Home Single Language, 10.0.26200) |
+| Máquina | <DEV_PC> (Windows 11 Home Single Language, 10.0.26200) |
 | Python | 3.11.0 |
 | Rama | `desarrollo-fase-2` |
 | Ruta de operación | Ruta oficial de la app (`python main.py` / `run_app`) automatizada temporalmente sobre el mismo stack Qt para sostener una sesión viva sin intervención manual |
@@ -29,7 +29,7 @@ Clasificación: **PASA completamente**
 
 | Ítem | Valor |
 |------|-------|
-| Nodos reales activos | EB1 (`node_id=1`, `192.168.1.89`) y EB2 (`node_id=6`, `192.168.1.90`) |
+| Nodos reales activos | EB1 (`node_id=1`, `192.0.2.10`) y EB2 (`node_id=6`, `192.0.2.10`) |
 | Estado de nodos durante la ventana | 2 online, 0 degraded, 0 offline |
 | Tráfico observado | EVT + STAT continuos durante toda la sesión |
 | Tráfico acumulado al cierre | 27,320 EVT / 1,369 STAT |
@@ -96,7 +96,7 @@ La sesión sostuvo nodos reales activos durante toda la ventana, con tráfico EV
 
 **Ninguno.**
 
-No aparecieron bugs pequeños atribuibles a la app que justificaran cambio de código.  
+No aparecieron bugs pequeños atribuibles a la app que justificaran cambio de código.
 La observación mostró comportamiento estable y consistente.
 
 ---
