@@ -1,7 +1,7 @@
 # Piloto interno controlado — Control OKÚA CKv2 — RC1
 
-Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-19 (Ticket 37.0)  
+Rama: `desarrollo-fase-2`
+Fecha: 2026-04-19 (Ticket 37.0)
 Clasificación: **PASA con observaciones menores**
 
 ---
@@ -106,7 +106,7 @@ AssertionError: expected okua_app_icon.ico, got okua_icon_256.png
 
 **Corrección:** Renombrado y actualizado el test a `test_app_icon_path_prefers_png_over_ico` para reflejar el comportamiento correcto actual.
 
-**Archivo:** `tests/test_resources_icons.py`  
+**Archivo:** `tests/test_resources_icons.py`
 **Resultado post-corrección:** 498/498 PASAN.
 
 ---

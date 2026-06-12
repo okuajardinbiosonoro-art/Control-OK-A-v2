@@ -1,7 +1,7 @@
 # Checklist de entrega interna — Control OKÚA CKv2 — RC1
 
-Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-18 (Ticket 36.0)  
+Rama: `desarrollo-fase-2`
+Fecha: 2026-04-18 (Ticket 36.0)
 Referencia operativa completa: [`release_candidate_runbook.md`](release_candidate_runbook.md)
 
 ---
@@ -167,10 +167,10 @@ Ver detalle completo en [`internal_operational_acceptance.md`](internal_operatio
 
 ## Decisión de cierre
 
-**El ciclo RC queda cerrado. Este checklist es evidencia de entrega de la Release Interna Controlada RC1.**  
+**El ciclo RC queda cerrado. Este checklist es evidencia de entrega de la Release Interna Controlada RC1.**
 **La aceptación operativa interna (38.0) es la declaración formal de cierre del ciclo de validación.**
 
-Para contexto completo de validación: [`release_candidate_handoff.md`](release_candidate_handoff.md)  
-Para release notes: [`internal_release_notes_rc1.md`](internal_release_notes_rc1.md)  
-Para operación de campo: [`release_candidate_runbook.md`](release_candidate_runbook.md)  
+Para contexto completo de validación: [`release_candidate_handoff.md`](release_candidate_handoff.md)
+Para release notes: [`internal_release_notes_rc1.md`](internal_release_notes_rc1.md)
+Para operación de campo: [`release_candidate_runbook.md`](release_candidate_runbook.md)
 Para piloto interno: [`internal_operational_pilot.md`](internal_operational_pilot.md)

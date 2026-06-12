@@ -1,8 +1,8 @@
 # Bitácora de operación temprana post-promoción — Control OKÚA CKv2
 
-Rama: `desarrollo-fase-2`  
-Fecha de inicio: 2026-04-19 (Ticket 40.0)  
-Período cubierto: 2026-04-19 (post-promoción de `rc1-interna` a `main`)  
+Rama: `desarrollo-fase-2`
+Fecha de inicio: 2026-04-19 (Ticket 40.0)
+Período cubierto: 2026-04-19 (post-promoción de `rc1-interna` a `main`)
 Clasificación: **OPERACIÓN TEMPRANA LIMPIA — sin incidentes**
 
 ---
@@ -49,9 +49,9 @@ Clasificación: **OPERACIÓN TEMPRANA LIMPIA — sin incidentes**
 |----|------|-------------|-----------|--------|
 | DOC-40-1 | Documentación | README.md documentaba ruta de exe en formato one-file sin tilde; el artefacto real es one-dir con tilde. | MENOR | **CORREGIDO** en 39.1 |
 
-**Incidentes de código:** NINGUNO  
-**Incidentes de runtime:** NINGUNO  
-**Incidentes de suite:** NINGUNO  
+**Incidentes de código:** NINGUNO
+**Incidentes de runtime:** NINGUNO
+**Incidentes de suite:** NINGUNO
 **Regresiones:** NINGUNA
 
 ---
@@ -92,12 +92,12 @@ Razones:
 | Revisión de deuda OTA-CAMP-1 | Próximo ciclo de actualización multi-nodo | Campaña >1 wave en hardware real |
 | Apertura de familia 40.x | Solo si se detecta incidente en operación continuada | Criterio de incidente moderado o crítico per `internal_operational_acceptance.md` §Bloque 3 |
 
-El runbook operativo vigente es [`release_candidate_runbook.md`](release_candidate_runbook.md).  
+El runbook operativo vigente es [`release_candidate_runbook.md`](release_candidate_runbook.md).
 El acta de aceptación vigente es [`internal_operational_acceptance.md`](internal_operational_acceptance.md).
 
 ---
 
 ## Cierre del período de seguimiento temprano
 
-**El período de seguimiento temprano post-promoción queda cerrado sin incidentes de código.**  
+**El período de seguimiento temprano post-promoción queda cerrado sin incidentes de código.**
 **Control OKÚA CKv2 — RC1 entra en fase de operación controlada continuada.**

@@ -1,8 +1,8 @@
 # QA Funcional de Campo — Control OKÚA CKv2 — Baseline
 
-Rama: `desarrollo-fase-2`  
-Fecha QA: 2026-04-13 (Ticket 34.4)  
-Tipo de QA: funcional operativa + runbook de campo  
+Rama: `desarrollo-fase-2`
+Fecha QA: 2026-04-13 (Ticket 34.4)
+Tipo de QA: funcional operativa + runbook de campo
 Ejecutado por: José David / Claude Code (agente)
 
 ---
@@ -22,7 +22,7 @@ Ejecutado por: José David / Claude Code (agente)
 
 ## Criterio de clasificación
 
-- **[A] EJECUTADO** — prueba corrida de verdad, resultado observado directamente.  
+- **[A] EJECUTADO** — prueba corrida de verdad, resultado observado directamente.
 - **[B] DOCUMENTADO** — prueba definida con precisión pero no corrida por falta de hardware/red/display.
 
 No se afirma ninguna validación que no pertenezca al grupo **[A]**.
@@ -183,7 +183,7 @@ Para cada sección (Nodos, Diagnóstico, Técnico, Firmware, Remoto):
 8. Verificar que se recibe respuesta (sin timeout ni error visible).
 9. Clic "Detener sesión" — verificar que el estado regresa a "Sesión inactiva".
 
-**Criterio PASS:** Sesión inicia, runtime responde, sesión detiene limpiamente.  
+**Criterio PASS:** Sesión inicia, runtime responde, sesión detiene limpiamente.
 **Criterio FAIL:** Timeout en handshake, crash, sesión no detiene, traceback.
 
 ---
@@ -205,7 +205,7 @@ Para cada sección (Nodos, Diagnóstico, Técnico, Firmware, Remoto):
 11. Navegar a Diagnóstico — verificar campos de "Detalle UDP" actualizados.
 12. Clic "Detener sesión".
 
-**Criterio PASS:** Sincronización ocurre, nodos visibles, flujo mapa↔Nodos funciona.  
+**Criterio PASS:** Sincronización ocurre, nodos visibles, flujo mapa↔Nodos funciona.
 **Criterio FAIL:** Sin nodos en árbol, mapa sin estado, crash, timeout.
 
 ---
@@ -256,7 +256,7 @@ Para cada sección (Nodos, Diagnóstico, Técnico, Firmware, Remoto):
 3. Clic "Aplicar servicio remoto".
 4. Verificar que el campo "Estado" se actualiza.
 
-**Criterio PASS:** Estado cambia sin error, sin traceback.  
+**Criterio PASS:** Estado cambia sin error, sin traceback.
 **Nota:** No ejecutar si no hay credenciales o si el entorno no es de prueba.
 
 ---

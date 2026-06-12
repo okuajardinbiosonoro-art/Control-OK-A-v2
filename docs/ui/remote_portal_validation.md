@@ -1,7 +1,7 @@
 # Validación del portal web remoto — `/remote/` — Control OKÚA CKv2
 
-Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-18 (Ticket 35.5)  
+Rama: `desarrollo-fase-2`
+Fecha: 2026-04-18 (Ticket 35.5)
 Tipo: Validación funcional real con servicio standalone + navegador abierto + Tailscale
 
 ---

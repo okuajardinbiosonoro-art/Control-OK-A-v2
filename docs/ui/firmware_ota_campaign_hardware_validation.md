@@ -1,7 +1,7 @@
 # Validación de Campaña OTA end-to-end con hardware real — Control OKÚA CKv2
 
-Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-18 (Ticket 35.6)  
+Rama: `desarrollo-fase-2`
+Fecha: 2026-04-18 (Ticket 35.6)
 Clasificación: **PASA con observaciones menores**
 
 ---

@@ -1,7 +1,7 @@
 # Paquete de entrega — Release Candidate Funcional — Control OKÚA CKv2
 
-Rama: `desarrollo-fase-2`  
-Fecha de freeze: 2026-04-18 (Ticket 36.0 — ciclo RC cerrado, release interna consolidada)  
+Rama: `desarrollo-fase-2`
+Fecha de freeze: 2026-04-18 (Ticket 36.0 — ciclo RC cerrado, release interna consolidada)
 Estado: **Release Interna Controlada — ciclo RC cerrado**
 
 ---
@@ -63,7 +63,7 @@ config.json con perfil activo configurado o primer arranque resuelto con selecto
 
 ### Artefacto principal
 
-**Ruta principal: `python main.py` desde el repositorio en `desarrollo-fase-2`.**  
+**Ruta principal: `python main.py` desde el repositorio en `desarrollo-fase-2`.**
 El `.exe` empaquetado (`ControlOkuaV2.spec`) es alternativa secundaria viable para distribución. Build confirmado el 2026-04-19 (one-dir, PyInstaller 6.19.0); validación visual completa confirmada por José David (2026-04-19): ícono OKÚA correcto en barra de título y taskbar, Home con mapa, navegación a Nodos/Diagnóstico/Técnico y cierre limpio — todos PASAN. Ver [`internal_release_packaged_rehearsal.md`](internal_release_packaged_rehearsal.md).
 
 > Nota de distribución: para entregar el exe a otra máquina, copiar `config.example.json` como `config.json` junto al exe. El `dist/config.json` actual contiene la config personal de José David (ports MIDI locales, remote_api tailscale_only) y no es un config genérico.

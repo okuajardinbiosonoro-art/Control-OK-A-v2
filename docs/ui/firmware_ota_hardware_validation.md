@@ -1,7 +1,7 @@
 # Protocolo de validación OTA con hardware real — Control OKÚA CKv2
 
-Rama: `desarrollo-fase-2`  
-Fecha de preparación: 2026-04-17 (Ticket 35.3)  
+Rama: `desarrollo-fase-2`
+Fecha de preparación: 2026-04-17 (Ticket 35.3)
 Estado: **PENDIENTE DE EJECUCIÓN POR JOSÉ DAVID**
 
 > Este documento es un protocolo de validación, no un acta. El agente no puede interactuar con la GUI ni observar dispositivos físicos. La ejecución real corresponde a José David con acceso físico al hardware y la app abierta en pantalla.

@@ -1,7 +1,7 @@
 # Promoción a main — Control OKÚA CKv2 — RC1 Interna
 
-Rama origen: `desarrollo-fase-2`  
-Fecha: 2026-04-19 (Ticket 39.0)  
+Rama origen: `desarrollo-fase-2`
+Fecha: 2026-04-19 (Ticket 39.0)
 Estado: **PROMOVIDA — fast-forward limpio**
 
 ---
@@ -104,13 +104,13 @@ git push origin :rc1-interna
 git tag -d rc1-interna
 ```
 
-> El commit `7fe065d` es el estado de `main` inmediatamente antes de esta promoción.  
+> El commit `7fe065d` es el estado de `main` inmediatamente antes de esta promoción.
 > `desarrollo-fase-2` **no se ve afectada** por revertir `main`.
 
 ---
 
 ## Decisión final
 
-**La promoción a `main` se ejecutó correctamente como fast-forward limpio.**  
-**El tag `rc1-interna` queda publicado como referencia trazable de la Release Interna Controlada RC1.**  
+**La promoción a `main` se ejecutó correctamente como fast-forward limpio.**
+**El tag `rc1-interna` queda publicado como referencia trazable de la Release Interna Controlada RC1.**
 `main` ahora refleja el estado operativamente aceptado y documentado de Control OKÚA CKv2.

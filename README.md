@@ -562,5 +562,5 @@ python -m compileall src main.py tools
 
 Control OKÚA CKv2 es parte del sistema OKÚA Jardín Biosonoro — instalación de arte sonoro que convierte señales biológicas en música mediante nodos ESP32 distribuidos en un jardín.
 
-Diseñado y desarrollado por José David para operación interna controlada.  
+Diseñado y desarrollado por José David para operación interna controlada.
 Release Interna Controlada RC1 — 2026-04-19.

@@ -78,4 +78,3 @@ def test_resolve_control_secret_rejects_placeholder_from_auto_file(
 
     with pytest.raises(ControlSecretNotConfiguredError):
         resolve_control_secret()
-

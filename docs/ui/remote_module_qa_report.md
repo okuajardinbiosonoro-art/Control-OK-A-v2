@@ -1,7 +1,7 @@
 # QA funcional — Módulo Remoto — Control OKÚA CKv2
 
-Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-18 (Ticket 35.4 + Ticket 35.5)  
+Rama: `desarrollo-fase-2`
+Fecha: 2026-04-18 (Ticket 35.4 + Ticket 35.5)
 Tipo: QA funcional de código + suite automática + validación real del portal web con navegador y Tailscale
 
 ---

@@ -94,7 +94,7 @@ QComboBox {
 QComboBox:hover {
     border-color: #2FACC6;
 }
-QComboBox QAbstractItemView { 
+QComboBox QAbstractItemView {
      background-color: #2D2D2D;
      color: #cbbba0;
      border: 1px solid #444444;

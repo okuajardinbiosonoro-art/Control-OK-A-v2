@@ -1,7 +1,7 @@
 # QA funcional — Firmware Manager / OTA UI — Control OKÚA CKv2
 
-Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-17 (Ticket 35.2)  
+Rama: `desarrollo-fase-2`
+Fecha: 2026-04-17 (Ticket 35.2)
 Tipo: QA funcional de UI/flujo — sin hardware OTA real
 
 ---
@@ -90,8 +90,8 @@ Tipo: QA funcional de UI/flujo — sin hardware OTA real
 
 **Corrección:** `QVBoxLayout` reemplazado por `QSplitter(Vertical)` con `setChildrenCollapsible(False)`. El rollout group ahora usa `QGridLayout` + altura mínima calculada desde primeros principios (`content_min_h + _HEADER_V`). Panel de detalles inicializado oculto y revelado con `setSizes([75%, 25%])` en el primer despliegue.
 
-**Archivo:** `src/control_okua/app_qt/ota_deploy_dialog.py`  
-**Tests añadidos:** `test_ota_dialog_layout.py` — 14 nuevos tests de layout/geometría (ver §Pruebas automáticas)  
+**Archivo:** `src/control_okua/app_qt/ota_deploy_dialog.py`
+**Tests añadidos:** `test_ota_dialog_layout.py` — 14 nuevos tests de layout/geometría (ver §Pruebas automáticas)
 **Estado:** CORREGIDO — en working tree antes de este ticket; comprometido en 35.2
 
 ---

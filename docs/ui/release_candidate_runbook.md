@@ -1,7 +1,7 @@
 # Runbook operativo — Control OKÚA CKv2 — RC Funcional
 
-Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-16 (Ticket 35.0 — actualizado en 35.0-correctivo)  
+Rama: `desarrollo-fase-2`
+Fecha: 2026-04-16 (Ticket 35.0 — actualizado en 35.0-correctivo)
 Audiencia: José David — uso controlado en instalación OKÚA
 
 > Este documento es la guía de operación de campo. Para contexto de validación, deuda residual y decisión RC ver [`release_candidate_handoff.md`](release_candidate_handoff.md).

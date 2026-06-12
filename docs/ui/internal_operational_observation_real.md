@@ -1,7 +1,7 @@
 # Observación operativa prolongada real — Control OKÚA CKv2 — RC1
 
-Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-19 (Ticket 37.2)  
+Rama: `desarrollo-fase-2`
+Fecha: 2026-04-19 (Ticket 37.2)
 Clasificación: **PASA completamente**
 
 ---
@@ -96,7 +96,7 @@ La sesión sostuvo nodos reales activos durante toda la ventana, con tráfico EV
 
 **Ninguno.**
 
-No aparecieron bugs pequeños atribuibles a la app que justificaran cambio de código.  
+No aparecieron bugs pequeños atribuibles a la app que justificaran cambio de código.
 La observación mostró comportamiento estable y consistente.
 
 ---

@@ -1,7 +1,7 @@
 # Release Notes Internas — Control OKÚA CKv2 — RC1 / Release Interna Controlada
 
-Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-18 (Ticket 36.0)  
+Rama: `desarrollo-fase-2`
+Fecha: 2026-04-18 (Ticket 36.0)
 Estado: **Release Interna Controlada — ciclo RC cerrado**
 
 ---

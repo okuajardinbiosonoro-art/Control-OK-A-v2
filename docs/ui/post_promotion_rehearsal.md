@@ -1,7 +1,7 @@
 # Ensayo post-promoción desde `rc1-interna` — Control OKÚA CKv2
 
-Rama/tag fuente: `rc1-interna` → commit `6a16c33`  
-Fecha: 2026-04-19 (Ticket 39.1)  
+Rama/tag fuente: `rc1-interna` → commit `6a16c33`
+Fecha: 2026-04-19 (Ticket 39.1)
 Clasificación: **PASA completamente**
 
 ---
@@ -88,7 +88,7 @@ El ejecutable queda en `dist/Control OKÚA CKv2/Control OKÚA CKv2.exe` (formato
 Copiar `config.dist.json` como `config.json` junto al exe antes de distribuir.
 ```
 
-**Archivo:** `README.md`  
+**Archivo:** `README.md`
 **Sin cambios de código** — solo documentación.
 
 ---

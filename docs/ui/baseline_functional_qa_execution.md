@@ -1,8 +1,8 @@
 # Acta de Ejecución — QA Funcional Real — Control OKÚA CKv2 — Ticket 34.5
 
-Rama: `desarrollo-fase-2`  
-Fecha ejecución: 2026-04-13 (Ticket 34.5)  
-Tipo: validación funcional real — ejecución de runbook de campo  
+Rama: `desarrollo-fase-2`
+Fecha ejecución: 2026-04-13 (Ticket 34.5)
+Tipo: validación funcional real — ejecución de runbook de campo
 Ejecutado por: José David / Claude Code (agente)
 
 ---
@@ -64,7 +64,7 @@ import control_okua.core.session.session_state_machine
 import control_okua.core.profiles.profile_service
 ```
 
-**Resultado: PASA** — todos los módulos principales importan sin error.  
+**Resultado: PASA** — todos los módulos principales importan sin error.
 `run_app` es callable: confirmado.
 
 ---
@@ -90,7 +90,7 @@ subprocess.Popen([sys.executable, 'main.py'], stdout=PIPE, stderr=PIPE)
 | Salida por stdout | Vacía (normal en PySide6) |
 | Código de salida antes del timeout | N/A (proceso terminado por agente tras 5s) |
 
-**Conclusión del smoke launch:**  
+**Conclusión del smoke launch:**
 La aplicación arrancó sin excepción, sin traceback y sin error de importación. El proceso estuvo vivo 5+ segundos con stderr limpio. La ventana SE ABRIÓ en el display de la máquina del usuario (Windows 11, sesión activa), pero el agente no tiene capacidad de observar qué se renderizó en pantalla.
 
 **Esto es un avance real respecto a 34.4**, donde el lanzamiento no fue intentado. Sin embargo, **no sustituye la validación visual**.

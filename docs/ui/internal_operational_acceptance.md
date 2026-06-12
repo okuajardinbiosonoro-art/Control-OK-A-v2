@@ -1,7 +1,7 @@
 # Acta de aceptación operativa interna — Control OKÚA CKv2 — RC1
 
-Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-19 (Ticket 38.0)  
+Rama: `desarrollo-fase-2`
+Fecha: 2026-04-19 (Ticket 38.0)
 Estado: **ACEPTADA para operación interna controlada**
 
 ---

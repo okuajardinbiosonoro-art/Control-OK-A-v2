@@ -1,7 +1,7 @@
 # Ensayo de entrega empaquetada (.exe) — Control OKÚA CKv2 — RC1
 
-Rama: `desarrollo-fase-2`  
-Fecha: 2026-04-19 (Ticket 36.2 — actualizado post-correcciones)  
+Rama: `desarrollo-fase-2`
+Fecha: 2026-04-19 (Ticket 36.2 — actualizado post-correcciones)
 Clasificación: **PASA — confirmado visualmente por José David (2026-04-19)**
 
 ---
@@ -132,7 +132,7 @@ Tras la validación visual, José David reportó:
 
 **Corrección:** Reemplazado por `resource_path("assets/maps/okua_home_base.png")` de `control_okua.app_qt.resources`, que usa correctamente `sys._MEIPASS` tanto en one-file como en one-dir.
 
-**Archivo:** `src/control_okua/app_qt/widgets/home_map_panel.py`  
+**Archivo:** `src/control_okua/app_qt/widgets/home_map_panel.py`
 **Tests:** 8/8 tests de mapa pasan post-corrección.
 
 ### Decisión de formato — one-dir en lugar de one-file
