@@ -1,3 +1,19 @@
+<!-- CONTINUIDAD_DOCUMENTAL_20261107 -->
+### Documentación verificada · 7 de noviembre de 2026
+
+El piloto documental P04 está publicado con nueve brechas técnicas explícitas. Documentación, código versionado y operación física se verifican por separado; firmware y campo conservan sus gates.
+
+Base de código conservada al publicar esta revisión: `6adaa5750b1f616952110d9d1a0b265b33266e28`.
+Los informes IEEE editables y sus PDF están en la biblioteca privada del responsable; el acceso requiere su cuenta autorizada.
+
+- [P04: informe, fuente LaTeX y trazabilidad](https://github.com/okuajardinbiosonoro/okua-memoria-tecnica/tree/main/proyectos/P04)
+- [P05: informe, fuente LaTeX y trazabilidad](https://github.com/okuajardinbiosonoro/okua-memoria-tecnica/tree/main/proyectos/P05)
+- [P07: informe, fuente LaTeX y trazabilidad](https://github.com/okuajardinbiosonoro/okua-memoria-tecnica/tree/main/proyectos/P07)
+- [P08: informe, fuente LaTeX y trazabilidad](https://github.com/okuajardinbiosonoro/okua-memoria-tecnica/tree/main/proyectos/P08)
+
+Esta sección es un índice de navegación. La actualización documental no publica cambios de producto pendientes, no reanuda trabajos pausados ni modifica aprobaciones. El contenido anterior se conserva debajo como antecedente fechado.
+<!-- /CONTINUIDAD_DOCUMENTAL_20261107 -->
+
 # Control OKÚA CKv2
 
 > Aplicación de escritorio para la operación de la instalación OKÚA Jardín Biosonoro
